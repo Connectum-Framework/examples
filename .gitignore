@@ -1,0 +1,15 @@
+node_modules/
+gen/
+gen-ts/
+keys/
+*.log
+*.crt
+*.key
+*.pem
+.turbo/
+.idea/
+.vscode/
+coverage/
+.env
+.env*
+!.env.example

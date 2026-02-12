@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package mycompany.orders.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/field_mask.proto";
+import "buf/validate/validate.proto";
+
+// Order management service with REST transcoding via google.api.http annotations.
+// Envoy Gateway uses these annotations for automatic gRPC-JSON transcoding.
+service OrderService {
+  // Create a new order
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {
+    option (google.api.http) = {
+      post: "/v1/orders"
+      body: "*"
+    };
+  }
+
+  // Get a single order by ID
+  rpc GetOrder(GetOrderRequest) returns (Order) {
+    option (google.api.http) = {
+      get: "/v1/orders/{order_id}"
+    };
+  }
+
+  // List orders with filtering and pagination
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse) {
+    option (google.api.http) = {
+      get: "/v1/orders"
+    };
+  }
+
+  // Partial update of an existing order
+  rpc UpdateOrder(UpdateOrderRequest) returns (Order) {
+    option (google.api.http) = {
+      patch: "/v1/orders/{order.order_id}"
+      body: "order"
+    };
+  }
+
+  // Delete an order
+  rpc DeleteOrder(DeleteOrderRequest) returns (DeleteOrderResponse) {
+    option (google.api.http) = {
+      delete: "/v1/orders/{order_id}"
+    };
+  }
+}
+
+// --- Enums ---
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PENDING = 1;
+  ORDER_STATUS_CONFIRMED = 2;
+  ORDER_STATUS_PROCESSING = 3;
+  ORDER_STATUS_SHIPPED = 4;
+  ORDER_STATUS_DELIVERED = 5;
+  ORDER_STATUS_CANCELLED = 6;
+}
+
+// --- Core messages ---
+
+message Order {
+  string order_id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  OrderStatus status = 4;
+  int64 total_amount_cents = 5;
+  string currency = 6;
+  ShippingAddress shipping_address = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message OrderItem {
+  string product_id = 1 [(buf.validate.field).string.min_len = 1];
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  int32 quantity = 3 [(buf.validate.field).int32.gt = 0];
+  int64 price_cents = 4 [(buf.validate.field).int64.gt = 0];
+}
+
+message ShippingAddress {
+  string street = 1 [(buf.validate.field).string.min_len = 1];
+  string city = 2 [(buf.validate.field).string.min_len = 1];
+  string state = 3;
+  string postal_code = 4 [(buf.validate.field).string.min_len = 1];
+  string country = 5 [(buf.validate.field).string = {min_len: 2, max_len: 2}];
+}
+
+// --- Request / Response messages ---
+
+message CreateOrderRequest {
+  string customer_id = 1 [(buf.validate.field).string.min_len = 1];
+  repeated OrderItem items = 2 [(buf.validate.field).repeated.min_items = 1];
+  ShippingAddress shipping_address = 3 [(buf.validate.field).required = true];
+  string currency = 4 [(buf.validate.field).string = {min_len: 3, max_len: 3}];
+}
+
+message CreateOrderResponse {
+  Order order = 1;
+}
+
+message GetOrderRequest {
+  string order_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ListOrdersRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 1, lte: 100}];
+  string page_token = 2;
+  string customer_id = 3;
+  OrderStatus status = 4;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message UpdateOrderRequest {
+  Order order = 1 [(buf.validate.field).required = true];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteOrderRequest {
+  string order_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DeleteOrderResponse {}

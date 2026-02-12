@@ -1,0 +1,20 @@
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: connectum
+  labels:
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: order-service
+  ports:
+    - name: grpc
+      port: 5000
+      targetPort: grpc
+      protocol: TCP
+      # appProtocol hints to service meshes and ingress controllers
+      appProtocol: grpc

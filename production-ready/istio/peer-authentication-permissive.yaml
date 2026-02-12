@@ -1,0 +1,11 @@
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: order-service-permissive
+  namespace: connectum
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-service
+  mtls:
+    mode: PERMISSIVE

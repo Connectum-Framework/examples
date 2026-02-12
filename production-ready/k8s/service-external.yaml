@@ -1,0 +1,22 @@
+# service-external.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service-external
+  namespace: connectum
+  labels:
+    app.kubernetes.io/name: order-service
+  annotations:
+    # Cloud provider-specific annotations
+    # AWS NLB example:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http2
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: order-service
+  ports:
+    - name: grpc
+      port: 443
+      targetPort: grpc
+      protocol: TCP

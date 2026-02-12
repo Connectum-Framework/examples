@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package echo.v1;
+
+// EchoService demonstrates custom interceptors in action
+service EchoService {
+  // Echo returns the same message it receives
+  rpc Echo(EchoRequest) returns (EchoResponse) {}
+
+  // SecureEcho requires API key authentication
+  rpc SecureEcho(EchoRequest) returns (EchoResponse) {}
+
+  // RateLimitedEcho is protected by rate limiting
+  rpc RateLimitedEcho(EchoRequest) returns (EchoResponse) {}
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+  int64 timestamp = 2;  // Unix epoch milliseconds
+}

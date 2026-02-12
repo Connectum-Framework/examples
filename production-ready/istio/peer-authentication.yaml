@@ -1,0 +1,9 @@
+# peer-authentication.yaml
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: connectum
+spec:
+  mtls:
+    mode: STRICT

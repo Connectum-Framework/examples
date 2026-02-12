@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: order-service
+  namespace: connectum
+spec:
+  hosts:
+    - order-service
+  http:
+    # Route requests with x-canary header to canary
+    - match:
+        - headers:
+            x-canary:
+              exact: "true"
+      route:
+        - destination:
+            host: order-service
+            subset: canary
+    # All other traffic to stable
+    - route:
+        - destination:
+            host: order-service
+            subset: stable

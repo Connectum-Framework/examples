@@ -1,0 +1,32 @@
+FROM node:25-alpine AS deps
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+
+FROM node:25-alpine AS runtime
+
+RUN apk add --no-cache curl
+
+RUN addgroup -S connectum && adduser -S connectum -G connectum
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY src/ ./src/
+COPY gen/ ./gen/
+
+RUN chown -R connectum:connectum /app
+USER connectum
+
+ENV NODE_ENV=production
+ENV PORT=5000
+
+EXPOSE 5000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:5000/healthz || exit 1
+
+CMD ["node", "--experimental-strip-types", "src/index.ts"]

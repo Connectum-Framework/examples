@@ -1,0 +1,113 @@
+# docker-compose.yml
+services:
+  # =========================================================================
+  # Connectum Services
+  # =========================================================================
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=debug
+      - HTTP_HEALTH_ENABLED=true
+      - OTEL_SERVICE_NAME=order-service
+      - OTEL_TRACES_EXPORTER=otlp/http
+      - OTEL_METRICS_EXPORTER=otlp/http
+      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - INVENTORY_SERVICE_HOST=inventory-service
+      - INVENTORY_SERVICE_PORT=5001
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - connectum
+
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=development
+      - PORT=5001
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=debug
+      - HTTP_HEALTH_ENABLED=true
+      - OTEL_SERVICE_NAME=inventory-service
+      - OTEL_TRACES_EXPORTER=otlp/http
+      - OTEL_METRICS_EXPORTER=otlp/http
+      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - connectum
+
+  # =========================================================================
+  # Observability Stack
+  # =========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - connectum
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.63
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317"        # OTLP gRPC (internal)
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - connectum
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - connectum
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - jaeger
+    networks:
+      - connectum
+
+networks:
+  connectum:
+    driver: bridge

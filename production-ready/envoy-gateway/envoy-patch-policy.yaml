@@ -1,0 +1,32 @@
+# envoy-patch-policy.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: grpc-json-transcoder
+  namespace: connectum
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: connectum-gateway
+  type: JSONPatch
+  jsonPatches:
+    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+      name: "connectum/connectum-gateway/http"
+      operation:
+        op: add
+        path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
+        value:
+          name: envoy.filters.http.grpc_json_transcoder
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_json_transcoder.v3.GrpcJsonTranscoder
+            proto_descriptor_bin: <base64-encoded-proto-descriptor>
+            services:
+              - mycompany.orders.v1.OrderService
+            print_options:
+              add_whitespace: true
+              always_print_primitive_fields: true
+              always_print_enums_as_ints: false
+              preserve_proto_field_names: true
+            convert_grpc_status: true
+            url_unescape_spec: ALL_CHARACTERS_EXCEPT_RESERVED

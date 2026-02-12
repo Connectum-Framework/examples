@@ -1,0 +1,9 @@
+# namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: connectum
+  labels:
+    app.kubernetes.io/part-of: connectum
+    # Enable Istio sidecar injection (if using service mesh)
+    # istio-injection: enabled

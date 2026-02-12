@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+__tests__/
+coverage/
+
+# Development files
+.env
+.env.*
+docker-compose*.yml
+Dockerfile*
+README.md
+CHANGELOG.md
+LICENSE
+
+# Proto source (already compiled to gen/)
+proto/
+
+# OS files
+.DS_Store
+Thumbs.db

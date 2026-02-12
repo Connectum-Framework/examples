@@ -1,0 +1,30 @@
+# http-route.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: order-service-rest
+  namespace: connectum
+spec:
+  parentRefs:
+    - name: connectum-gateway
+      sectionName: http
+    - name: connectum-gateway
+      sectionName: https
+  rules:
+    # REST API routes (transcoded to gRPC by Envoy)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/orders
+      backendRefs:
+        - name: order-service
+          port: 5000
+
+    # Swagger UI
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /docs
+      backendRefs:
+        - name: swagger-ui
+          port: 8080

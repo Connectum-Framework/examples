@@ -1,0 +1,10 @@
+# rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-service
+  namespace: connectum
+  labels:
+    app.kubernetes.io/name: order-service
+---
+# Add RoleBindings here if the service needs Kubernetes API access

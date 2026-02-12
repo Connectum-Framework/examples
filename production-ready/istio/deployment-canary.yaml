@@ -1,0 +1,22 @@
+# deployment-canary.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service-canary
+  namespace: connectum
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-service
+      version: canary
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: order-service
+        version: canary
+    spec:
+      containers:
+        - name: order-service
+          image: ghcr.io/mycompany/order-service:1.1.0-rc.1
+          # ... same config as stable

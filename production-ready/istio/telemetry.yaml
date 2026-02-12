@@ -1,0 +1,17 @@
+# telemetry.yaml
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: connectum-telemetry
+  namespace: connectum
+spec:
+  tracing:
+    - providers:
+        - name: otel-tracing
+      randomSamplingPercentage: 100
+  metrics:
+    - providers:
+        - name: prometheus
+  accessLogging:
+    - providers:
+        - name: otel-access-logging

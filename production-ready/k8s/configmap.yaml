@@ -1,0 +1,28 @@
+# configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-config
+  namespace: connectum
+  labels:
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  LISTEN: "0.0.0.0"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  LOG_BACKEND: "otel"
+  HTTP_HEALTH_ENABLED: "true"
+  GRACEFUL_SHUTDOWN_ENABLED: "true"
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: "30000"
+  # OpenTelemetry
+  OTEL_SERVICE_NAME: "order-service"
+  OTEL_TRACES_EXPORTER: "otlp/grpc"
+  OTEL_METRICS_EXPORTER: "otlp/grpc"
+  OTEL_LOGS_EXPORTER: "otlp/grpc"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+  # Downstream services
+  INVENTORY_SERVICE_HOST: "inventory-service.connectum.svc.cluster.local"
+  INVENTORY_SERVICE_PORT: "5000"

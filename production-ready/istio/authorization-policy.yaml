@@ -1,0 +1,23 @@
+# authorization-policy.yaml
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: order-service-policy
+  namespace: connectum
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-service
+  action: ALLOW
+  rules:
+    # Allow traffic from API gateway
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/connectum/sa/envoy-gateway"
+    # Allow traffic from other Connectum services
+    - from:
+        - source:
+            namespaces:
+              - connectum
+    # Deny everything else (implicit with ALLOW action)

@@ -1,0 +1,20 @@
+# virtual-service.yaml
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: order-service
+  namespace: connectum
+spec:
+  hosts:
+    - order-service
+  http:
+    - timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: unavailable,deadline-exceeded
+      route:
+        - destination:
+            host: order-service
+            port:
+              number: 5000

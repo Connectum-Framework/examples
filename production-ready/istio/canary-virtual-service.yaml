@@ -1,0 +1,23 @@
+# canary-virtual-service.yaml
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: order-service
+  namespace: connectum
+spec:
+  hosts:
+    - order-service
+  http:
+    - route:
+        - destination:
+            host: order-service
+            subset: stable
+            port:
+              number: 5000
+          weight: 90
+        - destination:
+            host: order-service
+            subset: canary
+            port:
+              number: 5000
+          weight: 10

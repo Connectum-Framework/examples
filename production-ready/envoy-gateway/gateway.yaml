@@ -1,0 +1,46 @@
+# gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: connectum-gateway
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: connectum-gateway
+  namespace: connectum
+  annotations:
+    # Enable gRPC-JSON transcoding
+    gateway.envoyproxy.io/enable-grpc-json-transcoder: "true"
+spec:
+  gatewayClassName: connectum-gateway
+  listeners:
+    # HTTP listener for REST clients
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+    # HTTPS listener for production
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: gateway-tls-cert
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+    # gRPC listener for native gRPC clients
+    - name: grpc
+      protocol: HTTP
+      port: 9090
+      allowedRoutes:
+        namespaces:
+          from: Same

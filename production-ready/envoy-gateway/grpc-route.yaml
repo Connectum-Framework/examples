@@ -1,0 +1,17 @@
+# grpc-route.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: order-service-grpc
+  namespace: connectum
+spec:
+  parentRefs:
+    - name: connectum-gateway
+      sectionName: grpc
+  rules:
+    - matches:
+        - method:
+            service: mycompany.orders.v1.OrderService
+      backendRefs:
+        - name: order-service
+          port: 5000

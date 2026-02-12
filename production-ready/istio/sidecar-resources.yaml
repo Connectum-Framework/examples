@@ -1,0 +1,14 @@
+# sidecar-resources.yaml (annotation on pod template)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: connectum
+spec:
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/proxyCPU: "100m"
+        sidecar.istio.io/proxyCPULimit: "500m"
+        sidecar.istio.io/proxyMemory: "128Mi"
+        sidecar.istio.io/proxyMemoryLimit: "256Mi"

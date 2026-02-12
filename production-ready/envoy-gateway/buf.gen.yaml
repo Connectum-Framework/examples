@@ -1,0 +1,24 @@
+version: v2
+plugins:
+  # Protobuf message types
+  - local: protoc-gen-es
+    out: gen
+    opt:
+      - target=ts
+
+  # ConnectRPC service stubs
+  - local: protoc-gen-connect-es
+    out: gen
+    opt:
+      - target=ts
+
+  # OpenAPI v3 spec from proto (for Swagger UI)
+  # Install: go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest
+  - local: protoc-gen-openapi
+    out: openapi
+    opt:
+      - naming=proto
+      - depth=2
+      - default_response=false
+      - enum_type=string
+      - output_mode=source_relative

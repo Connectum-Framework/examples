@@ -1,0 +1,60 @@
+# swagger-ui.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openapi-spec
+  namespace: connectum
+data:
+  openapi.yaml: |
+    # Paste or mount the generated OpenAPI spec here
+    openapi: 3.0.3
+    info:
+      title: Connectum Order Service API
+      version: 1.0.0
+    # ... full spec
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swagger-ui
+  namespace: connectum
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swagger-ui
+  template:
+    metadata:
+      labels:
+        app: swagger-ui
+    spec:
+      containers:
+        - name: swagger-ui
+          image: swaggerapi/swagger-ui:v5.18.2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SWAGGER_JSON
+              value: /specs/openapi.yaml
+            - name: BASE_URL
+              value: /docs
+          volumeMounts:
+            - name: openapi-spec
+              mountPath: /specs
+              readOnly: true
+      volumes:
+        - name: openapi-spec
+          configMap:
+            name: openapi-spec
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swagger-ui
+  namespace: connectum
+spec:
+  selector:
+    app: swagger-ui
+  ports:
+    - port: 8080
+      targetPort: 8080
