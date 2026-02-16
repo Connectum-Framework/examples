@@ -1,0 +1,38 @@
+# Generated proto code
+gen/
+
+# Dependencies
+node_modules/
+
+# Lockfile (may contain file: paths during tarball testing)
+pnpm-lock.yaml
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Coverage
+coverage/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Tarballs
+*.tgz
