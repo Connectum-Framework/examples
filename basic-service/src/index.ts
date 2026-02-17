@@ -14,7 +14,7 @@ import { createServer } from "@connectum/core";
 import type { CreateServerOptions } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
-import { withReflection } from "@connectum/reflection";
+import { Reflection } from "@connectum/reflection";
 import { greeterServiceRoutes } from "./services/greeterService.ts";
 
 console.log("🚀 Starting Basic Service Example...\n");
@@ -35,7 +35,7 @@ const options: CreateServerOptions = {
     host: "0.0.0.0",
 
     // Protocol registrations (healthcheck + reflection)
-    protocols: [Healthcheck({ httpEnabled: true }), withReflection()],
+    protocols: [Healthcheck({ httpEnabled: true }), Reflection()],
 
     // Interceptors (explicit)
     interceptors: createDefaultInterceptors(),
