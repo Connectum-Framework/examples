@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package greeter.v1;
+
+// Greeter service provides greeting functionality
+service GreeterService {
+  // Say hello to a person
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {}
+
+  // Say goodbye to a person
+  rpc SayGoodbye(SayGoodbyeRequest) returns (SayGoodbyeResponse) {}
+}
+
+// Request message for SayHello
+message SayHelloRequest {
+  // Name of the person to greet
+  string name = 1;
+}
+
+// Response message for SayHello
+message SayHelloResponse {
+  // Greeting message
+  string message = 1;
+}
+
+// Request message for SayGoodbye
+message SayGoodbyeRequest {
+  // Name of the person
+  string name = 1;
+}
+
+// Response message for SayGoodbye
+message SayGoodbyeResponse {
+  // Goodbye message
+  string message = 1;
+}
