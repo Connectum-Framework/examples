@@ -1,0 +1,51 @@
+desc: "10 — TLS + ALPN: gRPC and ConnectRPC HTTP over TLS"
+runners:
+  greq:
+    addr: server-tls:5002
+    tls: true
+    skipVerify: true
+  req:
+    endpoint: https://server-tls:5002
+    skipVerify: true
+steps:
+  tls_grpc_hello:
+    desc: "gRPC over TLS: SayHello"
+    greq:
+      greeter.v1.GreeterService/SayHello:
+        message:
+          name: "TLS-gRPC"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, TLS-gRPC!'
+
+  tls_grpc_health:
+    desc: "gRPC over TLS: Health Check"
+    greq:
+      grpc.health.v1.Health/Check:
+        message: {}
+    test: |
+      current.res.status == 0
+
+  tls_http_hello:
+    desc: "ConnectRPC HTTP over TLS: SayHello via POST"
+    req:
+      /greeter.v1.GreeterService/SayHello:
+        post:
+          header:
+            Content-Type: application/json
+          body:
+            application/json:
+              name: "TLS-HTTP"
+    test: |
+      current.res.status == 200 &&
+      current.res.body.message == 'Hello, TLS-HTTP!'
+
+  tls_http_healthz:
+    desc: "HTTP over TLS: GET /healthz"
+    req:
+      /healthz:
+        get:
+          header:
+            Accept: application/json
+    test: |
+      current.res.status == 200

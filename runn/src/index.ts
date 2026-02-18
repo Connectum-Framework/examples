@@ -57,12 +57,14 @@ const authz = createAuthzInterceptor({
 // ---------------------------------------------------------------------------
 const port = Number(process.env.PORT) || 5000;
 const allowHTTP1 = process.env.ALLOW_HTTP1 !== "false";
+const tlsDir = process.env.TLS_DIR;
 
 const server = createServer({
     services: [greeterServiceRoutes, testServiceRoutes],
     port,
     host: "0.0.0.0",
     allowHTTP1,
+    tls: tlsDir ? { dirPath: tlsDir } : undefined,
     protocols: [Healthcheck({ httpEnabled: true }), Reflection()],
     interceptors: [
         ...createDefaultInterceptors({

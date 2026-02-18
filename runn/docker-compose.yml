@@ -54,6 +54,34 @@ services:
       - e2e
 
   # =========================================================================
+  # Test Server — TLS + ALPN mode (HTTP/1.1 + HTTP/2 via ALPN)
+  # =========================================================================
+  server-tls:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - NODE_ENV=production
+      - PORT=5002
+      - ALLOW_HTTP1=true
+      - TLS_DIR=/app/certs
+      - OTEL_SERVICE_NAME=runn-e2e-server-tls
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fk", "https://localhost:5002/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - e2e
+
+  # =========================================================================
   # runn E2E Tests
   # =========================================================================
   tests:
@@ -64,6 +92,8 @@ services:
       server:
         condition: service_healthy
       server-http:
+        condition: service_healthy
+      server-tls:
         condition: service_healthy
     command: run --verbose /books/**/*.yml
     networks:
