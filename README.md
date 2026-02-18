@@ -32,7 +32,6 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 | Example | Description | Highlights | Status |
 |---------|-------------|------------|--------|
-| [basic-service](basic-service/) | Minimal Greeter service | `createServer()`, Health Check (gRPC + HTTP), Reflection, Graceful shutdown | Ready |
 | [basic-service-node](basic-service-node/) | Basic service — Node.js | Direct execution, `@connectum/*` packages ship compiled JS | Ready |
 | [basic-service-bun](basic-service-bun/) | Basic service — Bun | Zero-config TypeScript, no loader needed | Ready |
 | [basic-service-tsx](basic-service-tsx/) | Basic service — tsx | Universal TS runner, works on any Node.js 18+ | Ready |
@@ -51,7 +50,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 ```bash
 git clone https://github.com/Connectum-Framework/examples.git
-cd examples/basic-service
+cd examples/basic-service-node
 pnpm install
 pnpm dev
 ```

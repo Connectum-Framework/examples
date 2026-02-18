@@ -26,14 +26,15 @@
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
-    "@connectum/core": "1.0.0-rc.3",
-    "@connectum/healthcheck": "1.0.0-rc.3",
-    "@connectum/interceptors": "1.0.0-rc.3",
-    "@connectum/reflection": "1.0.0-rc.3"
+    "@connectum/core": "1.0.0-rc.4",
+    "@connectum/healthcheck": "1.0.0-rc.4",
+    "@connectum/interceptors": "1.0.0-rc.4",
+    "@connectum/reflection": "1.0.0-rc.4"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.65.0",
     "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@connectrpc/connect-node": "^2.1.1",
     "@types/node": "^25.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
