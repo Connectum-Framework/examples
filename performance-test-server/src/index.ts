@@ -24,6 +24,11 @@ import {
 import { createOtelInterceptor } from "@connectum/otel";
 import { benchmarkServiceRoutes } from "./services/benchmarkService.ts";
 
+// Optional TLS: set TLS_DIR env var to enable HTTPS (required for HTTP/1.1 compatibility)
+const tlsConfig = process.env.TLS_DIR
+    ? { dirPath: process.env.TLS_DIR }
+    : undefined;
+
 console.log("🚀 Starting Performance Test Server...\n");
 
 // ============================================================================
@@ -34,6 +39,7 @@ const baselineOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8081,
     host: "0.0.0.0",
+    tls: tlsConfig,
     interceptors: [], // NO interceptors - pure baseline
 };
 
@@ -45,6 +51,7 @@ const validationOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8082,
     host: "0.0.0.0",
+    tls: tlsConfig,
     interceptors: createDefaultInterceptors({
         errorHandler: false,
         timeout: false,
@@ -64,6 +71,7 @@ const loggerOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8083,
     host: "0.0.0.0",
+    tls: tlsConfig,
     interceptors: [
         createLoggerInterceptor({
             level: "error", // Minimal logging to reduce overhead
@@ -80,6 +88,7 @@ const otelOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8084,
     host: "0.0.0.0",
+    tls: tlsConfig,
     interceptors: [
         createOtelInterceptor({
             filter: ({ service }) => !service.includes("grpc.health"),
@@ -95,6 +104,7 @@ const fullChainOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8080,
     host: "0.0.0.0",
+    tls: tlsConfig,
     interceptors: [
         ...createDefaultInterceptors({
             errorHandler: {
@@ -119,6 +129,10 @@ const fullChainOptions: CreateServerOptions = {
 // ============================================================================
 
 console.log("📊 Starting 5 server configurations:\n");
+
+if (tlsConfig) {
+    console.log(`🔒 TLS enabled (certs from ${process.env.TLS_DIR})\n`);
+}
 
 try {
     // createServer() is synchronous - creates unstarted server instances
