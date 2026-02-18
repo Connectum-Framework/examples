@@ -8,10 +8,11 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-# Copy package manifests for dependency caching
+# Copy package manifests and local tarballs for dependency caching
 COPY package.json pnpm-lock.yaml ./
+COPY vendor/ ./vendor/
 
-# Install production dependencies only
+# Install production dependencies (includes local tarballs from vendor/)
 RUN pnpm install --frozen-lockfile --prod
 
 # =============================================================================
@@ -49,7 +50,7 @@ EXPOSE 5000
 
 # Health check via HTTP endpoint from @connectum/healthcheck
 HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=5 \
-    CMD curl -f --http2-prior-knowledge http://localhost:5000/healthz || exit 1
+    CMD ["sh", "-c", "curl -f http://localhost:${PORT:-5000}/healthz || exit 1"]
 
 # Start with native TypeScript support (Node.js 25.2.0+ stable type stripping)
 CMD ["node", "src/index.ts"]

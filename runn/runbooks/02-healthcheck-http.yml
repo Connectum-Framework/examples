@@ -1,44 +1,53 @@
-desc: "02 — Health Check: per-service status and unknown service"
+desc: "02 — Health Check: HTTP endpoints (/healthz, /readyz, /health)"
 runners:
-  greq:
-    addr: server:5000
-    tls: false
+  req: http://server-http:5001
 steps:
-  check_overall:
-    desc: "Overall health check returns SERVING"
-    greq:
-      grpc.health.v1.Health/Check:
-        message:
-          service: ""
+  http_healthz:
+    desc: "GET /healthz returns 200"
+    req:
+      /healthz:
+        get:
+          header:
+            Accept: application/json
     test: |
-      current.res.status == 0 &&
-      current.res.message.status == 1
+      current.res.status == 200
 
-  check_greeter:
-    desc: "Greeter service returns SERVING"
-    greq:
-      grpc.health.v1.Health/Check:
-        message:
-          service: "greeter.v1.GreeterService"
+  http_readyz:
+    desc: "GET /readyz returns 200"
+    req:
+      /readyz:
+        get:
+          header:
+            Accept: application/json
     test: |
-      current.res.status == 0 &&
-      current.res.message.status == 1
+      current.res.status == 200
 
-  check_test:
-    desc: "Test service returns SERVING"
-    greq:
-      grpc.health.v1.Health/Check:
-        message:
-          service: "test.v1.TestService"
+  http_health:
+    desc: "GET /health returns 200 with status"
+    req:
+      /health:
+        get:
+          header:
+            Accept: application/json
     test: |
-      current.res.status == 0 &&
-      current.res.message.status == 1
+      current.res.status == 200
 
-  check_unknown:
-    desc: "Unknown service returns NOT_FOUND"
-    greq:
-      grpc.health.v1.Health/Check:
-        message:
-          service: "unknown.v1.UnknownService"
+  http_health_service:
+    desc: "GET /health?service=greeter.v1.GreeterService returns SERVING"
+    req:
+      /health?service=greeter.v1.GreeterService:
+        get:
+          header:
+            Accept: application/json
     test: |
-      current.res.status == 5
+      current.res.status == 200
+
+  http_health_unknown:
+    desc: "GET /health?service=unknown returns 404"
+    req:
+      /health?service=unknown.v1.UnknownService:
+        get:
+          header:
+            Accept: application/json
+    test: |
+      current.res.status == 404

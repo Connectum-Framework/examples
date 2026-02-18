@@ -27,12 +27,12 @@
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
-    "@connectum/auth": "1.0.0-rc.4",
-    "@connectum/core": "1.0.0-rc.4",
-    "@connectum/healthcheck": "1.0.0-rc.4",
-    "@connectum/interceptors": "1.0.0-rc.4",
-    "@connectum/otel": "1.0.0-rc.4",
-    "@connectum/reflection": "1.0.0-rc.4",
+    "@connectum/auth": "file:vendor/connectum-auth-1.0.0-rc.4.tgz",
+    "@connectum/core": "file:vendor/connectum-core-1.0.0-rc.4.tgz",
+    "@connectum/healthcheck": "file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz",
+    "@connectum/interceptors": "file:vendor/connectum-interceptors-1.0.0-rc.4.tgz",
+    "@connectum/otel": "file:vendor/connectum-otel-1.0.0-rc.4.tgz",
+    "@connectum/reflection": "file:vendor/connectum-reflection-1.0.0-rc.4.tgz",
     "jose": "^6.0.11"
   },
   "devDependencies": {

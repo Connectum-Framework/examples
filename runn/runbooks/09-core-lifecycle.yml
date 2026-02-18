@@ -1,8 +1,9 @@
-desc: "09 — Core: multi-service, dual protocols via gRPC"
+desc: "09 — Core: multi-service, gRPC + ConnectRPC HTTP"
 runners:
   greq:
     addr: server:5000
     tls: false
+  req: http://server-http:5001
 steps:
   grpc_greeter:
     desc: "gRPC: SayHello on GreeterService"
@@ -23,6 +24,34 @@ steps:
     test: |
       current.res.status == 0 &&
       current.res.message.message == 'Completed after 0ms'
+
+  http_say_hello:
+    desc: "ConnectRPC HTTP: SayHello via POST"
+    req:
+      /greeter.v1.GreeterService/SayHello:
+        post:
+          header:
+            Content-Type: application/json
+          body:
+            application/json:
+              name: "HTTP"
+    test: |
+      current.res.status == 200 &&
+      current.res.body.message == 'Hello, HTTP!'
+
+  http_slow_method:
+    desc: "ConnectRPC HTTP: SlowMethod via POST"
+    req:
+      /test.v1.TestService/SlowMethod:
+        post:
+          header:
+            Content-Type: application/json
+          body:
+            application/json:
+              delayMs: 0
+    test: |
+      current.res.status == 200 &&
+      current.res.body.message == 'Completed after 0ms'
 
   grpc_health_overall:
     desc: "gRPC: Health check (protocol extension)"

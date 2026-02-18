@@ -55,10 +55,14 @@ const authz = createAuthzInterceptor({
 // ---------------------------------------------------------------------------
 // Server (ALL packages enabled)
 // ---------------------------------------------------------------------------
+const port = Number(process.env.PORT) || 5000;
+const allowHTTP1 = process.env.ALLOW_HTTP1 !== "false";
+
 const server = createServer({
     services: [greeterServiceRoutes, testServiceRoutes],
-    port: 5000,
+    port,
     host: "0.0.0.0",
+    allowHTTP1,
     protocols: [Healthcheck({ httpEnabled: true }), Reflection()],
     interceptors: [
         ...createDefaultInterceptors({
@@ -69,7 +73,7 @@ const server = createServer({
             bulkhead: false,
         }),
         createOtelInterceptor({
-            serverPort: 5000,
+            serverPort: port,
             filter: ({ service }) => !service.includes("Health"),
         }),
         jwtAuth,
