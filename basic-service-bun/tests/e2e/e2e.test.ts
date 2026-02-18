@@ -122,6 +122,7 @@ describe("E2E: Basic Service", () => {
             port: 0,
             protocols: [Healthcheck({ httpEnabled: true, manager }), Reflection()],
             interceptors: createDefaultInterceptors(),
+            allowHTTP1: false,
         });
 
         server.on("ready", () => {

@@ -24,6 +24,7 @@ describe("Server lifecycle", () => {
             port: 0,
             protocols: [Healthcheck({ httpEnabled: true, manager }), Reflection()],
             interceptors: createDefaultInterceptors(),
+            allowHTTP1: false,
         });
         server.on("ready", () => {
             manager.update(ServingStatus.SERVING);

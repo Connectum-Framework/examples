@@ -24,6 +24,7 @@ describe("gRPC calls", () => {
             services: [greeterServiceRoutes],
             port: 0,
             interceptors: createDefaultInterceptors(),
+            allowHTTP1: false,
         });
         await server.start();
 

@@ -21,6 +21,7 @@ describe("Server reflection", () => {
             port: 0,
             protocols: [Reflection()],
             interceptors: createDefaultInterceptors(),
+            allowHTTP1: false,
         });
         await server.start();
     });
