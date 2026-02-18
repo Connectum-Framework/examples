@@ -1,0 +1,33 @@
+desc: "03 — gRPC Reflection: service discovery"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  discover_greeter:
+    desc: "Discover greeter.v1.GreeterService via reflection"
+    greq:
+      greeter.v1.GreeterService/SayHello:
+        message:
+          name: "ReflectionTest"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, ReflectionTest!'
+
+  discover_test_service:
+    desc: "Discover test.v1.TestService via reflection"
+    greq:
+      test.v1.TestService/SlowMethod:
+        message:
+          delay_ms: 0
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Completed after 0ms'
+
+  discover_health:
+    desc: "Discover grpc.health.v1.Health via reflection"
+    greq:
+      grpc.health.v1.Health/Check:
+        message: {}
+    test: |
+      current.res.status == 0

@@ -1,0 +1,36 @@
+desc: "04 — Auth: public endpoint (no token required)"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  public_no_token:
+    desc: "SayHello without token returns greeting"
+    greq:
+      greeter.v1.GreeterService/SayHello:
+        message:
+          name: "World"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, World!'
+
+  public_with_token:
+    desc: "SayHello with valid token includes auth info"
+    greq:
+      test.v1.TestService/GetTestTokens:
+        message: {}
+    test: |
+      current.res.status == 0 &&
+      current.res.message.user_token != ''
+
+  public_with_user_token:
+    desc: "SayHello with user token still works (skipMethods skips auth processing)"
+    greq:
+      greeter.v1.GreeterService/SayHello:
+        headers:
+          authorization: "Bearer {{ steps.public_with_token.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, Alice!'

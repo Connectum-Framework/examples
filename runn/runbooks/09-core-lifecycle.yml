@@ -1,0 +1,53 @@
+desc: "09 — Core: multi-service, dual protocols via gRPC"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  grpc_greeter:
+    desc: "gRPC: SayHello on GreeterService"
+    greq:
+      greeter.v1.GreeterService/SayHello:
+        message:
+          name: "gRPC"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, gRPC!'
+
+  grpc_test_service:
+    desc: "gRPC: SlowMethod on TestService (second registered service)"
+    greq:
+      test.v1.TestService/SlowMethod:
+        message:
+          delay_ms: 0
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Completed after 0ms'
+
+  grpc_health_overall:
+    desc: "gRPC: Health check (protocol extension)"
+    greq:
+      grpc.health.v1.Health/Check:
+        message: {}
+    test: |
+      current.res.status == 0
+
+  grpc_get_tokens:
+    desc: "gRPC: GetTestTokens (verify all services discoverable)"
+    greq:
+      test.v1.TestService/GetTestTokens:
+        message: {}
+    test: |
+      current.res.status == 0 &&
+      current.res.message.user_token != '' &&
+      current.res.message.admin_token != ''
+
+  grpc_error:
+    desc: "gRPC: ErrorMethod (verify error handling across services)"
+    greq:
+      test.v1.TestService/ErrorMethod:
+        message:
+          code: 5
+          message: "not found"
+    test: |
+      current.res.status == 5

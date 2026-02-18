@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package test.v1;
+
+service TestService {
+  // Returns after specified delay (for timeout testing)
+  rpc SlowMethod(SlowMethodRequest) returns (SlowMethodResponse) {}
+
+  // Throws error with specified code (for error handler testing)
+  rpc ErrorMethod(ErrorMethodRequest) returns (ErrorMethodResponse) {}
+
+  // Returns pre-generated JWT tokens (for auth testing)
+  rpc GetTestTokens(GetTestTokensRequest) returns (GetTestTokensResponse) {}
+}
+
+message SlowMethodRequest {
+  int32 delay_ms = 1;
+}
+
+message SlowMethodResponse {
+  string message = 1;
+}
+
+message ErrorMethodRequest {
+  int32 code = 1;
+  string message = 2;
+}
+
+message ErrorMethodResponse {
+  string message = 1;
+}
+
+message GetTestTokensRequest {}
+
+message GetTestTokensResponse {
+  string user_token = 1;
+  string admin_token = 2;
+  string expired_token = 3;
+}

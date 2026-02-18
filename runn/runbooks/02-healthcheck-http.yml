@@ -1,0 +1,44 @@
+desc: "02 — Health Check: per-service status and unknown service"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  check_overall:
+    desc: "Overall health check returns SERVING"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: ""
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_greeter:
+    desc: "Greeter service returns SERVING"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "greeter.v1.GreeterService"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_test:
+    desc: "Test service returns SERVING"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "test.v1.TestService"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_unknown:
+    desc: "Unknown service returns NOT_FOUND"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "unknown.v1.UnknownService"
+    test: |
+      current.res.status == 5

@@ -1,0 +1,58 @@
+desc: "05 — Auth: JWT (valid, invalid, expired, missing)"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  get_tokens:
+    desc: "Get test tokens"
+    greq:
+      test.v1.TestService/GetTestTokens:
+        message: {}
+    test: |
+      current.res.status == 0 &&
+      current.res.message.user_token != '' &&
+      current.res.message.expired_token != ''
+
+  valid_token:
+    desc: "SayGoodbye with valid user token succeeds"
+    greq:
+      greeter.v1.GreeterService/SayGoodbye:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message contains 'Goodbye, Alice!'
+
+  missing_token:
+    desc: "SayGoodbye without token returns UNAUTHENTICATED"
+    greq:
+      greeter.v1.GreeterService/SayGoodbye:
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  invalid_token:
+    desc: "SayGoodbye with invalid token returns UNAUTHENTICATED"
+    greq:
+      greeter.v1.GreeterService/SayGoodbye:
+        headers:
+          authorization: "Bearer invalid.jwt.token"
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  expired_token:
+    desc: "SayGoodbye with expired token returns UNAUTHENTICATED"
+    greq:
+      greeter.v1.GreeterService/SayGoodbye:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.expired_token }}"
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16

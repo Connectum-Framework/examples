@@ -1,0 +1,48 @@
+desc: "06 — Auth: admin role (admin/user/no token)"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  get_tokens:
+    desc: "Get test tokens"
+    greq:
+      test.v1.TestService/GetTestTokens:
+        message: {}
+    test: |
+      current.res.status == 0 &&
+      current.res.message.admin_token != '' &&
+      current.res.message.user_token != ''
+
+  admin_with_admin_token:
+    desc: "SaySecret with admin token succeeds"
+    greq:
+      greeter.v1.GreeterService/SaySecret:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.admin_token }}"
+        message:
+          name: "Bob"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, Bob!' &&
+      current.res.message.secret contains 'admin secret is 42'
+
+  admin_with_user_token:
+    desc: "SaySecret with user token returns PERMISSION_DENIED"
+    greq:
+      greeter.v1.GreeterService/SaySecret:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 7
+
+  admin_without_token:
+    desc: "SaySecret without token returns UNAUTHENTICATED"
+    greq:
+      greeter.v1.GreeterService/SaySecret:
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16

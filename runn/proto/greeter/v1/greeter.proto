@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package greeter.v1;
+
+service GreeterService {
+  // Public -- no auth required (skipped by auth interceptor)
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {}
+
+  // Authenticated -- requires valid JWT
+  rpc SayGoodbye(SayGoodbyeRequest) returns (SayGoodbyeResponse) {}
+
+  // Admin only -- requires 'admin' role
+  rpc SaySecret(SaySecretRequest) returns (SaySecretResponse) {}
+}
+
+message SayHelloRequest {
+  string name = 1;
+}
+
+message SayHelloResponse {
+  string message = 1;
+}
+
+message SayGoodbyeRequest {
+  string name = 1;
+}
+
+message SayGoodbyeResponse {
+  string message = 1;
+}
+
+message SaySecretRequest {
+  string name = 1;
+}
+
+message SaySecretResponse {
+  string message = 1;
+  string secret = 2;
+}

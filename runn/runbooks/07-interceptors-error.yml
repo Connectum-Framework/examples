@@ -1,0 +1,45 @@
+desc: "07 — Error Handler: INTERNAL, INVALID_ARGUMENT, NOT_FOUND"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  error_internal:
+    desc: "ErrorMethod with code=13 returns INTERNAL"
+    greq:
+      test.v1.TestService/ErrorMethod:
+        message:
+          code: 13
+          message: "Something went wrong"
+    test: |
+      current.res.status == 13
+
+  error_invalid_argument:
+    desc: "ErrorMethod with code=3 returns INVALID_ARGUMENT"
+    greq:
+      test.v1.TestService/ErrorMethod:
+        message:
+          code: 3
+          message: "Bad input"
+    test: |
+      current.res.status == 3
+
+  error_not_found:
+    desc: "ErrorMethod with code=5 returns NOT_FOUND"
+    greq:
+      test.v1.TestService/ErrorMethod:
+        message:
+          code: 5
+          message: "Resource not found"
+    test: |
+      current.res.status == 5
+
+  error_permission_denied:
+    desc: "ErrorMethod with code=7 returns PERMISSION_DENIED"
+    greq:
+      test.v1.TestService/ErrorMethod:
+        message:
+          code: 7
+          message: "Access denied"
+    test: |
+      current.res.status == 7

@@ -1,0 +1,49 @@
+{
+  "name": "@connectum/example-runn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Connectum E2E tests — runn-based runbooks covering all 8 packages",
+  "type": "module",
+  "imports": {
+    "#gen/*": "./gen/*",
+    "#*": "./src/*"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "buf:generate": "buf generate",
+    "buf:lint": "buf lint",
+    "build:proto": "pnpm run buf:generate",
+    "test": "docker compose up --build --exit-code-from tests --abort-on-container-exit",
+    "test:observe": "docker compose --profile observability up --build"
+  },
+  "keywords": ["connectrpc", "grpc", "connectum", "example", "e2e", "runn"],
+  "author": "Highload.Zone",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=25.2.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectum/auth": "1.0.0-rc.4",
+    "@connectum/core": "1.0.0-rc.4",
+    "@connectum/healthcheck": "1.0.0-rc.4",
+    "@connectum/interceptors": "1.0.0-rc.4",
+    "@connectum/otel": "1.0.0-rc.4",
+    "@connectum/reflection": "1.0.0-rc.4",
+    "jose": "^6.0.11"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@types/node": "^25.2.0",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@bufbuild/buf"
+    ]
+  }
+}

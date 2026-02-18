@@ -1,0 +1,43 @@
+desc: "01 — gRPC Health Check: Check, List, unknown service"
+runners:
+  greq:
+    addr: server:5000
+    tls: false
+steps:
+  check_overall:
+    desc: "Check overall health (empty service name)"
+    greq:
+      grpc.health.v1.Health/Check:
+        message: {}
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_greeter_service:
+    desc: "Check greeter.v1.GreeterService health"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "greeter.v1.GreeterService"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_test_service:
+    desc: "Check test.v1.TestService health"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "test.v1.TestService"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  list_services:
+    desc: "List all healthy services"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: ""
+    test: |
+      current.res.status == 0
