@@ -40,6 +40,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | WIP |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
+| [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
 
 ## Prerequisites
 
@@ -74,6 +75,22 @@ The [production-ready](production-ready/) example provides a complete deployment
 - **Envoy Gateway** — Routing, rate limiting, Swagger UI
 
 See [production-ready/README.md](production-ready/README.md) for details.
+
+## E2E Testing
+
+The [runn](runn/) example provides a comprehensive E2E test suite using [runn](https://github.com/k1LoW/runn) YAML runbooks:
+
+- **9 runbooks, 30 scenarios** covering all @connectum/* packages
+- **Packages tested:** core, healthcheck, reflection, auth, interceptors, otel
+- **Docker Compose** — server + runn tests + OpenTelemetry Collector
+
+```bash
+cd runn
+pnpm install && pnpm build:proto
+docker compose up --build --exit-code-from tests --abort-on-container-exit
+```
+
+See [runn/README.md](runn/README.md) for details.
 
 ## Dependencies Note
 
