@@ -1,15 +1,11 @@
 syntax = "proto3";
+package codebased.v1;
 
-package greeter.v1;
-
-service GreeterService {
-  // Public -- no auth required (skipped by auth interceptor)
+// Authorization defined in TypeScript code (programmatic rules).
+// See src/index.ts for createProtoAuthzInterceptor({ rules: [...] }).
+service CodeBasedService {
   rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {}
-
-  // Authenticated -- requires valid JWT
   rpc SayGoodbye(SayGoodbyeRequest) returns (SayGoodbyeResponse) {}
-
-  // Admin only -- requires 'admin' role
   rpc SaySecret(SaySecretRequest) returns (SaySecretResponse) {}
 }
 

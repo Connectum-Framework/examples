@@ -1,17 +1,25 @@
-import { createAuthzInterceptor, createJwtAuthInterceptor } from "@connectum/auth";
+import { createJwtAuthInterceptor } from "@connectum/auth";
+import { createProtoAuthzInterceptor, getPublicMethods } from "@connectum/auth/proto";
 import { TEST_JWT_SECRET } from "@connectum/auth/testing";
 import { createServer } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { createOtelInterceptor, initProvider } from "@connectum/otel";
 import { Reflection } from "@connectum/reflection";
-import { greeterServiceRoutes } from "./services/greeterService.ts";
+import { codeBasedServiceRoutes } from "./services/codeBasedService.ts";
+import { protoBasedServiceRoutes } from "./services/protoBasedService.ts";
 import { testServiceRoutes } from "./services/testService.ts";
+import { ProtoBasedService } from "#gen/protobased/v1/protobased_pb.ts";
 
 // ---------------------------------------------------------------------------
 // OpenTelemetry (env-based: OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT)
 // ---------------------------------------------------------------------------
 initProvider({ serviceName: "runn-e2e-server" });
+
+// ---------------------------------------------------------------------------
+// Auto-discover public methods from proto options
+// ---------------------------------------------------------------------------
+const protoPublicMethods = getPublicMethods([ProtoBasedService]);
 
 // ---------------------------------------------------------------------------
 // JWT Authentication
@@ -23,33 +31,44 @@ const jwtAuth = createJwtAuthInterceptor({
         roles: "roles",
         name: "name",
     },
-    skipMethods: ["greeter.v1.GreeterService/SayHello", "test.v1.TestService/*", "grpc.health.v1.Health/*", "grpc.reflection.v1.ServerReflection/*"],
+    skipMethods: [
+        "codebased.v1.CodeBasedService/SayHello",
+        ...protoPublicMethods,
+        "test.v1.TestService/*",
+        "grpc.health.v1.Health/*",
+        "grpc.reflection.v1.ServerReflection/*",
+    ],
 });
 
 // ---------------------------------------------------------------------------
-// Authorization Rules
+// Authorization (single interceptor for both approaches)
 // ---------------------------------------------------------------------------
-const authz = createAuthzInterceptor({
+const authz = createProtoAuthzInterceptor({
     defaultPolicy: "deny",
+    // Fallback rules for CodeBasedService + infrastructure services
     rules: [
         {
-            name: "public",
-            methods: ["greeter.v1.GreeterService/SayHello", "test.v1.TestService/*", "grpc.health.v1.Health/*", "grpc.reflection.v1.ServerReflection/*"],
+            name: "codebased-public",
+            methods: [
+                "codebased.v1.CodeBasedService/SayHello",
+                "test.v1.TestService/*",
+                "grpc.health.v1.Health/*",
+                "grpc.reflection.v1.ServerReflection/*",
+            ],
             effect: "allow",
         },
         {
-            name: "authenticated",
-            methods: ["greeter.v1.GreeterService/SayGoodbye"],
+            name: "codebased-authenticated",
+            methods: ["codebased.v1.CodeBasedService/SayGoodbye"],
             effect: "allow",
         },
         {
-            name: "admin-only",
-            methods: ["greeter.v1.GreeterService/SaySecret"],
+            name: "codebased-admin-only",
+            methods: ["codebased.v1.CodeBasedService/SaySecret"],
             requires: { roles: ["admin"] },
             effect: "allow",
         },
     ],
-    skipMethods: ["greeter.v1.GreeterService/SayHello", "test.v1.TestService/*", "grpc.health.v1.Health/*", "grpc.reflection.v1.ServerReflection/*"],
 });
 
 // ---------------------------------------------------------------------------
@@ -60,7 +79,7 @@ const allowHTTP1 = process.env.ALLOW_HTTP1 !== "false";
 const tlsDir = process.env.TLS_DIR;
 
 const server = createServer({
-    services: [greeterServiceRoutes, testServiceRoutes],
+    services: [codeBasedServiceRoutes, protoBasedServiceRoutes, testServiceRoutes],
     port,
     host: "0.0.0.0",
     allowHTTP1,
@@ -94,7 +113,8 @@ server.on("start", () => {
 });
 
 server.on("ready", () => {
-    healthcheckManager.update(ServingStatus.SERVING, "greeter.v1.GreeterService");
+    healthcheckManager.update(ServingStatus.SERVING, "codebased.v1.CodeBasedService");
+    healthcheckManager.update(ServingStatus.SERVING, "protobased.v1.ProtoBasedService");
     healthcheckManager.update(ServingStatus.SERVING, "test.v1.TestService");
 
     const addr = server.address;

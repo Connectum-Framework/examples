@@ -11,7 +11,7 @@ steps:
   tls_grpc_hello:
     desc: "gRPC over TLS: SayHello"
     greq:
-      greeter.v1.GreeterService/SayHello:
+      codebased.v1.CodeBasedService/SayHello:
         message:
           name: "TLS-gRPC"
     test: |
@@ -29,7 +29,7 @@ steps:
   tls_http_hello:
     desc: "ConnectRPC HTTP over TLS: SayHello via POST"
     req:
-      /greeter.v1.GreeterService/SayHello:
+      /codebased.v1.CodeBasedService/SayHello:
         post:
           header:
             Content-Type: application/json

@@ -1,0 +1,46 @@
+syntax = "proto3";
+package protobased.v1;
+
+import "connectum/auth/v1/options.proto";
+
+// Authorization defined in proto custom options.
+// createProtoAuthzInterceptor reads these options at runtime.
+//
+// service_auth.default_policy = "allow" means all authenticated
+// users can access methods unless restricted at method level.
+service ProtoBasedService {
+  option (connectum.auth.v1.service_auth) = { default_policy: "allow" };
+
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {
+    option (connectum.auth.v1.method_auth) = { public: true };
+  }
+  rpc SayGoodbye(SayGoodbyeRequest) returns (SayGoodbyeResponse) {}
+  rpc SaySecret(SaySecretRequest) returns (SaySecretResponse) {
+    option (connectum.auth.v1.method_auth) = { requires: { roles: "admin" } };
+  }
+}
+
+message SayHelloRequest {
+  string name = 1;
+}
+
+message SayHelloResponse {
+  string message = 1;
+}
+
+message SayGoodbyeRequest {
+  string name = 1;
+}
+
+message SayGoodbyeResponse {
+  string message = 1;
+}
+
+message SaySecretRequest {
+  string name = 1;
+}
+
+message SaySecretResponse {
+  string message = 1;
+  string secret = 2;
+}

@@ -1,15 +1,43 @@
-# Auth Example -- JWT + Authorization
+# Auth Example — Proto-Based + Code-Based Authorization
 
-A gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum) that demonstrates server-side JWT authentication and declarative authorization using `@connectum/auth`.
+A gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum) that demonstrates **two approaches to authorization side by side** using `@connectum/auth`.
 
-Demonstrates:
+## Two Approaches
 
-- JWT authentication interceptor (`createJwtAuthInterceptor`)
-- Declarative authorization rules (`createAuthzInterceptor`) with public, authenticated, and admin access levels
-- Auth context access in handlers via `getAuthContext()` and `requireAuthContext()`
-- Test token generation at startup for local development
-- Health checks (gRPC + HTTP) via `@connectum/healthcheck`
-- Server reflection via `@connectum/reflection`
+### Code-Based (CodeBasedService)
+
+Authorization rules defined in TypeScript via programmatic rules:
+
+```typescript
+const authz = createProtoAuthzInterceptor({
+    defaultPolicy: "deny",
+    rules: [
+        { name: "codebased-public", methods: ["codebased.v1.CodeBasedService/SayHello"], effect: "allow" },
+        { name: "codebased-authenticated", methods: ["codebased.v1.CodeBasedService/SayGoodbye"], effect: "allow" },
+        { name: "codebased-admin-only", methods: ["codebased.v1.CodeBasedService/SaySecret"], requires: { roles: ["admin"] }, effect: "allow" },
+    ],
+});
+```
+
+### Proto-Based (ProtoBasedService)
+
+Authorization rules defined in `.proto` file via custom options:
+
+```protobuf
+import "connectum/auth/v1/options.proto";
+
+service ProtoBasedService {
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse) {
+    option (connectum.auth.v1.method_auth) = { public: true };
+  }
+  rpc SayGoodbye(SayGoodbyeRequest) returns (SayGoodbyeResponse) {}
+  rpc SaySecret(SaySecretRequest) returns (SaySecretResponse) {
+    option (connectum.auth.v1.method_auth) = { requires: { roles: "admin" } };
+  }
+}
+```
+
+Both services have identical behavior — the difference is only **where** the rules are defined.
 
 ## Prerequisites
 
@@ -19,134 +47,115 @@ Demonstrates:
 ## Quick Start
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Generate proto code
 pnpm build:proto
-
-# Start the server
 pnpm start
-
-# Or in watch mode
-pnpm dev
 ```
 
-The server starts on `http://localhost:5000` and prints sample JWT tokens and curl commands for testing.
+The server starts on `http://localhost:5000` and prints sample JWT tokens and curl commands for both services.
 
 ## Project Structure
 
 ```
 auth/
-├── proto/greeter/v1/greeter.proto   # Service definition (3 RPC methods)
-├── gen/                              # Generated code (git-ignored)
+├── proto/
+│   ├── codebased/v1/codebased.proto       # No auth options (rules in code)
+│   └── protobased/v1/protobased.proto     # Auth options in proto
+├── gen/                                    # Generated code (git-ignored)
 ├── src/
-│   ├── services/greeterService.ts   # RPC handlers with auth context access
-│   └── index.ts                     # Server setup with JWT auth + authz
-├── buf.yaml                          # Buf module config
-├── buf.gen.yaml                      # Buf code generation config
+│   ├── services/
+│   │   ├── codeBasedService.ts            # Handlers (auth via programmatic rules)
+│   │   └── protoBasedService.ts           # Handlers (auth via proto options)
+│   └── index.ts                           # Server + interceptor configuration
+├── tests/e2e/auth.test.ts                 # E2E tests for both services
+├── buf.yaml                               # Buf module config (incl. auth proto)
+├── buf.gen.yaml
 ├── tsconfig.json
 └── package.json
 ```
 
 ## How It Works
 
-The example exposes three RPC methods with different authorization levels:
+Both services expose three RPC methods with the same authorization levels:
 
-### SayHello -- Public
+| Method | Auth Level | CodeBased | ProtoBased |
+|--------|-----------|-----------|------------|
+| `SayHello` | Public | `rules: [{ methods: [...], effect: "allow" }]` | `option (method_auth) = { public: true }` |
+| `SayGoodbye` | Authenticated | `rules: [{ methods: [...], effect: "allow" }]` | No option → `defaultPolicy: "deny"` requires auth |
+| `SaySecret` | Admin only | `rules: [{ requires: { roles: ["admin"] } }]` | `option (method_auth) = { requires: { roles: "admin" } }` |
 
-No token required. Anyone can call this method. If a valid JWT happens to be present, the response includes the caller's identity.
+### Interceptor Chain
 
-### SayGoodbye -- Authenticated
-
-Requires a valid JWT. The handler uses `requireAuthContext()` to access the authenticated user's identity. Requests without a token receive `UNAUTHENTICATED` error.
-
-### SaySecret -- Admin Only
-
-Requires a valid JWT **and** the `admin` role. The authorization interceptor checks roles before the handler runs. Users without the `admin` role receive `PERMISSION_DENIED` error.
+```
+Request
+  │
+  ▼
+defaultInterceptors     (error handler, timeout, bulkhead)
+  │
+  ▼
+jwtAuth                 (extract + verify JWT, set AuthContext)
+  │                     skipMethods: CodeBased/SayHello + proto public methods + Health
+  ▼
+protoAuthz              (single interceptor for both approaches)
+  │                     ├─ Proto options found? → Apply proto authz rules
+  │                     └─ No proto options?   → Evaluate programmatic rules → defaultPolicy
+  ▼
+Handler                 (service implementation)
+```
 
 ## Testing
 
-When the server starts, it generates two sample JWT tokens and prints curl commands. You can copy-paste them directly.
-
-### 1. Public call (no token needed)
+### Code-Based Service
 
 ```bash
-curl -s -X POST http://localhost:5000/greeter.v1.GreeterService/SayHello \
+# 1. Public (no token needed)
+curl -s -X POST http://localhost:5000/codebased.v1.CodeBasedService/SayHello \
   -H "Content-Type: application/json" \
   -d '{"name":"World"}'
-```
 
-Expected: `{"message":"Hello, World!"}`
-
-### 2. Authenticated call (user token)
-
-```bash
-curl -s -X POST http://localhost:5000/greeter.v1.GreeterService/SayGoodbye \
+# 2. Authenticated (user token)
+curl -s -X POST http://localhost:5000/codebased.v1.CodeBasedService/SayGoodbye \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <USER_TOKEN>" \
   -d '{"name":"Alice"}'
-```
 
-Expected: `{"message":"Goodbye, Alice! (from Alice)"}`
-
-### 3. Admin call (admin token)
-
-```bash
-curl -s -X POST http://localhost:5000/greeter.v1.GreeterService/SaySecret \
+# 3. Admin only (admin token)
+curl -s -X POST http://localhost:5000/codebased.v1.CodeBasedService/SaySecret \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -d '{"name":"Bob"}'
 ```
 
-Expected: `{"message":"Hello, Bob!","secret":"The admin secret is 42. Verified by admin-1 with roles: admin"}`
-
-### 4. Missing token (should fail)
+### Proto-Based Service
 
 ```bash
-curl -s -X POST http://localhost:5000/greeter.v1.GreeterService/SayGoodbye \
+# 4. Public (no token needed — proto: public=true)
+curl -s -X POST http://localhost:5000/protobased.v1.ProtoBasedService/SayHello \
   -H "Content-Type: application/json" \
-  -d '{"name":"Eve"}'
-```
+  -d '{"name":"World"}'
 
-Expected: `UNAUTHENTICATED` error
-
-### 5. Insufficient permissions (should fail)
-
-```bash
-curl -s -X POST http://localhost:5000/greeter.v1.GreeterService/SaySecret \
+# 5. Authenticated (user token — proto: default policy)
+curl -s -X POST http://localhost:5000/protobased.v1.ProtoBasedService/SayGoodbye \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <USER_TOKEN>" \
   -d '{"name":"Alice"}'
-```
 
-Expected: `PERMISSION_DENIED` error
+# 6. Admin only (admin token — proto: requires roles=admin)
+curl -s -X POST http://localhost:5000/protobased.v1.ProtoBasedService/SaySecret \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"name":"Bob"}'
+```
 
 Replace `<USER_TOKEN>` and `<ADMIN_TOKEN>` with the tokens printed by the server at startup.
 
-## Interceptor Chain
+### E2E Tests
 
-The interceptors execute in the following order for each request:
-
-```
-Request
-  |
-  v
-defaultInterceptors     (error handler, timeout, bulkhead)
-  |
-  v
-jwtAuth                 (extract + verify JWT, set AuthContext)
-  |
-  v
-authz                   (evaluate rules against AuthContext)
-  |
-  v
-Handler                 (service implementation)
+```bash
+pnpm test
 ```
 
-- **jwtAuth** skips methods listed in `skipMethods` (SayHello, Health).
-- **authz** skips the same public methods and applies declarative rules to everything else.
-- Methods not matching any authz rule fall through to `defaultPolicy: "deny"`.
+Runs all scenarios for both services: public, authenticated, admin-only, and health check.
 
 ## Available Scripts
 
@@ -156,13 +165,14 @@ Handler                 (service implementation)
 | `pnpm dev` | Start with `--watch` (auto-restart on changes) |
 | `pnpm build:proto` | Generate TypeScript from `.proto` files |
 | `pnpm typecheck` | Run `tsc --noEmit` |
+| `pnpm test` | Run E2E tests |
 | `pnpm buf:lint` | Lint proto files |
 
 ## Related
 
-- **[basic-service-node](../basic-service-node/)** -- Minimal service without auth
-- **[interceptors](../interceptors/)** -- Custom interceptor examples
-- **[@connectum/auth](https://github.com/Connectum-Framework/connectum/tree/main/packages/auth)** -- Auth package documentation
+- **[basic-service-node](../basic-service-node/)** — Minimal service without auth
+- **[interceptors](../interceptors/)** — Custom interceptor examples
+- **[@connectum/auth](https://github.com/Connectum-Framework/connectum/tree/main/packages/auth)** — Auth package documentation
 
 ## License
 

@@ -1,6 +1,7 @@
 version: v2
 modules:
   - path: proto
+  - path: node_modules/@connectum/auth/proto
 lint:
   use:
     - STANDARD

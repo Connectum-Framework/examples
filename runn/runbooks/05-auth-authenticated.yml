@@ -14,10 +14,11 @@ steps:
       current.res.message.user_token != '' &&
       current.res.message.expired_token != ''
 
-  valid_token:
-    desc: "SayGoodbye with valid user token succeeds"
+  # --- CodeBasedService (programmatic rules) ---
+  codebased_valid_token:
+    desc: "CodeBased/SayGoodbye with valid user token succeeds"
     greq:
-      greeter.v1.GreeterService/SayGoodbye:
+      codebased.v1.CodeBasedService/SayGoodbye:
         headers:
           authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
         message:
@@ -26,19 +27,19 @@ steps:
       current.res.status == 0 &&
       current.res.message.message contains 'Goodbye, Alice!'
 
-  missing_token:
-    desc: "SayGoodbye without token returns UNAUTHENTICATED"
+  codebased_missing_token:
+    desc: "CodeBased/SayGoodbye without token returns UNAUTHENTICATED"
     greq:
-      greeter.v1.GreeterService/SayGoodbye:
+      codebased.v1.CodeBasedService/SayGoodbye:
         message:
           name: "Eve"
     test: |
       current.res.status == 16
 
-  invalid_token:
-    desc: "SayGoodbye with invalid token returns UNAUTHENTICATED"
+  codebased_invalid_token:
+    desc: "CodeBased/SayGoodbye with invalid token returns UNAUTHENTICATED"
     greq:
-      greeter.v1.GreeterService/SayGoodbye:
+      codebased.v1.CodeBasedService/SayGoodbye:
         headers:
           authorization: "Bearer invalid.jwt.token"
         message:
@@ -46,10 +47,54 @@ steps:
     test: |
       current.res.status == 16
 
-  expired_token:
-    desc: "SayGoodbye with expired token returns UNAUTHENTICATED"
+  codebased_expired_token:
+    desc: "CodeBased/SayGoodbye with expired token returns UNAUTHENTICATED"
     greq:
-      greeter.v1.GreeterService/SayGoodbye:
+      codebased.v1.CodeBasedService/SayGoodbye:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.expired_token }}"
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  # --- ProtoBasedService (proto options) ---
+  protobased_valid_token:
+    desc: "ProtoBased/SayGoodbye with valid user token succeeds"
+    greq:
+      protobased.v1.ProtoBasedService/SayGoodbye:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message contains 'Goodbye, Alice!'
+
+  protobased_missing_token:
+    desc: "ProtoBased/SayGoodbye without token returns UNAUTHENTICATED"
+    greq:
+      protobased.v1.ProtoBasedService/SayGoodbye:
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  protobased_invalid_token:
+    desc: "ProtoBased/SayGoodbye with invalid token returns UNAUTHENTICATED"
+    greq:
+      protobased.v1.ProtoBasedService/SayGoodbye:
+        headers:
+          authorization: "Bearer invalid.jwt.token"
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  protobased_expired_token:
+    desc: "ProtoBased/SayGoodbye with expired token returns UNAUTHENTICATED"
+    greq:
+      protobased.v1.ProtoBasedService/SayGoodbye:
         headers:
           authorization: "Bearer {{ steps.get_tokens.res.message.expired_token }}"
         message:

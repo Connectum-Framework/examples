@@ -14,10 +14,11 @@ steps:
       current.res.message.admin_token != '' &&
       current.res.message.user_token != ''
 
-  admin_with_admin_token:
-    desc: "SaySecret with admin token succeeds"
+  # --- CodeBasedService (programmatic rules) ---
+  codebased_admin_with_admin_token:
+    desc: "CodeBased/SaySecret with admin token succeeds"
     greq:
-      greeter.v1.GreeterService/SaySecret:
+      codebased.v1.CodeBasedService/SaySecret:
         headers:
           authorization: "Bearer {{ steps.get_tokens.res.message.admin_token }}"
         message:
@@ -27,10 +28,10 @@ steps:
       current.res.message.message == 'Hello, Bob!' &&
       current.res.message.secret contains 'admin secret is 42'
 
-  admin_with_user_token:
-    desc: "SaySecret with user token returns PERMISSION_DENIED"
+  codebased_admin_with_user_token:
+    desc: "CodeBased/SaySecret with user token returns PERMISSION_DENIED"
     greq:
-      greeter.v1.GreeterService/SaySecret:
+      codebased.v1.CodeBasedService/SaySecret:
         headers:
           authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
         message:
@@ -38,10 +39,44 @@ steps:
     test: |
       current.res.status == 7
 
-  admin_without_token:
-    desc: "SaySecret without token returns UNAUTHENTICATED"
+  codebased_admin_without_token:
+    desc: "CodeBased/SaySecret without token returns UNAUTHENTICATED"
     greq:
-      greeter.v1.GreeterService/SaySecret:
+      codebased.v1.CodeBasedService/SaySecret:
+        message:
+          name: "Eve"
+    test: |
+      current.res.status == 16
+
+  # --- ProtoBasedService (proto options: requires roles=admin) ---
+  protobased_admin_with_admin_token:
+    desc: "ProtoBased/SaySecret with admin token succeeds (proto: requires roles=admin)"
+    greq:
+      protobased.v1.ProtoBasedService/SaySecret:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.admin_token }}"
+        message:
+          name: "Bob"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, Bob!' &&
+      current.res.message.secret contains 'admin secret is 42'
+
+  protobased_admin_with_user_token:
+    desc: "ProtoBased/SaySecret with user token returns PERMISSION_DENIED"
+    greq:
+      protobased.v1.ProtoBasedService/SaySecret:
+        headers:
+          authorization: "Bearer {{ steps.get_tokens.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 7
+
+  protobased_admin_without_token:
+    desc: "ProtoBased/SaySecret without token returns UNAUTHENTICATED"
+    greq:
+      protobased.v1.ProtoBasedService/SaySecret:
         message:
           name: "Eve"
     test: |

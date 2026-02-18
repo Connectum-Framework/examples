@@ -2,17 +2,17 @@ import { create } from "@bufbuild/protobuf";
 import type { ConnectRouter } from "@connectrpc/connect";
 import { getAuthContext, requireAuthContext } from "@connectum/auth";
 import {
-    GreeterService,
+    CodeBasedService,
     type SayGoodbyeRequest,
     SayGoodbyeResponseSchema,
     type SayHelloRequest,
     SayHelloResponseSchema,
     type SaySecretRequest,
     SaySecretResponseSchema,
-} from "#gen/greeter/v1/greeter_pb.ts";
+} from "#gen/codebased/v1/codebased_pb.ts";
 
-export function greeterServiceRoutes(router: ConnectRouter): void {
-    router.service(GreeterService, {
+export function codeBasedServiceRoutes(router: ConnectRouter): void {
+    router.service(CodeBasedService, {
         async sayHello(request: SayHelloRequest) {
             const name = request.name || "World";
             const auth = getAuthContext();

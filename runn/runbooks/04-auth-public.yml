@@ -4,18 +4,19 @@ runners:
     addr: server:5000
     tls: false
 steps:
-  public_no_token:
-    desc: "SayHello without token returns greeting"
+  # --- CodeBasedService (programmatic rules) ---
+  codebased_no_token:
+    desc: "CodeBased/SayHello without token returns greeting"
     greq:
-      greeter.v1.GreeterService/SayHello:
+      codebased.v1.CodeBasedService/SayHello:
         message:
           name: "World"
     test: |
       current.res.status == 0 &&
       current.res.message.message == 'Hello, World!'
 
-  public_with_token:
-    desc: "SayHello with valid token includes auth info"
+  codebased_get_token:
+    desc: "Get test token for CodeBased with-token test"
     greq:
       test.v1.TestService/GetTestTokens:
         message: {}
@@ -23,12 +24,35 @@ steps:
       current.res.status == 0 &&
       current.res.message.user_token != ''
 
-  public_with_user_token:
-    desc: "SayHello with user token still works (skipMethods skips auth processing)"
+  codebased_with_token:
+    desc: "CodeBased/SayHello with user token still works (skipMethods skips auth processing)"
     greq:
-      greeter.v1.GreeterService/SayHello:
+      codebased.v1.CodeBasedService/SayHello:
         headers:
-          authorization: "Bearer {{ steps.public_with_token.res.message.user_token }}"
+          authorization: "Bearer {{ steps.codebased_get_token.res.message.user_token }}"
+        message:
+          name: "Alice"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, Alice!'
+
+  # --- ProtoBasedService (proto options: public=true) ---
+  protobased_no_token:
+    desc: "ProtoBased/SayHello without token returns greeting (proto: public=true)"
+    greq:
+      protobased.v1.ProtoBasedService/SayHello:
+        message:
+          name: "World"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, World!'
+
+  protobased_with_token:
+    desc: "ProtoBased/SayHello with user token still works (proto: public skips auth)"
+    greq:
+      protobased.v1.ProtoBasedService/SayHello:
+        headers:
+          authorization: "Bearer {{ steps.codebased_get_token.res.message.user_token }}"
         message:
           name: "Alice"
     test: |

@@ -13,12 +13,22 @@ steps:
       current.res.status == 0 &&
       current.res.message.status == 1
 
-  check_greeter_service:
-    desc: "Check greeter.v1.GreeterService health"
+  check_codebased_service:
+    desc: "Check codebased.v1.CodeBasedService health"
     greq:
       grpc.health.v1.Health/Check:
         message:
-          service: "greeter.v1.GreeterService"
+          service: "codebased.v1.CodeBasedService"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.status == 1
+
+  check_protobased_service:
+    desc: "Check protobased.v1.ProtoBasedService health"
+    greq:
+      grpc.health.v1.Health/Check:
+        message:
+          service: "protobased.v1.ProtoBasedService"
     test: |
       current.res.status == 0 &&
       current.res.message.status == 1

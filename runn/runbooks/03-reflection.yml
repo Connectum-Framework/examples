@@ -4,10 +4,20 @@ runners:
     addr: server:5000
     tls: false
 steps:
-  discover_greeter:
-    desc: "Discover greeter.v1.GreeterService via reflection"
+  discover_codebased:
+    desc: "Discover codebased.v1.CodeBasedService via reflection"
     greq:
-      greeter.v1.GreeterService/SayHello:
+      codebased.v1.CodeBasedService/SayHello:
+        message:
+          name: "ReflectionTest"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, ReflectionTest!'
+
+  discover_protobased:
+    desc: "Discover protobased.v1.ProtoBasedService via reflection"
+    greq:
+      protobased.v1.ProtoBasedService/SayHello:
         message:
           name: "ReflectionTest"
     test: |

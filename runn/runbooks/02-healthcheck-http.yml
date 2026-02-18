@@ -33,9 +33,9 @@ steps:
       current.res.status == 200
 
   http_health_service:
-    desc: "GET /health?service=greeter.v1.GreeterService returns SERVING"
+    desc: "GET /health?service=codebased.v1.CodeBasedService returns SERVING"
     req:
-      /health?service=greeter.v1.GreeterService:
+      /health?service=codebased.v1.CodeBasedService:
         get:
           header:
             Accept: application/json

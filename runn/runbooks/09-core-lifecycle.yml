@@ -5,10 +5,20 @@ runners:
     tls: false
   req: http://server-http:5001
 steps:
-  grpc_greeter:
-    desc: "gRPC: SayHello on GreeterService"
+  grpc_codebased:
+    desc: "gRPC: SayHello on CodeBasedService"
     greq:
-      greeter.v1.GreeterService/SayHello:
+      codebased.v1.CodeBasedService/SayHello:
+        message:
+          name: "gRPC"
+    test: |
+      current.res.status == 0 &&
+      current.res.message.message == 'Hello, gRPC!'
+
+  grpc_protobased:
+    desc: "gRPC: SayHello on ProtoBasedService"
+    greq:
+      protobased.v1.ProtoBasedService/SayHello:
         message:
           name: "gRPC"
     test: |
@@ -16,7 +26,7 @@ steps:
       current.res.message.message == 'Hello, gRPC!'
 
   grpc_test_service:
-    desc: "gRPC: SlowMethod on TestService (second registered service)"
+    desc: "gRPC: SlowMethod on TestService (third registered service)"
     greq:
       test.v1.TestService/SlowMethod:
         message:
@@ -26,9 +36,9 @@ steps:
       current.res.message.message == 'Completed after 0ms'
 
   http_say_hello:
-    desc: "ConnectRPC HTTP: SayHello via POST"
+    desc: "ConnectRPC HTTP: CodeBased/SayHello via POST"
     req:
-      /greeter.v1.GreeterService/SayHello:
+      /codebased.v1.CodeBasedService/SayHello:
         post:
           header:
             Content-Type: application/json

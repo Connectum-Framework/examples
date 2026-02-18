@@ -2,6 +2,7 @@ version: v2
 clean: true
 inputs:
   - directory: proto
+  - directory: node_modules/@connectum/auth/proto
 plugins:
   - local: protoc-gen-es
     out: gen
