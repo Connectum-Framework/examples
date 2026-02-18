@@ -6,8 +6,8 @@
 
 import { create } from "@bufbuild/protobuf";
 import type { ConnectRouter } from "@connectrpc/connect";
-import { GreeterService } from "#gen/greeter_pb.js";
-import { type SayGoodbyeRequest, SayGoodbyeResponseSchema, type SayHelloRequest, SayHelloResponseSchema } from "#gen/greeter_pb.js";
+import { GreeterService } from "#gen/greeter/v1/greeter_pb.ts";
+import { type SayGoodbyeRequest, SayGoodbyeResponseSchema, type SayHelloRequest, SayHelloResponseSchema } from "#gen/greeter/v1/greeter_pb.ts";
 
 /**
  * Register Benchmark service routes (minimal overhead implementation)

@@ -20,7 +20,6 @@ import type { CreateServerOptions, Server } from "@connectum/core";
 import {
     createDefaultInterceptors,
     createLoggerInterceptor,
-    createValidationInterceptor,
 } from "@connectum/interceptors";
 import { createOtelInterceptor } from "@connectum/otel";
 import { benchmarkServiceRoutes } from "./services/benchmarkService.ts";
@@ -46,7 +45,15 @@ const validationOptions: CreateServerOptions = {
     services: [benchmarkServiceRoutes],
     port: 8082,
     host: "0.0.0.0",
-    interceptors: [createValidationInterceptor()], // ONLY validation
+    interceptors: createDefaultInterceptors({
+        errorHandler: false,
+        timeout: false,
+        bulkhead: false,
+        circuitBreaker: false,
+        retry: false,
+        validation: true,
+        serializer: false,
+    }),
 };
 
 // ============================================================================
@@ -94,13 +101,12 @@ const fullChainOptions: CreateServerOptions = {
                 logErrors: true,
                 includeStackTrace: true,
             },
-            logger: {
-                level: "error", // Minimal logging
-                skipHealthCheck: true,
-            },
             serializer: true,
             validation: true,
-            redact: false, // Skip for performance (no sensitive data in benchmark)
+        }),
+        createLoggerInterceptor({
+            level: "error",
+            skipHealthCheck: true,
         }),
         createOtelInterceptor({
             filter: ({ service }) => !service.includes("grpc.health"),

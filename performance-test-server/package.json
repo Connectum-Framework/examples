@@ -11,23 +11,39 @@
   "scripts": {
     "start": "node src/index.ts",
     "dev": "node --watch src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "buf:generate": "buf generate",
+    "buf:lint": "buf lint",
+    "build:proto": "pnpm run buf:generate"
   },
-  "keywords": ["performance", "benchmarking", "k6", "connectum"],
+  "keywords": [
+    "performance",
+    "benchmarking",
+    "k6",
+    "connectum"
+  ],
   "author": "Highload.Zone",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@connectum/core": "workspace:^",
-    "@connectum/interceptors": "workspace:^",
-    "@connectrpc/connect": "catalog:",
-    "@bufbuild/protobuf": "catalog:"
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectum/core": "1.0.0-rc.4",
+    "@connectum/interceptors": "1.0.0-rc.4",
+    "@connectum/otel": "1.0.0-rc.4"
   },
   "devDependencies": {
-    "@bufbuild/protoc-gen-es": "catalog:",
-    "@bufbuild/protoc-gen-connect-es": "^0.13.0",
-    "typescript": "catalog:"
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@types/node": "^25.2.0",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@bufbuild/buf",
+      "protobufjs"
+    ]
   }
 }
