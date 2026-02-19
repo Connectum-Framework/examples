@@ -4,8 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@connectum/auth': file:/tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz
+pnpmfileChecksum: sha256-caBtEEd165KX9H1OF6en4qlk7e8dvEtZaHq2Ex6fYwo=
 
 importers:
 
@@ -18,8 +17,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/auth':
-        specifier: file:/tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz
-        version: file:../../../../../../tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@bufbuild/protobuf@2.11.0)
       '@connectum/core':
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -145,9 +144,8 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/auth@file:../../../../../../tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-XIhQOKquFD57S5udW3KaXcZvPYvvNrQnKwZ0YR7CzHRdyAgc1j0Vlt0TYnFe2lph78QpV/egqcBxH5RIVir72g==, tarball: file:../../../../../../tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/auth@1.0.0-rc.4':
+    resolution: {integrity: sha512-2GkEExTceCmuaIsB7bdnB084CK+Niz6aCR6iYochFPFX8sTxaN0fbsSWu9fobHUdvD0is+m8XaOw13eDFFmlAA==}
     engines: {node: '>=18.0.0'}
 
   '@connectum/core@1.0.0-rc.4':
@@ -300,12 +298,13 @@ snapshots:
       '@bufbuild/protovalidate': 1.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
 
-  '@connectum/auth@file:../../../../../../tmp/connectum-pack/connectum-auth-1.0.0-rc.4.tgz':
+  '@connectum/auth@1.0.0-rc.4(@bufbuild/protobuf@2.11.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/core': 1.0.0-rc.4
       jose: 6.1.3
+    transitivePeerDependencies:
+      - '@bufbuild/protobuf'
 
   '@connectum/core@1.0.0-rc.4':
     dependencies:

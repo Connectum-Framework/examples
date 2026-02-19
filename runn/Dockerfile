@@ -8,12 +8,21 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-# Copy package manifests and local tarballs for dependency caching
-COPY package.json pnpm-lock.yaml ./
-COPY vendor/ ./vendor/
+# Copy package manifests (build context = Connectum/ root)
+COPY examples/runn/package.json examples/runn/pnpm-lock.yaml ./
 
-# Install production dependencies (includes local tarballs from vendor/)
-RUN pnpm install --frozen-lockfile --prod
+# Copy .pnpmfile.cjs hook (resolves @connectum/* to local tarballs)
+COPY examples/.pnpmfile.cjs ./
+
+# Copy local tarballs from pack/ (hook references ../pack relative to .pnpmfile.cjs)
+# Since .pnpmfile.cjs is at /app/.pnpmfile.cjs, ../pack resolves to /pack
+COPY pack/ /pack/
+
+# Set CONNECTUM_LOCAL=1 so the hook activates
+ENV CONNECTUM_LOCAL=1
+
+# Install production dependencies using the hook to redirect @connectum/* to /pack/*.tgz
+RUN pnpm install --prod
 
 # =============================================================================
 # Stage 2: Production runtime
@@ -39,9 +48,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy application source (native TypeScript -- no build needed)
-COPY package.json ./
-COPY src/ ./src/
-COPY gen/ ./gen/
+COPY examples/runn/package.json ./
+COPY examples/runn/src/ ./src/
+COPY examples/runn/gen/ ./gen/
 
 # Set ownership (includes certs)
 RUN chown -R connectum:connectum /app

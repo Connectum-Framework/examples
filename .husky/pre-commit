@@ -1,0 +1,19 @@
+#!/bin/sh
+# pre-commit hook: prevent committing pnpm-lock.yaml with local pack/ paths
+#
+# Setup (run once after clone):
+#   git config core.hooksPath .husky
+
+set -eu
+
+LOCK_FILES=$(git diff --cached --name-only | grep 'pnpm-lock.yaml' || true)
+
+if [ -n "$LOCK_FILES" ]; then
+  for f in $LOCK_FILES; do
+    if git show ":$f" 2>/dev/null | grep -q 'pack/connectum-'; then
+      echo "ERROR: $f contains local pack/ paths." >&2
+      echo "Run 'pnpm install' without CONNECTUM_LOCAL before committing." >&2
+      exit 1
+    fi
+  done
+fi

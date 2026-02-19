@@ -4,8 +4,8 @@ services:
   # =========================================================================
   server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: examples/runn/Dockerfile
     ports:
       - "5000:5000"
     environment:
@@ -31,8 +31,8 @@ services:
   # =========================================================================
   server-http:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: examples/runn/Dockerfile
     ports:
       - "5001:5001"
     environment:
@@ -45,7 +45,7 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
+      test: ["CMD", "curl", "-f", "--http2-prior-knowledge", "http://localhost:5001/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -58,8 +58,8 @@ services:
   # =========================================================================
   server-tls:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: examples/runn/Dockerfile
     ports:
       - "5002:5002"
     environment:

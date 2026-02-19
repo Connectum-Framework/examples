@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+pnpmfileChecksum: sha256-caBtEEd165KX9H1OF6en4qlk7e8dvEtZaHq2Ex6fYwo=
+
 importers:
 
   .:
@@ -15,23 +17,23 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/auth':
-        specifier: file:vendor/connectum-auth-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-auth-1.0.0-rc.4.tgz
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@bufbuild/protobuf@2.11.0)
       '@connectum/core':
-        specifier: file:vendor/connectum-core-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-core-1.0.0-rc.4.tgz
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4
       '@connectum/healthcheck':
-        specifier: file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz(@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz)
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@connectum/core@1.0.0-rc.4)
       '@connectum/interceptors':
-        specifier: file:vendor/connectum-interceptors-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-interceptors-1.0.0-rc.4.tgz(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
       '@connectum/otel':
-        specifier: file:vendor/connectum-otel-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-otel-1.0.0-rc.4.tgz(@bufbuild/protobuf@2.11.0)
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@bufbuild/protobuf@2.11.0)
       '@connectum/reflection':
-        specifier: file:vendor/connectum-reflection-1.0.0-rc.4.tgz
-        version: file:vendor/connectum-reflection-1.0.0-rc.4.tgz(@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz)
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@connectum/core@1.0.0-rc.4)
       jose:
         specifier: ^6.0.11
         version: 6.1.3
@@ -148,40 +150,30 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/auth@file:vendor/connectum-auth-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-XIhQOKquFD57S5udW3KaXcZvPYvvNrQnKwZ0YR7CzHRdyAgc1j0Vlt0TYnFe2lph78QpV/egqcBxH5RIVir72g==, tarball: file:vendor/connectum-auth-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/auth@1.0.0-rc.4':
+    resolution: {integrity: sha512-2GkEExTceCmuaIsB7bdnB084CK+Niz6aCR6iYochFPFX8sTxaN0fbsSWu9fobHUdvD0is+m8XaOw13eDFFmlAA==}
     engines: {node: '>=18.0.0'}
 
   '@connectum/core@1.0.0-rc.4':
     resolution: {integrity: sha512-8NA9Pz6NCMKXL8V8OGu5kOI2WOClSYqNxsNH4JEnryanqiIoqdrFQ1GdazmB7Gfgf5UM3Qm5/VRVmWFsAIpiDw==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-Naie3eq/5mtAFDewsYE8KM7BJ6Yhl4BlRojhEW5c4llq/jEFd0ITlUBHqSCD5Yvmrt/Hwl7tATdsv1R7ZwvvVA==, tarball: file:vendor/connectum-core-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
-    engines: {node: '>=18.0.0'}
-
-  '@connectum/healthcheck@file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-GUDLhDUHeHDv1bTXWhSLe2bn4HbTyMbClgrrvoko/R86Gdsmp7zswuusW0OGpEkm7qEjohN7tfRWhmghfQ/BqQ==, tarball: file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/healthcheck@1.0.0-rc.4':
+    resolution: {integrity: sha512-NgHp8q6M9AONaOVAt2oUgyLYCAlwOHMK9bRrajZb73uV405t/ADqm+8u++7OLzS6JqRvbzNc34J1BPeniRCbrQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@connectum/core': ^1.0.0-rc.4
 
-  '@connectum/interceptors@file:vendor/connectum-interceptors-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-9P0krN7Pcf8QJY3xRtH/OR2r6RS0eIHelrB9D0XJoq+Hrz8iybAgGS2FYXc5a0lGc88aKWO3MqP+3IKZs1HA/A==, tarball: file:vendor/connectum-interceptors-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/interceptors@1.0.0-rc.4':
+    resolution: {integrity: sha512-9P0krN7Pcf8QJY3xRtH/OR2r6RS0eIHelrB9D0XJoq+Hrz8iybAgGS2FYXc5a0lGc88aKWO3MqP+3IKZs1HA/A==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/otel@file:vendor/connectum-otel-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-4UDyzgiOeOwSRvNYThSQzVvRsSzY17+AgdGQK4xT0t23ocMOCfvCtRfn0G++Hz3AjNEaof9HkXO1UmJAkCSdog==, tarball: file:vendor/connectum-otel-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/otel@1.0.0-rc.4':
+    resolution: {integrity: sha512-4UDyzgiOeOwSRvNYThSQzVvRsSzY17+AgdGQK4xT0t23ocMOCfvCtRfn0G++Hz3AjNEaof9HkXO1UmJAkCSdog==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/reflection@file:vendor/connectum-reflection-1.0.0-rc.4.tgz':
-    resolution: {integrity: sha512-WXseidGlbd40ARB9Wx4FSO2x7GHfPEwJFKOViQIe1nwX1uWzfNiI/BNKt+Otv20J0/4HllX12IN8Zu9YNKWU/g==, tarball: file:vendor/connectum-reflection-1.0.0-rc.4.tgz}
-    version: 1.0.0-rc.4
+  '@connectum/reflection@1.0.0-rc.4':
+    resolution: {integrity: sha512-WXseidGlbd40ARB9Wx4FSO2x7GHfPEwJFKOViQIe1nwX1uWzfNiI/BNKt+Otv20J0/4HllX12IN8Zu9YNKWU/g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@connectum/core': ^1.0.0-rc.4
@@ -542,12 +534,13 @@ snapshots:
       '@bufbuild/protovalidate': 1.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
 
-  '@connectum/auth@file:vendor/connectum-auth-1.0.0-rc.4.tgz':
+  '@connectum/auth@1.0.0-rc.4(@bufbuild/protobuf@2.11.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/core': 1.0.0-rc.4
       jose: 6.1.3
+    transitivePeerDependencies:
+      - '@bufbuild/protobuf'
 
   '@connectum/core@1.0.0-rc.4':
     dependencies:
@@ -557,21 +550,13 @@ snapshots:
       env-var: 7.5.0
       zod: 4.3.6
 
-  '@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz':
+  '@connectum/healthcheck@1.0.0-rc.4(@connectum/core@1.0.0-rc.4)':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectrpc/connect-node': 2.1.1(@bufbuild/protobuf@2.11.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.11.0))
-      env-var: 7.5.0
-      zod: 4.3.6
+      '@connectum/core': 1.0.0-rc.4
 
-  '@connectum/healthcheck@file:vendor/connectum-healthcheck-1.0.0-rc.4.tgz(@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz)':
-    dependencies:
-      '@bufbuild/protobuf': 2.11.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectum/core': file:vendor/connectum-core-1.0.0-rc.4.tgz
-
-  '@connectum/interceptors@file:vendor/connectum-interceptors-1.0.0-rc.4.tgz(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
+  '@connectum/interceptors@1.0.0-rc.4(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
@@ -581,7 +566,7 @@ snapshots:
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/otel@file:vendor/connectum-otel-1.0.0-rc.4.tgz(@bufbuild/protobuf@2.11.0)':
+  '@connectum/otel@1.0.0-rc.4(@bufbuild/protobuf@2.11.0)':
     dependencies:
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@opentelemetry/api': 1.9.0
@@ -601,11 +586,11 @@ snapshots:
     transitivePeerDependencies:
       - '@bufbuild/protobuf'
 
-  '@connectum/reflection@file:vendor/connectum-reflection-1.0.0-rc.4.tgz(@connectum/core@file:vendor/connectum-core-1.0.0-rc.4.tgz)':
+  '@connectum/reflection@1.0.0-rc.4(@connectum/core@1.0.0-rc.4)':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectum/core': file:vendor/connectum-core-1.0.0-rc.4.tgz
+      '@connectum/core': 1.0.0-rc.4
       '@lambdalisue/connectrpc-grpcreflect': 0.5.0
 
   '@grpc/grpc-js@1.14.3':
