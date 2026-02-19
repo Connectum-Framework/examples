@@ -45,7 +45,7 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "--http2-prior-knowledge", "http://localhost:5001/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
