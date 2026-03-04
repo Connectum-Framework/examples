@@ -26,6 +26,17 @@ interface RateLimitEntry {
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 /**
+ * Remove expired entries to prevent unbounded memory growth.
+ */
+function pruneExpiredEntries(now: number): void {
+    for (const [clientId, entry] of rateLimitStore) {
+        if (now - entry.windowStart >= WINDOW_MS) {
+            rateLimitStore.delete(clientId);
+        }
+    }
+}
+
+/**
  * Reset all rate limit counters.
  *
  * Useful for testing to ensure a clean state between test runs.
@@ -78,6 +89,7 @@ export const rateLimitInterceptor: Interceptor = (next) => async (req) => {
 
     const clientId = getClientId(req.header);
     const now = Date.now();
+    pruneExpiredEntries(now);
 
     let entry = rateLimitStore.get(clientId);
 

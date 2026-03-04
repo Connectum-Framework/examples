@@ -10,7 +10,7 @@ Demonstrates how to write and use **custom ConnectRPC interceptors** with Connec
 
 ## Project structure
 
-```
+```text
 src/
 ├── index.ts                          # Server entry point
 ├── interceptors/
