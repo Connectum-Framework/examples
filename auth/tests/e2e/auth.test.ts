@@ -16,7 +16,6 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import http2 from "node:http2";
 import { createServer } from "@connectum/core";
 import type { Server } from "@connectum/core";
 import { createHealthcheckManager, Healthcheck, ServingStatus } from "@connectum/healthcheck";
@@ -34,62 +33,32 @@ import { ProtoBasedService } from "#gen/protobased/v1/protobased_pb.ts";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function http2Request(
-    port: number,
-    reqHeaders: Record<string, string>,
-    payload?: string,
-): Promise<{ status: number; body: Record<string, unknown> }> {
-    return new Promise((resolve, reject) => {
-        const client = http2.connect(`http://localhost:${port}`);
-        client.on("error", reject);
-
-        const req = client.request(reqHeaders);
-
-        let status = 0;
-        req.on("response", (headers) => {
-            status = (headers[":status"] ?? 0) as number;
-        });
-
-        const chunks: Buffer[] = [];
-        req.on("data", (chunk: Buffer) => chunks.push(chunk));
-        req.on("end", () => {
-            const json = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
-            client.close();
-            resolve({ status, body: json });
-        });
-        req.on("error", (err: unknown) => {
-            client.close();
-            reject(err);
-        });
-
-        if (payload) req.write(payload);
-        req.end();
-    });
-}
-
-function connectPost(
+async function connectPost(
     port: number,
     method: string,
     body: Record<string, unknown>,
     headers?: Record<string, string>,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-    return http2Request(
-        port,
-        {
-            ":method": "POST",
-            ":path": `/${method}`,
+    const response = await fetch(`http://localhost:${port}/${method}`, {
+        method: "POST",
+        headers: {
             "content-type": "application/json",
             ...headers,
         },
-        JSON.stringify(body),
-    );
+        body: JSON.stringify(body),
+    });
+
+    const json = (await response.json()) as Record<string, unknown>;
+    return { status: response.status, body: json };
 }
 
-function http2Get(
+async function httpGet(
     port: number,
     path: string,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-    return http2Request(port, { ":method": "GET", ":path": path });
+    const response = await fetch(`http://localhost:${port}${path}`);
+    const json = (await response.json()) as Record<string, unknown>;
+    return { status: response.status, body: json };
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +388,7 @@ describe("Auth E2E", () => {
 
     describe("Health check", () => {
         it("should respond 200 on GET /healthz", async () => {
-            const result = await http2Get(port, "/healthz");
+            const result = await httpGet(port, "/healthz");
 
             assert.equal(result.status, 200);
             assert.equal(result.body.status, "SERVING");
