@@ -41,6 +41,7 @@ async function connectPost(
 ): Promise<{ status: number; body: Record<string, unknown> }> {
     const response = await fetch(`http://localhost:${port}/${method}`, {
         method: "POST",
+        signal: AbortSignal.timeout(5_000),
         headers: {
             "content-type": "application/json",
             ...headers,
@@ -56,7 +57,9 @@ async function httpGet(
     port: number,
     path: string,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-    const response = await fetch(`http://localhost:${port}${path}`);
+    const response = await fetch(`http://localhost:${port}${path}`, {
+        signal: AbortSignal.timeout(5_000),
+    });
     const json = (await response.json()) as Record<string, unknown>;
     return { status: response.status, body: json };
 }
