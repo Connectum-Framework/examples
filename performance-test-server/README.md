@@ -175,8 +175,13 @@ interceptors: [] // NO interceptors - pure baseline
 
 ```typescript
 interceptors: createDefaultInterceptors({
-  validation: true, // ONLY validation
-  // All others disabled
+  errorHandler: false,
+  timeout: false,
+  bulkhead: false,
+  circuitBreaker: false,
+  retry: false,
+  validation: true,
+  serializer: false,
 })
 ```
 
@@ -233,7 +238,7 @@ Results from Docker benchmarks (10 VUs, 2 min duration, TLS/HTTP2):
 | OTel (tracing + metrics) | 2.94ms | 5.15ms | 5.80ms | - |
 | Full chain (all interceptors) | 3.45ms | 5.25ms | 5.89ms | - |
 
-**Per interceptor overhead**: (Full chain p95 - Baseline p95) / interceptors = (5.89 - 4.40) / ~7 = **0.21ms** per interceptor
+**Per interceptor overhead**: (Full chain p95 - Baseline p95) / interceptors = (5.89 - 4.40) / 9 = **0.17ms** per interceptor
 
 All thresholds passed:
 - Baseline p95 < 10ms: 4.40ms

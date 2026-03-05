@@ -2,7 +2,7 @@
  * Interceptor Overhead Profiling
  *
  * Purpose: Measure performance impact of each interceptor
- * Duration: 2 minutes per configuration
+ * Duration: 2 minutes total
  * Target: < 2ms overhead per interceptor
  *
  * Tests 5 different server configurations:
@@ -40,14 +40,14 @@ const fullChainSuccess = new Rate("fullchain_success");
 
 export const options = {
     vus: 10, // Low VU count for accurate measurements
-    duration: "2m", // 2 minutes per scenario
+    duration: "2m", // 2 minutes total
 
     // Thresholds: Full chain should be < 2ms per interceptor overhead
     thresholds: {
         // Baseline should be fast (< 10ms p95)
         baseline_no_interceptors: ["p(95)<10"],
 
-        // Full chain with ~10 interceptors: baseline + (10 * 2ms) = ~30ms max
+        // Full chain with 9 interceptors: baseline + (9 * 2ms) = ~28ms max
         full_chain_all_interceptors: ["p(95)<30"],
 
         // All configurations should have high success rate
@@ -122,50 +122,55 @@ function callService(port, configName) {
 // ============================================================================
 
 export default function () {
-    // Test each configuration in sequence
-    // NOTE: We test them all in one VU iteration to ensure fair comparison
+    // Test all configurations per iteration in randomized order
+    // to eliminate ordering bias in measurements
+    const testCases = [
+        {
+            run() {
+                const { response, success } = callService(BASELINE_PORT, "baseline");
+                baselineDuration.add(response.timings.duration);
+                baselineSuccess.add(success);
+            },
+        },
+        {
+            run() {
+                const { response, success } = callService(VALIDATION_PORT, "validation");
+                validationDuration.add(response.timings.duration);
+                validationSuccess.add(success);
+            },
+        },
+        {
+            run() {
+                const { response, success } = callService(LOGGER_PORT, "logger");
+                loggerDuration.add(response.timings.duration);
+                loggerSuccess.add(success);
+            },
+        },
+        {
+            run() {
+                const { response, success } = callService(TRACING_PORT, "tracing");
+                tracingDuration.add(response.timings.duration);
+                tracingSuccess.add(success);
+            },
+        },
+        {
+            run() {
+                const { response, success } = callService(FULLCHAIN_PORT, "fullchain");
+                fullChainDuration.add(response.timings.duration);
+                fullChainSuccess.add(success);
+            },
+        },
+    ];
 
-    // 1. Baseline (no interceptors)
-    {
-        const { response, success } = callService(BASELINE_PORT, "baseline");
-        baselineDuration.add(response.timings.duration);
-        baselineSuccess.add(success);
+    // Fisher-Yates shuffle to randomize execution order
+    for (let i = testCases.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [testCases[i], testCases[j]] = [testCases[j], testCases[i]];
     }
 
-    sleep(0.1); // Small pause between requests
-
-    // 2. Validation only
-    {
-        const { response, success } = callService(VALIDATION_PORT, "validation");
-        validationDuration.add(response.timings.duration);
-        validationSuccess.add(success);
-    }
-
-    sleep(0.1);
-
-    // 3. Logger only
-    {
-        const { response, success } = callService(LOGGER_PORT, "logger");
-        loggerDuration.add(response.timings.duration);
-        loggerSuccess.add(success);
-    }
-
-    sleep(0.1);
-
-    // 4. Tracing only
-    {
-        const { response, success } = callService(TRACING_PORT, "tracing");
-        tracingDuration.add(response.timings.duration);
-        tracingSuccess.add(success);
-    }
-
-    sleep(0.1);
-
-    // 5. Full chain (all interceptors)
-    {
-        const { response, success } = callService(FULLCHAIN_PORT, "fullchain");
-        fullChainDuration.add(response.timings.duration);
-        fullChainSuccess.add(success);
+    for (const testCase of testCases) {
+        testCase.run();
+        sleep(0.1);
     }
 
     // Think time between iterations
@@ -225,10 +230,10 @@ export function teardown(_data) {
     console.log("\n  Analysis Instructions:");
     console.log("   1. Compare p50, p95, p99 latencies across configurations");
     console.log("   2. Calculate overhead per interceptor:");
-    console.log("      - Validation overhead = validation_p95 - baseline_p95");
-    console.log("      - Logger overhead = logger_p95 - baseline_p95");
-    console.log("      - Tracing overhead = tracing_p95 - baseline_p95");
-    console.log("      - Full chain overhead = fullchain_p95 - baseline_p95");
+    console.log("      - Validation overhead = with_validation_only(p95) - baseline_no_interceptors(p95)");
+    console.log("      - Logger overhead = with_logger_only(p95) - baseline_no_interceptors(p95)");
+    console.log("      - Tracing overhead = with_tracing_only(p95) - baseline_no_interceptors(p95)");
+    console.log("      - Full chain overhead = full_chain_all_interceptors(p95) - baseline_no_interceptors(p95)");
     console.log("   3. Estimate cost per interceptor:");
     console.log("      - Avg overhead = fullchain_overhead / num_interceptors");
     console.log("   4. Verify: Avg overhead < 2ms or NOT");

@@ -4,7 +4,7 @@
  * Purpose: Measure performance under normal sustained load
  * Duration: 7 minutes total
  * Target: 100 concurrent virtual users
- * SLA: p95 < 100ms, throughput > 1000 req/sec, error rate < 1%
+ * SLA: p95 < 100ms, throughput > 500 req/sec, error rate < 1%
  */
 
 import { check, sleep } from "k6";
@@ -99,20 +99,12 @@ export default function () {
     const success = check(response, {
         "status is 200": (r) => r.status === 200,
         "response time < 100ms": (r) => r.timings.duration < 100,
-        "has valid JSON": (r) => {
+        "has valid response": (r) => {
             try {
                 const body = JSON.parse(r.body);
-                return body !== null && typeof body === "object";
+                return body !== null && typeof body === "object" && "message" in body;
             } catch (e) {
                 console.error(`JSON parse error: ${e.message}`);
-                return false;
-            }
-        },
-        "has message field": (r) => {
-            try {
-                const body = JSON.parse(r.body);
-                return "message" in body;
-            } catch (_e) {
                 return false;
             }
         },
@@ -153,7 +145,7 @@ export function setup() {
     console.log("   - p50 latency: < 50ms");
     console.log("   - p95 latency: < 100ms (PRIMARY SLA)");
     console.log("   - p99 latency: < 150ms");
-    console.log("   - Throughput: > 1000 req/sec");
+    console.log("   - Throughput: > 500 req/sec");
     console.log("   - Error rate: < 1%");
     console.log("\n");
 

@@ -3,8 +3,8 @@
 # =============================================================================
 FROM node:25-slim AS deps
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest-10 --activate
+# Install pnpm (pinned version)
+RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 
 WORKDIR /app
 
@@ -13,6 +13,23 @@ COPY package.json pnpm-lock.yaml ./
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod
+
+# =============================================================================
+# Generate protobuf TypeScript code from .proto sources
+# =============================================================================
+FROM node:25-slim AS proto
+
+RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY proto/ ./proto/
+COPY buf.yaml buf.gen.yaml ./
+
+RUN pnpm build:proto
 
 # =============================================================================
 # Generate self-signed TLS certificates for h2 (ALPN) support
@@ -41,10 +58,12 @@ COPY --from=deps --chown=connectum:connectum /app/node_modules ./node_modules
 # Copy TLS certificates
 COPY --from=certs --chown=connectum:connectum /certs /app/certs
 
+# Copy generated protobuf code from proto stage
+COPY --from=proto --chown=connectum:connectum /app/gen ./gen
+
 # Copy application source (native TypeScript — no build needed)
 COPY --chown=connectum:connectum package.json ./
 COPY --chown=connectum:connectum src/ ./src/
-COPY --chown=connectum:connectum gen/ ./gen/
 
 USER connectum
 

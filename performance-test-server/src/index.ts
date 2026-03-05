@@ -128,10 +128,10 @@ const fullChainOptions: CreateServerOptions = {
 // Start all servers
 // ============================================================================
 
-console.log("📊 Starting 5 server configurations:\n");
+console.log("Starting 5 server configurations:\n");
 
 if (tlsConfig) {
-    console.log(`🔒 TLS enabled (certs from ${process.env.TLS_DIR})\n`);
+    console.log(`TLS enabled (certs from ${process.env.TLS_DIR})\n`);
 }
 
 try {

@@ -25,8 +25,8 @@ README.md
 CHANGELOG.md
 LICENSE
 
-# Proto source (already compiled to gen/)
-proto/
+# Proto source: NOT excluded — needed by proto build stage
+# proto/
 
 # k6 scripts (mounted as volume, not baked into image)
 k6/
