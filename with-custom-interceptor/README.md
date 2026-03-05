@@ -48,3 +48,8 @@ grpcurl -plaintext -H 'x-api-key: test-api-key-123' -d '{"message": "Secret"}' l
 # Rate-limited echo
 grpcurl -plaintext -d '{"message": "Test"}' localhost:5000 echo.v1.EchoService/RateLimitedEcho
 ```
+
+## Resources
+
+- [Quickstart Guide](https://connectum.dev/en/guide/quickstart)
+- [Custom Interceptors Guide](https://connectum.dev/en/guide/interceptors/custom)
