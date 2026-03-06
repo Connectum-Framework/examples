@@ -1,29 +1,24 @@
 # =============================================================================
 # Performance Test Server — Docker image for k6 benchmarking
 # =============================================================================
-FROM node:25-slim AS deps
+FROM node:25-slim AS base
 
-# Install pnpm (pinned version)
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
-
 WORKDIR /app
-
-# Copy package manifests for dependency caching
 COPY package.json pnpm-lock.yaml ./
 
-# Install production dependencies only
+# =============================================================================
+# Production dependencies
+# =============================================================================
+FROM base AS deps
+
 RUN pnpm install --frozen-lockfile --prod
 
 # =============================================================================
 # Generate protobuf TypeScript code from .proto sources
 # =============================================================================
-FROM node:25-slim AS proto
+FROM base AS proto
 
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
-
-WORKDIR /app
-
-COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY proto/ ./proto/

@@ -204,7 +204,7 @@ export function setup() {
 
     console.log("\n  Health checks:\n");
     for (const { port, name } of ports) {
-        const healthResponse = http.post(`${PROTOCOL}://${BASE_HOST}:${port}/greeter.v1.GreeterService/SayHello`, JSON.stringify({ name: "healthcheck" }), {
+        const healthResponse = http.post(`${PROTOCOL}://${BASE_HOST}:${port}${SERVICE_PATH}`, JSON.stringify({ name: "healthcheck" }), {
             headers: {
                 "Content-Type": "application/json",
                 "Connect-Protocol-Version": "1",

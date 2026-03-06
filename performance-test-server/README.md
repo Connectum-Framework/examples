@@ -88,7 +88,7 @@ docker compose up k6-interceptor-overhead --build --abort-on-container-exit
 
 ### Basic Load Test
 
-Stress-tests the full-chain configuration with 100 concurrent VUs for 7 minutes:
+Stress-tests the full-chain configuration for 7 minutes total, peaking at 100 concurrent VUs (ramp-up → plateau → cooldown):
 
 ```bash
 docker compose --profile load up k6-basic-load --build --abort-on-container-exit
