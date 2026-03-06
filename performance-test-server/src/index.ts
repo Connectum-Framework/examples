@@ -29,7 +29,7 @@ const tlsConfig = process.env.TLS_DIR
     ? { dirPath: process.env.TLS_DIR }
     : undefined;
 
-console.log("🚀 Starting Performance Test Server...\n");
+console.log("Starting Performance Test Server...\n");
 
 // ============================================================================
 // Configuration 1: Baseline (no interceptors)
@@ -128,10 +128,10 @@ const fullChainOptions: CreateServerOptions = {
 // Start all servers
 // ============================================================================
 
-console.log("📊 Starting 5 server configurations:\n");
+console.log("Starting 5 server configurations:\n");
 
 if (tlsConfig) {
-    console.log(`🔒 TLS enabled (certs from ${process.env.TLS_DIR})\n`);
+    console.log(`TLS enabled (certs from ${process.env.TLS_DIR})\n`);
 }
 
 try {
@@ -147,7 +147,7 @@ try {
     // start() is async - start all servers in parallel
     await Promise.all(servers.map((server) => server.start()));
 
-    console.log("\n✅ All servers started successfully!\n");
+    console.log("\nAll servers started successfully!\n");
     console.log("Port | Configuration");
     console.log("-----|-----------------------------------");
     console.log("8081 | Baseline (no interceptors)");
@@ -156,31 +156,29 @@ try {
     console.log("8084 | OTel (tracing + metrics) only");
     console.log("8080 | Full chain (all interceptors)");
 
-    console.log("\n🧪 Ready for k6 benchmarks!");
+    console.log("\nReady for k6 benchmarks!");
     console.log("\nRun benchmarks with:");
-    console.log("  k6 run tests/performance/scenarios/basic-load.js");
-    console.log("  k6 run tests/performance/scenarios/stress-test.js");
-    console.log("  k6 run tests/performance/scenarios/spike-test.js");
-    console.log("  k6 run tests/performance/scenarios/interceptor-overhead.js");
+    console.log("  k6 run k6/basic-load.js");
+    console.log("  k6 run k6/interceptor-overhead.js");
 
-    console.log("\n🛑 Press Ctrl+C to shutdown all servers\n");
+    console.log("\nPress Ctrl+C to shutdown all servers\n");
 
     // ============================================================================
     // Graceful shutdown on SIGTERM/SIGINT
     // ============================================================================
 
     const shutdownHandler = async () => {
-        console.log("\n🛑 Shutting down all servers gracefully...");
+        console.log("\nShutting down all servers gracefully...");
 
         await Promise.all(servers.map((server) => server.stop()));
 
-        console.log("✅ All servers stopped");
+        console.log("All servers stopped");
         process.exit(0);
     };
 
     process.on("SIGTERM", shutdownHandler);
     process.on("SIGINT", shutdownHandler);
 } catch (error) {
-    console.error("❌ Failed to start servers:", error);
+    console.error("Failed to start servers:", error);
     process.exit(1);
 }

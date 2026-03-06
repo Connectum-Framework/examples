@@ -1,0 +1,38 @@
+services:
+  server:
+    build: .
+    healthcheck:
+      test: >
+        node -e "const h=require('node:http2'),c=h.connect('https://localhost:8080',
+        {rejectUnauthorized:false});const r=c.request({':method':'POST',
+        ':path':'/greeter.v1.GreeterService/SayHello','content-type':'application/json',
+        'connect-protocol-version':'1'});r.end(JSON.stringify({name:'health'}));
+        let d='';r.on('data',x=>d+=x);r.on('end',()=>{c.close();process.exit(d?0:1)});
+        r.on('error',()=>{c.close();process.exit(1)});
+        setTimeout(()=>{c.close();process.exit(1)},3000)"
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  k6-interceptor-overhead:
+    image: grafana/k6:latest
+    volumes:
+      - ./k6:/scripts
+    environment:
+      PROTOCOL: https
+      BASE_HOST: server
+    depends_on:
+      server: { condition: service_healthy }
+    command: run /scripts/interceptor-overhead.js
+
+  k6-basic-load:
+    image: grafana/k6:latest
+    volumes:
+      - ./k6:/scripts
+    environment:
+      BASE_URL: "https://server:8080"
+    depends_on:
+      server: { condition: service_healthy }
+    command: run /scripts/basic-load.js
+    profiles: ["load"]

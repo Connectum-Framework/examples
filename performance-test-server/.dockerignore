@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+__tests__/
+coverage/
+
+# Development files
+.env
+.env.*
+docker-compose*.yml
+Dockerfile*
+README.md
+CHANGELOG.md
+LICENSE
+
+# Proto source: NOT excluded — needed by proto build stage
+# proto/
+
+# k6 scripts (mounted as volume, not baked into image)
+k6/
+
+# OS files
+.DS_Store
+Thumbs.db
