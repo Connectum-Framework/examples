@@ -21,6 +21,10 @@ const CONNECTUM_PACKAGES = [
   "cli",
   "otel",
   "testing",
+  "events",
+  "events-nats",
+  "events-kafka",
+  "events-redis",
 ];
 
 // __dirname resolves to the real file location (examples/), not the symlink.

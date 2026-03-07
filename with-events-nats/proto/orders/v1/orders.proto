@@ -1,0 +1,88 @@
+syntax = "proto3";
+package orders.v1;
+
+import "google/protobuf/empty.proto";
+import "connectum/events/v1/options.proto";
+
+message OrderCreated {
+  string order_id = 1;
+  string product = 2;
+  int32 quantity = 3;
+  string customer = 4;
+}
+
+message OrderCancelled {
+  string order_id = 1;
+  string reason = 2;
+}
+
+message InventoryReserved {
+  string order_id = 1;
+  string product = 2;
+  int32 quantity = 3;
+}
+
+message CreateOrderRequest {
+  string product = 1;
+  int32 quantity = 2;
+  string customer = 3;
+}
+message CreateOrderResponse {
+  string order_id = 1;
+  string status = 2;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string reason = 2;
+}
+message CancelOrderResponse {
+  string order_id = 1;
+  string status = 2;
+}
+
+message GetOrdersRequest {}
+message GetOrdersResponse {
+  repeated OrderInfo orders = 1;
+}
+message OrderInfo {
+  string order_id = 1;
+  string product = 2;
+  int32 quantity = 3;
+  string customer = 4;
+  string status = 5;
+}
+
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc GetOrders(GetOrdersRequest) returns (GetOrdersResponse);
+}
+
+message GetInventoryRequest {}
+message GetInventoryResponse {
+  repeated ReservationInfo reservations = 1;
+}
+message ReservationInfo {
+  string order_id = 1;
+  string product = 2;
+  int32 quantity = 3;
+  string status = 4;
+}
+
+service InventoryService {
+  rpc GetInventory(GetInventoryRequest) returns (GetInventoryResponse);
+}
+
+service InventoryEventHandlers {
+  rpc OnOrderCreated(OrderCreated) returns (google.protobuf.Empty);
+  rpc OnOrderCancelled(OrderCancelled) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "orders.cancelled";
+  }
+}
+
+service OrderEventHandlers {
+  rpc OnInventoryReserved(InventoryReserved) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "inventory.reserved";
+  }
+}
