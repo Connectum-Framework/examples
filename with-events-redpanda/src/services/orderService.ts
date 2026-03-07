@@ -22,11 +22,12 @@ export function orderServiceRoutes(router: ConnectRouter): void {
     router.service(OrderService, {
         async createOrder(request: CreateOrderRequest) {
             const orderId = randomUUID();
-            orders.set(orderId, { orderId, product: request.product, quantity: request.quantity, customer: request.customer, status: "pending" });
+            const order = { orderId, product: request.product, quantity: request.quantity, customer: request.customer, status: "pending" };
             console.log(`[OrderService] Creating order ${orderId}: ${request.quantity}x ${request.product} for ${request.customer}`);
             await orderEventBus.publish(OrderCreatedSchema, create(OrderCreatedSchema, {
                 orderId, product: request.product, quantity: request.quantity, customer: request.customer,
             }));
+            orders.set(orderId, order);
             console.log(`[OrderService] OrderCreated event published for ${orderId}`);
             return create(CreateOrderResponseSchema, { orderId, status: "pending" });
         },
@@ -35,11 +36,11 @@ export function orderServiceRoutes(router: ConnectRouter): void {
             if (!order) {
                 throw new ConnectError(`Order ${request.orderId} not found`, Code.NotFound);
             }
-            order.status = "cancelled";
             console.log(`[OrderService] Cancelling order ${request.orderId}: ${request.reason}`);
             await orderEventBus.publish(OrderCancelledSchema, create(OrderCancelledSchema, {
                 orderId: request.orderId, reason: request.reason,
             }), { topic: "orders.cancelled" });
+            order.status = "cancelled";
             console.log(`[OrderService] OrderCancelled event published for ${request.orderId}`);
             return create(CancelOrderResponseSchema, { orderId: request.orderId, status: "cancelled" });
         },
