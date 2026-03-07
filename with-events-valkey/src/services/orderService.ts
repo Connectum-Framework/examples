@@ -21,6 +21,9 @@ export const orders = new Map<string, { orderId: string; product: string; quanti
 export function orderServiceRoutes(router: ConnectRouter): void {
     router.service(OrderService, {
         async createOrder(request: CreateOrderRequest) {
+            if (request.quantity <= 0) {
+                throw new ConnectError("quantity must be positive", Code.InvalidArgument);
+            }
             const orderId = randomUUID();
             const order = { orderId, product: request.product, quantity: request.quantity, customer: request.customer, status: "pending" };
             console.log(`[OrderService] Creating order ${orderId}: ${request.quantity}x ${request.product} for ${request.customer}`);
@@ -37,10 +40,10 @@ export function orderServiceRoutes(router: ConnectRouter): void {
                 throw new ConnectError(`Order ${request.orderId} not found`, Code.NotFound);
             }
             console.log(`[OrderService] Cancelling order ${request.orderId}: ${request.reason}`);
+            order.status = "cancelled";
             await orderEventBus.publish(OrderCancelledSchema, create(OrderCancelledSchema, {
                 orderId: request.orderId, reason: request.reason,
             }));
-            order.status = "cancelled";
             console.log(`[OrderService] OrderCancelled event published for ${request.orderId}`);
             return create(CancelOrderResponseSchema, { orderId: request.orderId, status: "cancelled" });
         },

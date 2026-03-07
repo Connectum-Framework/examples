@@ -8,6 +8,7 @@ export const orderEventRoutes: EventRoute = (events) => {
             console.log(`[OrderEvents] InventoryReserved for order ${event.orderId}: ${event.quantity}x ${event.product}`);
             const order = orders.get(event.orderId);
             if (order) {
+                if (order.status === "cancelled") return;
                 order.status = "confirmed";
                 console.log(`[OrderEvents] Order ${event.orderId} status → confirmed`);
             }
