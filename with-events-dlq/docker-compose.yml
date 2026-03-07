@@ -26,7 +26,7 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -46,7 +46,7 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5002/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
