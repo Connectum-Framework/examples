@@ -1,0 +1,358 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e7]:
+      - link "Go to Overview" [ref=e10] [cursor=pointer]:
+        - /url: /overview
+      - navigation "Main navigation" [ref=e13]:
+        - list [ref=e14]:
+          - listitem [ref=e15]:
+            - link "Overview" [ref=e17] [cursor=pointer]:
+              - /url: /overview
+              - img [ref=e18]
+              - generic [ref=e21]: Overview
+          - listitem [ref=e22]:
+            - link "Topics" [ref=e24] [cursor=pointer]:
+              - /url: /topics
+              - img [ref=e25]
+              - generic [ref=e30]: Topics
+          - listitem [ref=e31]:
+            - link "Schema Registry" [ref=e33] [cursor=pointer]:
+              - /url: /schema-registry
+              - img [ref=e34]
+              - generic [ref=e37]: Schema Registry
+          - listitem [ref=e38]:
+            - link "Consumer Groups" [ref=e40] [cursor=pointer]:
+              - /url: /groups
+              - img [ref=e41]
+              - generic [ref=e43]: Consumer Groups
+          - listitem [ref=e44]:
+            - link "Security" [ref=e46] [cursor=pointer]:
+              - /url: /security
+              - img [ref=e47]
+              - generic [ref=e50]: Security
+          - listitem [ref=e51]:
+            - link "Quotas" [ref=e53] [cursor=pointer]:
+              - /url: /quotas
+              - img [ref=e54]
+              - generic [ref=e58]: Quotas
+          - listitem [ref=e59]:
+            - link "Connect" [ref=e61] [cursor=pointer]:
+              - /url: /connect-clusters
+              - img [ref=e62]
+              - generic [ref=e65]: Connect
+          - listitem [ref=e66]:
+            - generic [ref=e67]:
+              - button "Transforms" [disabled]:
+                - generic:
+                  - img
+                  - generic: Transforms
+          - listitem [ref=e68]:
+            - generic [ref=e69]:
+              - button "Reassign Partitions" [disabled]:
+                - generic:
+                  - img
+                  - generic: Reassign Partitions
+          - listitem [ref=e70]:
+            - link "Shadow Links" [ref=e72] [cursor=pointer]:
+              - /url: /shadowlinks
+              - img [ref=e73]
+              - generic [ref=e75]: Shadow Links
+      - list [ref=e77]:
+        - listitem
+        - listitem [ref=e78]:
+          - button "Collapse sidebar" [expanded] [ref=e80]:
+            - img [ref=e81]
+            - generic [ref=e84]: Collapse sidebar
+    - main [ref=e85]:
+      - generic [ref=e87]:
+        - generic [ref=e88]:
+          - generic [ref=e90]:
+            - button "Toggle Sidebar" [ref=e91] [cursor=pointer]:
+              - img
+              - generic [ref=e92]: Toggle Sidebar
+            - navigation "breadcrumb" [ref=e93]:
+              - list [ref=e94]:
+                - listitem [ref=e95]:
+                  - link "Cluster" [ref=e96] [cursor=pointer]:
+                    - /url: /
+                - listitem [ref=e97]:
+                  - img [ref=e98]
+                - listitem [ref=e100]:
+                  - link "Topics" [ref=e101] [cursor=pointer]:
+                    - /url: /topics
+          - generic [ref=e102]:
+            - generic [ref=e103]:
+              - heading "orders.v1.OrderCreated" [level=1] [ref=e104]
+              - button "Copy" [ref=e106]:
+                - img [ref=e107]
+              - generic [ref=e110]:
+                - button "Auth Refresh" [ref=e112]:
+                  - img [ref=e113]
+                - button "Force Refresh" [ref=e148]:
+                  - img [ref=e149]
+                - paragraph
+            - generic [ref=e123]:
+              - link "Debug bundle" [ref=e154] [cursor=pointer]:
+                - /url: /debug-bundle
+                - button "Debug bundle" [ref=e155]
+              - button "user preferences" [ref=e124]:
+                - img [ref=e125]
+        - generic [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e159]:
+              - term [ref=e160]: "Size:"
+              - definition [ref=e161]: 961 B
+            - separator [ref=e163]
+            - generic [ref=e164]:
+              - img [ref=e166]
+              - term [ref=e168]: "Estimated messages:"
+              - definition [ref=e169]: "4"
+            - separator [ref=e171]
+            - generic [ref=e172]:
+              - term [ref=e173]: "Cleanup Policy:"
+              - definition [ref=e174]: Delete
+            - separator [ref=e176]
+            - generic [ref=e177]:
+              - term [ref=e178]: "Retention:"
+              - definition [ref=e179]: ~7 days or Infinite
+          - generic [ref=e180]:
+            - button "Produce Record" [ref=e181]
+            - button "Delete Records" [ref=e182]
+          - generic [ref=e184]:
+            - tablist [ref=e185]:
+              - tab "Messages" [selected] [ref=e186]
+              - tab "Consumers" [ref=e187]
+              - tab "Partitions" [ref=e188]:
+                - generic [ref=e189]: Partitions
+              - tab "Configuration" [ref=e190]
+              - tab "ACL" [ref=e191]
+              - tab "Documentation" [disabled] [ref=e192]:
+                - generic [ref=e193]: Documentation
+            - tabpanel "Messages" [ref=e195]:
+              - generic [ref=e196]:
+                - generic [ref=e197]:
+                  - generic [ref=e198]:
+                    - generic [ref=e200]: Start Offset
+                    - generic [ref=e204]:
+                      - log [ref=e206]
+                      - generic [ref=e207]:
+                        - generic [ref=e208]:
+                          - generic [ref=e210]:
+                            - img [ref=e211]
+                            - generic [ref=e214]: Newest - 50
+                          - combobox [ref=e216]
+                        - img [ref=e219]
+                  - generic [ref=e221]:
+                    - generic [ref=e223]: Max Results
+                    - generic [ref=e226]:
+                      - log [ref=e228]
+                      - generic [ref=e229]:
+                        - generic [ref=e230]:
+                          - generic [ref=e231]: "50"
+                          - combobox [ref=e233]
+                        - img [ref=e236]
+                  - button "Add filter" [ref=e239]:
+                    - generic: Add filter
+                - generic [ref=e240]:
+                  - button [ref=e241]:
+                    - img [ref=e242]
+                  - button "Repeat current search" [ref=e246]:
+                    - img [ref=e247]
+                - generic [ref=e252]:
+                  - textbox "Filter table content ..." [ref=e253]
+                  - generic [ref=e254]:
+                    - generic [ref=e255]:
+                      - img [ref=e256]
+                      - text: 216 B
+                    - generic [ref=e259]:
+                      - img [ref=e260]
+                      - text: 41ms
+              - table [ref=e264]:
+                - rowgroup [ref=e265]:
+                  - row "Timestamp unsorted Key unsorted Value unsorted" [ref=e266]:
+                    - columnheader [ref=e267]
+                    - columnheader "Timestamp unsorted" [ref=e268]:
+                      - generic [ref=e269] [cursor=pointer]:
+                        - text: Timestamp
+                        - img "unsorted" [ref=e271]
+                    - columnheader "Key unsorted" [ref=e273]:
+                      - generic [ref=e274] [cursor=pointer]:
+                        - text: Key
+                        - img "unsorted" [ref=e276]
+                    - columnheader "Value unsorted" [ref=e278]:
+                      - generic [ref=e279] [cursor=pointer]:
+                        - text: Value
+                        - img "unsorted" [ref=e281]
+                    - columnheader [ref=e283]
+                - rowgroup [ref=e284]:
+                  - row "Expand row 3/7/2026, 7:38:35 PM Null $4ccf488c-67ba-4057-a59f-cdeb540b8565\u0012\u0006Widget\u0018\u0005\"\u0005Alice UTF8WITHCONTROLCHARS - 55 B" [ref=e393]:
+                    - cell "Expand row" [ref=e394]:
+                      - button "Expand row" [ref=e395]:
+                        - img [ref=e396]
+                    - cell "3/7/2026, 7:38:35 PM" [ref=e291]
+                    - cell "Null" [ref=e292]:
+                      - generic [ref=e295]:
+                        - img [ref=e296]
+                        - paragraph [ref=e299]: "Null"
+                    - cell "$4ccf488c-67ba-4057-a59f-cdeb540b8565\u0012\u0006Widget\u0018\u0005\"\u0005Alice UTF8WITHCONTROLCHARS - 55 B" [ref=e300]:
+                      - generic [ref=e301]:
+                        - code [ref=e302]:
+                          - generic [ref=e303]: "$4ccf488c-67ba-4057-a59f-cdeb540b8565\x12\x06Widget\x18\x05\"\x05Alice"
+                        - paragraph [ref=e304]: UTF8WITHCONTROLCHARS - 55 B
+                    - cell [ref=e305]:
+                      - button [ref=e306]:
+                        - generic:
+                          - img
+                  - row "Partition 0 Offset 0 Key Null Value Utf8withcontrolchars (55 B) Headers 2 Compression uncompressed Transactional false Value (55 B)" [ref=e399]:
+                    - cell "Partition 0 Offset 0 Key Null Value Utf8withcontrolchars (55 B) Headers 2 Compression uncompressed Transactional false Value (55 B)" [ref=e400]:
+                      - generic [ref=e401]:
+                        - generic [ref=e402]:
+                          - generic [ref=e403]:
+                            - paragraph [ref=e404]: Partition
+                            - paragraph [ref=e405]: "0"
+                          - generic [ref=e406]:
+                            - paragraph [ref=e407]: Offset
+                            - paragraph [ref=e408]: "0"
+                          - generic [ref=e409]:
+                            - paragraph [ref=e410]: Key
+                            - paragraph [ref=e411]: "Null"
+                          - generic [ref=e412]:
+                            - paragraph [ref=e413]: Value
+                            - paragraph [ref=e414]: Utf8withcontrolchars (55 B)
+                          - generic [ref=e415]:
+                            - paragraph [ref=e416]: Headers
+                            - paragraph [ref=e417]: "2"
+                          - generic [ref=e418]:
+                            - paragraph [ref=e419]: Compression
+                            - paragraph [ref=e420]: uncompressed
+                          - generic [ref=e421]:
+                            - paragraph [ref=e422]: Transactional
+                            - paragraph [ref=e423]: "false"
+                        - generic [ref=e424]:
+                          - tablist [ref=e425]:
+                            - tab "Key" [disabled] [ref=e426]:
+                              - generic [ref=e427]: Key
+                            - tab "Value (55 B)" [selected] [ref=e428]:
+                              - generic [ref=e429]: Value (55 B)
+                            - tab "Headers (2)" [ref=e430]:
+                              - generic [ref=e431]: Headers (2)
+                          - tabpanel "Value (55 B)" [ref=e433]:
+                            - generic [ref=e434]:
+                              - generic [ref=e435]:
+                                - generic [ref=e436]: LF
+                                - text: $4ccf488c-67ba-4057-a59f-cdeb540b8565
+                                - generic [ref=e437]: DC2
+                                - generic [ref=e438]: ACK
+                                - text: Widget
+                                - generic [ref=e439]: CAN
+                                - generic [ref=e440]: ENQ
+                                - text: "\""
+                                - generic [ref=e441]: ENQ
+                                - text: Alice
+                              - generic [ref=e442]:
+                                - button "Copy Value" [ref=e443]
+                                - button "Download Record" [ref=e444]
+                  - row "Collapse row 3/7/2026, 7:38:43 PM Null $9dd1c6f4-2045-4bb2-b105-e87bb40fed44\u0012\u0006Gadget\u0018\u0003\"\u0003Bob UTF8WITHCONTROLCHARS - 53 B" [ref=e307]:
+                    - cell "Collapse row" [ref=e308]:
+                      - button "Collapse row" [ref=e445]:
+                        - img [ref=e446]
+                    - cell "3/7/2026, 7:38:43 PM" [ref=e313]
+                    - cell "Null" [ref=e314]:
+                      - generic [ref=e317]:
+                        - img [ref=e318]
+                        - paragraph [ref=e321]: "Null"
+                    - cell "$9dd1c6f4-2045-4bb2-b105-e87bb40fed44\u0012\u0006Gadget\u0018\u0003\"\u0003Bob UTF8WITHCONTROLCHARS - 53 B" [ref=e322]:
+                      - generic [ref=e323]:
+                        - code [ref=e324]:
+                          - generic [ref=e325]: "$9dd1c6f4-2045-4bb2-b105-e87bb40fed44\x12\x06Gadget\x18\x03\"\x03Bob"
+                        - paragraph [ref=e326]: UTF8WITHCONTROLCHARS - 53 B
+                    - cell [ref=e327]:
+                      - button [ref=e328]:
+                        - generic:
+                          - img
+                  - row "Collapse row 3/7/2026, 7:44:41 PM Null $b27ea322-367c-4d42-a823-f61c571f28c0\u0012\u0006Widget\u0018\u0005\"\u0005Alice UTF8WITHCONTROLCHARS - 55 B" [ref=e329]:
+                    - cell "Collapse row" [ref=e330]:
+                      - button "Collapse row" [ref=e449]:
+                        - img [ref=e450]
+                    - cell "3/7/2026, 7:44:41 PM" [ref=e335]
+                    - cell "Null" [ref=e336]:
+                      - generic [ref=e339]:
+                        - img [ref=e340]
+                        - paragraph [ref=e343]: "Null"
+                    - cell "$b27ea322-367c-4d42-a823-f61c571f28c0\u0012\u0006Widget\u0018\u0005\"\u0005Alice UTF8WITHCONTROLCHARS - 55 B" [ref=e344]:
+                      - generic [ref=e345]:
+                        - code [ref=e346]:
+                          - generic [ref=e347]: "$b27ea322-367c-4d42-a823-f61c571f28c0\x12\x06Widget\x18\x05\"\x05Alice"
+                        - paragraph [ref=e348]: UTF8WITHCONTROLCHARS - 55 B
+                    - cell [ref=e349]:
+                      - button [ref=e350]:
+                        - generic:
+                          - img
+                  - row "Collapse row 3/7/2026, 7:44:44 PM Null $a959035d-ce26-43ed-bd63-62827e21036e\u0012\u0006Gadget\u0018\u0003\"\u0003Bob UTF8WITHCONTROLCHARS - 53 B" [ref=e351]:
+                    - cell "Collapse row" [ref=e352]:
+                      - button "Collapse row" [ref=e453]:
+                        - img [ref=e454]
+                    - cell "3/7/2026, 7:44:44 PM" [ref=e357]
+                    - cell "Null" [ref=e358]:
+                      - generic [ref=e361]:
+                        - img [ref=e362]
+                        - paragraph [ref=e365]: "Null"
+                    - cell "$a959035d-ce26-43ed-bd63-62827e21036e\u0012\u0006Gadget\u0018\u0003\"\u0003Bob UTF8WITHCONTROLCHARS - 53 B" [ref=e366]:
+                      - generic [ref=e367]:
+                        - code [ref=e368]:
+                          - generic [ref=e369]: "$a959035d-ce26-43ed-bd63-62827e21036e\x12\x06Gadget\x18\x03\"\x03Bob"
+                        - paragraph [ref=e370]: UTF8WITHCONTROLCHARS - 53 B
+                    - cell [ref=e371]:
+                      - button [ref=e372]:
+                        - generic:
+                          - img
+                - rowgroup [ref=e373]:
+                  - row "10 / page Previous Page 1 Next Page" [ref=e374]:
+                    - cell "10 / page Previous Page 1 Next Page" [ref=e375]:
+                      - generic [ref=e376]:
+                        - generic [ref=e378]:
+                          - combobox [ref=e379]:
+                            - option "5 / page"
+                            - option "10 / page" [selected]
+                            - option "20 / page"
+                            - option "30 / page"
+                            - option "40 / page"
+                            - option "50 / page"
+                            - option "100 / page"
+                          - generic:
+                            - img
+                        - generic [ref=e380]:
+                          - button "Previous Page" [disabled] [ref=e381]:
+                            - img [ref=e382]
+                          - button "1" [ref=e384]
+                          - button "Next Page" [disabled] [ref=e385]:
+                            - img [ref=e386]
+              - button "Save Messages" [ref=e388]:
+                - img [ref=e390]
+                - text: Save Messages
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - link "GitHub" [ref=e130] [cursor=pointer]:
+              - /url: https://github.com/redpanda-data/console
+              - img "GitHub" [ref=e131]
+            - link "Slack" [ref=e133] [cursor=pointer]:
+              - /url: https://redpanda.com/slack
+              - img "Slack" [ref=e134]
+            - link "X" [ref=e136] [cursor=pointer]:
+              - /url: https://twitter.com/redpandadata
+              - img "X" [ref=e137]
+            - link "LinkedIn" [ref=e139] [cursor=pointer]:
+              - /url: https://www.linkedin.com/company/redpanda-data
+              - img [ref=e140]
+          - generic [ref=e144]:
+            - generic [ref=e145]: Redpanda Console (Platform Version v25.3)
+            - generic [ref=e146]: (built February 26, 2026)
+            - generic [ref=e147]: 1232f4c
+        - region "Notifications alt+T"
+  - generic:
+    - region "Notifications-top"
+    - region "Notifications-top-left"
+    - region "Notifications-top-right"
+    - region "Notifications-bottom-left"
+    - region "Notifications-bottom"
+    - region "Notifications-bottom-right"
