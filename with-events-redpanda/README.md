@@ -2,6 +2,20 @@
 
 A bidirectional event-driven communication example between microservices using Redpanda (Kafka-compatible broker) with a visual console for monitoring topics and messages.
 
+## Demo
+
+### Architecture Walkthrough
+
+Code structure, proto contracts, EventBus configuration, and saga handlers:
+
+![Architecture Walkthrough](demo-walkthrough.gif)
+
+### Live Saga Demo
+
+Creating orders, verifying saga flow, and cancelling with event-driven inventory release:
+
+![Saga Demo](demo-api.gif)
+
 ## Architecture
 
 ```mermaid

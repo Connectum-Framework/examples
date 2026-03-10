@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-caBtEEd165KX9H1OF6en4qlk7e8dvEtZaHq2Ex6fYwo=
+pnpmfileChecksum: sha256-j1pBfvY96GVX5TNAy0pzk7fKT2XK4Ldv1a3k+lIYM0E=
 
 importers:
 
@@ -17,20 +17,20 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/auth':
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@bufbuild/protobuf@2.11.0)
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6
       '@connectum/core':
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6
       '@connectum/healthcheck':
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@connectum/core@1.0.0-rc.4)
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
       '@connectum/interceptors':
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
       '@connectum/reflection':
-        specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@connectum/core@1.0.0-rc.4)
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
@@ -144,29 +144,29 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/auth@1.0.0-rc.4':
-    resolution: {integrity: sha512-2GkEExTceCmuaIsB7bdnB084CK+Niz6aCR6iYochFPFX8sTxaN0fbsSWu9fobHUdvD0is+m8XaOw13eDFFmlAA==}
+  '@connectum/auth@1.0.0-rc.6':
+    resolution: {integrity: sha512-100Sz2O2OFe8WqcyH2E+ZsrKAD7b/Ww4lxzaVTfxiVhd4xDsYOLud8ZWVzAbdMzkgINdCR/sFCYCHAhBM1KGUw==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/core@1.0.0-rc.4':
-    resolution: {integrity: sha512-8NA9Pz6NCMKXL8V8OGu5kOI2WOClSYqNxsNH4JEnryanqiIoqdrFQ1GdazmB7Gfgf5UM3Qm5/VRVmWFsAIpiDw==}
+  '@connectum/core@1.0.0-rc.6':
+    resolution: {integrity: sha512-sxOYOGbrTvTmz3QK4sMw/H8ib0I1AGqc5+lDDxStVfz0l5gDUFd2G7/mrYAX8+P3GsM8bF4JoGQeFrq7CK961w==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/healthcheck@1.0.0-rc.4':
-    resolution: {integrity: sha512-NgHp8q6M9AONaOVAt2oUgyLYCAlwOHMK9bRrajZb73uV405t/ADqm+8u++7OLzS6JqRvbzNc34J1BPeniRCbrQ==}
+  '@connectum/healthcheck@1.0.0-rc.6':
+    resolution: {integrity: sha512-eX34hdZwMpNH618CnTenm+R6StC5dGAvLrbmhMvGxf1Wuaowis1AFnQnZLDwEMBEF8QdbMUTwr4qOm8bP7uz4g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@connectum/core': ^1.0.0-rc.4
+      '@connectum/core': ^1.0.0-rc.6
 
-  '@connectum/interceptors@1.0.0-rc.4':
-    resolution: {integrity: sha512-9P0krN7Pcf8QJY3xRtH/OR2r6RS0eIHelrB9D0XJoq+Hrz8iybAgGS2FYXc5a0lGc88aKWO3MqP+3IKZs1HA/A==}
+  '@connectum/interceptors@1.0.0-rc.6':
+    resolution: {integrity: sha512-OtVf/NmLP0ixNoMAJDRru2CqC5Rjl6sIqLLqvA756MgBS7EIur3Rpvs5mIjTSwHx4/nmBQGQ+aC80SIqp+3iag==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/reflection@1.0.0-rc.4':
-    resolution: {integrity: sha512-WXseidGlbd40ARB9Wx4FSO2x7GHfPEwJFKOViQIe1nwX1uWzfNiI/BNKt+Otv20J0/4HllX12IN8Zu9YNKWU/g==}
+  '@connectum/reflection@1.0.0-rc.6':
+    resolution: {integrity: sha512-PKh7STIB0p39P+6WbqO41arcObRnFxxJJrpfxw1HLkvNjVDUFcKBhgWh7kSZlBQCKvs2ht/dGYXJ9WFvt1q7cA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@connectum/core': ^1.0.0-rc.4
+      '@connectum/core': ^1.0.0-rc.6
 
   '@lambdalisue/connectrpc-grpcreflect@0.5.0':
     resolution: {integrity: sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog==}
@@ -298,15 +298,14 @@ snapshots:
       '@bufbuild/protovalidate': 1.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
 
-  '@connectum/auth@1.0.0-rc.4(@bufbuild/protobuf@2.11.0)':
+  '@connectum/auth@1.0.0-rc.6':
     dependencies:
+      '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectum/core': 1.0.0-rc.4
+      '@connectum/core': 1.0.0-rc.6
       jose: 6.1.3
-    transitivePeerDependencies:
-      - '@bufbuild/protobuf'
 
-  '@connectum/core@1.0.0-rc.4':
+  '@connectum/core@1.0.0-rc.6':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
@@ -314,27 +313,27 @@ snapshots:
       env-var: 7.5.0
       zod: 4.3.6
 
-  '@connectum/healthcheck@1.0.0-rc.4(@connectum/core@1.0.0-rc.4)':
+  '@connectum/healthcheck@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectum/core': 1.0.0-rc.4
+      '@connectum/core': 1.0.0-rc.6
 
-  '@connectum/interceptors@1.0.0-rc.4(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
+  '@connectum/interceptors@1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.11.0)(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.11.0))
-      '@connectum/core': 1.0.0-rc.4
+      '@connectum/core': 1.0.0-rc.6
       cockatiel: 3.2.1
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/reflection@1.0.0-rc.4(@connectum/core@1.0.0-rc.4)':
+  '@connectum/reflection@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
-      '@connectum/core': 1.0.0-rc.4
+      '@connectum/core': 1.0.0-rc.6
       '@lambdalisue/connectrpc-grpcreflect': 0.5.0
 
   '@lambdalisue/connectrpc-grpcreflect@0.5.0':

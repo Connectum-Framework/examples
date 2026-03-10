@@ -42,6 +42,12 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
 | [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
+| [auth](auth/) | JWT authentication + authorization | Token validation, proto-based authz rules, declarative RBAC | Ready |
+| [with-events-nats](with-events-nats/) | EventBus with NATS | Pub/sub events, saga pattern, JetStream | Ready |
+| [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
+| [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
+| [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
+| [with-events-dlq](with-events-dlq/) | EventBus Dead Letter Queue | DLQ service, retry policies, failed event inspection | Ready |
 
 ## Prerequisites
 
@@ -82,7 +88,7 @@ See [production-ready/README.md](production-ready/README.md) for details.
 The [runn](runn/) example provides a comprehensive E2E test suite using [runn](https://github.com/k1LoW/runn) YAML runbooks:
 
 - **9 runbooks, 30 scenarios** covering all @connectum/* packages
-- **Packages tested:** core, healthcheck, reflection, auth, interceptors, otel
+- **Packages tested:** core, healthcheck, reflection, auth, interceptors, otel, events
 - **Docker Compose** — server + runn tests + OpenTelemetry Collector
 
 ```bash
@@ -93,19 +99,9 @@ docker compose up --build --exit-code-from tests --abort-on-container-exit
 
 See [runn/README.md](runn/README.md) for details.
 
-## Dependencies Note
+## Dependencies
 
-Examples reference `@connectum/*` packages via `workspace:^` and `catalog:` protocols. For standalone usage outside this workspace, replace them with published versions from npm:
-
-```json
-{
-  "dependencies": {
-    "@connectum/core": "^0.x.x",
-    "@connectum/healthcheck": "^0.x.x",
-    "@connectum/interceptors": "^0.x.x"
-  }
-}
-```
+All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.6`). Just `pnpm install` in any example directory to get started.
 
 ## License
 
