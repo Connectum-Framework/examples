@@ -22,7 +22,7 @@ cleanup() {
     [ -n "${INVENTORY_PID:-}" ] && kill "$INVENTORY_PID" 2>/dev/null || true
     wait 2>/dev/null || true
 }
-trap cleanup INT TERM
+trap cleanup INT TERM ERR
 
 # ── Prerequisites ─────────────────────────────────────────
 

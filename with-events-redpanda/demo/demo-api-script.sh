@@ -75,7 +75,7 @@ echo "$ALICE_RESPONSE" | jq .
 ALICE_ORDER_ID=$(echo "$ALICE_RESPONSE" | jq -r '.orderId')
 ok "Alice order created: ${ALICE_ORDER_ID}"
 echo ""
-flow "Event: OrderCreated -> Redpanda topic 'orders.created'"
+flow "Event: OrderCreated -> Redpanda topic 'orders.v1.OrderCreated'"
 
 sleep 6
 
@@ -88,7 +88,7 @@ echo "$BOB_RESPONSE" | jq .
 BOB_ORDER_ID=$(echo "$BOB_RESPONSE" | jq -r '.orderId')
 ok "Bob order created: ${BOB_ORDER_ID}"
 echo ""
-flow "Event: OrderCreated -> Redpanda topic 'orders.created'"
+flow "Event: OrderCreated -> Redpanda topic 'orders.v1.OrderCreated'"
 
 sleep 5
 
