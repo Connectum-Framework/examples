@@ -19,9 +19,21 @@ importers:
       '@connectum/core':
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6
+      '@connectum/events':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6
+      '@connectum/events-kafka':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/events@1.0.0-rc.6)
+      '@connectum/healthcheck':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
       '@connectum/interceptors':
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
+      '@connectum/reflection':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
@@ -34,7 +46,7 @@ importers:
         version: 2.1.1(@bufbuild/protobuf@2.11.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.11.0))
       '@types/node':
         specifier: ^25.2.0
-        version: 25.3.3
+        version: 25.3.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -142,12 +154,37 @@ packages:
     resolution: {integrity: sha512-sxOYOGbrTvTmz3QK4sMw/H8ib0I1AGqc5+lDDxStVfz0l5gDUFd2G7/mrYAX8+P3GsM8bF4JoGQeFrq7CK961w==}
     engines: {node: '>=18.0.0'}
 
+  '@connectum/events-kafka@1.0.0-rc.6':
+    resolution: {integrity: sha512-cenisMA/piOZJnBq7IrsJovRW1XQq1m8+oo79D55Di4+YuqhC+VUcly4vcJSDsuFWUd83le5HXoimXRlJJjzQw==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@connectum/events': ^1.0.0-rc.6
+
+  '@connectum/events@1.0.0-rc.6':
+    resolution: {integrity: sha512-uNjab3ca2x4jvFSd5kdlCz+C8e0XbJjK/71UI1QRdnAvxWuyTBqxEXFXQao9dIV2PO2kgeNNiJlnrFNcRoPa3g==}
+    engines: {node: '>=18.0.0'}
+
+  '@connectum/healthcheck@1.0.0-rc.6':
+    resolution: {integrity: sha512-eX34hdZwMpNH618CnTenm+R6StC5dGAvLrbmhMvGxf1Wuaowis1AFnQnZLDwEMBEF8QdbMUTwr4qOm8bP7uz4g==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@connectum/core': ^1.0.0-rc.6
+
   '@connectum/interceptors@1.0.0-rc.6':
     resolution: {integrity: sha512-OtVf/NmLP0ixNoMAJDRru2CqC5Rjl6sIqLLqvA756MgBS7EIur3Rpvs5mIjTSwHx4/nmBQGQ+aC80SIqp+3iag==}
     engines: {node: '>=18.0.0'}
 
-  '@types/node@25.3.3':
-    resolution: {integrity: sha512-DpzbrH7wIcBaJibpKo9nnSQL0MTRdnWttGyE5haGwK86xgMOkFLp7vEyfQPGLOJh5wNYiJ3V9PmUMDhV9u8kkQ==}
+  '@connectum/reflection@1.0.0-rc.6':
+    resolution: {integrity: sha512-PKh7STIB0p39P+6WbqO41arcObRnFxxJJrpfxw1HLkvNjVDUFcKBhgWh7kSZlBQCKvs2ht/dGYXJ9WFvt1q7cA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@connectum/core': ^1.0.0-rc.6
+
+  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
+    resolution: {integrity: sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog==}
+
+  '@types/node@25.3.5':
+    resolution: {integrity: sha512-oX8xrhvpiyRCQkG1MFchB09f+cXftgIXb3a7UUa4Y3wpmZPw5tyZGTLWhlESOLq1Rq6oDlc8npVU2/9xiCuXMA==}
 
   '@typescript/vfs@1.6.4':
     resolution: {integrity: sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==}
@@ -170,6 +207,10 @@ packages:
   env-var@7.5.0:
     resolution: {integrity: sha512-mKZOzLRN0ETzau2W2QXefbFjo5EF4yWq28OyKb9ICdeNhHJlOE/pHHnz4hdYJ9cNZXcJHo5xN4OT4pzuSHSNvA==}
     engines: {node: '>=10'}
+
+  kafkajs@2.2.4:
+    resolution: {integrity: sha512-j/YeapB1vfPT2iOIUn/vxdyKEuhuY2PxMBvf5JWux6iSaukAccrMtXEY/Lb7OvavDhOWME589bpLrEdnVHjfjA==}
+    engines: {node: '>=14.0.0'}
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
@@ -278,6 +319,22 @@ snapshots:
       env-var: 7.5.0
       zod: 4.3.6
 
+  '@connectum/events-kafka@1.0.0-rc.6(@connectum/events@1.0.0-rc.6)':
+    dependencies:
+      '@connectum/events': 1.0.0-rc.6
+      kafkajs: 2.2.4
+
+  '@connectum/events@1.0.0-rc.6':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectum/core': 1.0.0-rc.6
+
+  '@connectum/healthcheck@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+      '@connectum/core': 1.0.0-rc.6
+
   '@connectum/interceptors@1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
@@ -288,7 +345,19 @@ snapshots:
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@types/node@25.3.3':
+  '@connectum/reflection@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+      '@connectum/core': 1.0.0-rc.6
+      '@lambdalisue/connectrpc-grpcreflect': 0.5.0
+
+  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+
+  '@types/node@25.3.5':
     dependencies:
       undici-types: 7.18.2
 
@@ -306,6 +375,8 @@ snapshots:
       ms: 2.1.3
 
   env-var@7.5.0: {}
+
+  kafkajs@2.2.4: {}
 
   ms@2.1.3: {}
 

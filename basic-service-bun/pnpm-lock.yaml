@@ -19,13 +19,19 @@ importers:
       '@connectum/core':
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6
+      '@connectum/healthcheck':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
       '@connectum/interceptors':
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
+      '@connectum/reflection':
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
-        version: 1.66.0
+        version: 1.66.1
       '@bufbuild/protoc-gen-es':
         specifier: ^2.11.0
         version: 2.11.0(@bufbuild/protobuf@2.11.0)
@@ -34,57 +40,57 @@ importers:
         version: 2.1.1(@bufbuild/protobuf@2.11.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.11.0))
       '@types/node':
         specifier: ^25.2.0
-        version: 25.3.3
+        version: 25.4.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
 
 packages:
 
-  '@bufbuild/buf-darwin-arm64@1.66.0':
-    resolution: {integrity: sha512-C9orXX4SSVYKEumWFEO2T6xKrXsrvij0uS8kR20sHt9MYuFke14y6DfnAvXINPZrNpDiyOTldG7BPQtR40poRw==}
+  '@bufbuild/buf-darwin-arm64@1.66.1':
+    resolution: {integrity: sha512-Yl7vvFhKrA87ctsIiwN2XWbJq34VxWoEzNBe9dhrutKLpy7hM7l/ylDCuctqPh+CGdSUijQfmHiA4bQgK8s2yQ==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [darwin]
 
-  '@bufbuild/buf-darwin-x64@1.66.0':
-    resolution: {integrity: sha512-5I33S9UbimoBNCpOdMsmJHcW9NfxzKW5PsVrSyajpo+LL22Lfyha2ZO3JNhT/k3ZlGVvtpDAS9pRS0ouNKmGgA==}
+  '@bufbuild/buf-darwin-x64@1.66.1':
+    resolution: {integrity: sha512-pRbu0l7jtbXBBCq/7wrs2ZUFzCkDBDGuT3xlQt04k1SgIoW1lznpDnUZ6vbQj1rIU94dCbnsuL7M6k+rCFafOA==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [darwin]
 
-  '@bufbuild/buf-linux-aarch64@1.66.0':
-    resolution: {integrity: sha512-KFz9HukP3ACKfSe0fo+XbxndQR0kKCVLVfUkoc6qPUTrKn9lACnah6HlUtBlwanK95vg+MIMvy0DWoLYUX9cuA==}
+  '@bufbuild/buf-linux-aarch64@1.66.1':
+    resolution: {integrity: sha512-V/dwOAcQ9r5B6BUEtUeVPvkpNxYhmHLILrJZmIqNdjpInVQWknpGm1Mmpy2xANuOhRh7O/Huq7kaoQvNjSdnWQ==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [linux]
 
-  '@bufbuild/buf-linux-armv7@1.66.0':
-    resolution: {integrity: sha512-W56iEZtnqB4ww9JCyhIipPrwZVe/zQ5I0pmWrJF8Daw67qvRYtvP3NSxtF5f0yAoB0tQAXDoqIiB/Ypl1UOz0g==}
+  '@bufbuild/buf-linux-armv7@1.66.1':
+    resolution: {integrity: sha512-WDmspvGLq/lNVj4jAb2TDWVKLzG9l5nwhNsZOo1I5UKrE0PD2LdbM7YdnMne15AIg3qlUxHqq2Eg8pVyxHqCqw==}
     engines: {node: '>=12'}
     cpu: [arm]
     os: [linux]
 
-  '@bufbuild/buf-linux-x64@1.66.0':
-    resolution: {integrity: sha512-6AYYyc2O32jnDjjHbyW9Oqcehd+PMw+34qVo+wGfaEgGwC+fyoL2oxcEmzsPyEvhY4mkYJRXaCb8p90Ndzd2vQ==}
+  '@bufbuild/buf-linux-x64@1.66.1':
+    resolution: {integrity: sha512-at0JeAlc+pquaNB/80R5F6bQs1gtdSuJRj+naei+lH2L2M1yQTiYU3f9dJnY4hVbq4/JbxSdxqJx2VOLPt1ztw==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [linux]
 
-  '@bufbuild/buf-win32-arm64@1.66.0':
-    resolution: {integrity: sha512-S+CD5NZ6q0HCI0g0PTVypjSQ63LsLm1Svd7yG1MjKz9mQ83Vl6rYXuzmYYVi2cww7w5tDew8sYASZETewvEuxg==}
+  '@bufbuild/buf-win32-arm64@1.66.1':
+    resolution: {integrity: sha512-gb2LDuqkY1RSFIOMYJQTimTLIsW2/pqOvcPWBDApUZBOQS5CJdrAtuoBqRzpqrI02OF45uinKmqq+9dun/X92A==}
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [win32]
 
-  '@bufbuild/buf-win32-x64@1.66.0':
-    resolution: {integrity: sha512-uSPoWRaX8Qd5pHZt6zzRuZXr4Sdbqe4Pm1PmMax/SGUPacVpH1v9AGX1/BTgx+g+b4vLS5T4SGxTl9ngkQaY3Q==}
+  '@bufbuild/buf-win32-x64@1.66.1':
+    resolution: {integrity: sha512-QzDiv9dAUr89HjHsKOrC5EQB+2aWVwKmhZFYzAGgHTt+ONAgz9RgLhwIm6LTtrLigB0LIHk/nLMIXB3sXUhyrg==}
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
 
-  '@bufbuild/buf@1.66.0':
-    resolution: {integrity: sha512-JSZT6OT8uKG2frScYNOS3Y4E+7wg1KSPQMKfLlbZZFnBoXwMqDdsxQF7O5ucameU+3DKRs+yQFI8tNQjFJ5T2g==}
+  '@bufbuild/buf@1.66.1':
+    resolution: {integrity: sha512-TelMLptEDfdcl8D+WjKQLzGGYKAwOSVjCPJ21L9X9xT7KZHigTAhHP5idrTCtXKHHPPQB6Sq12wVnhWgFQ9s7w==}
     engines: {node: '>=12'}
     hasBin: true
 
@@ -142,12 +148,27 @@ packages:
     resolution: {integrity: sha512-sxOYOGbrTvTmz3QK4sMw/H8ib0I1AGqc5+lDDxStVfz0l5gDUFd2G7/mrYAX8+P3GsM8bF4JoGQeFrq7CK961w==}
     engines: {node: '>=18.0.0'}
 
+  '@connectum/healthcheck@1.0.0-rc.6':
+    resolution: {integrity: sha512-eX34hdZwMpNH618CnTenm+R6StC5dGAvLrbmhMvGxf1Wuaowis1AFnQnZLDwEMBEF8QdbMUTwr4qOm8bP7uz4g==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@connectum/core': ^1.0.0-rc.6
+
   '@connectum/interceptors@1.0.0-rc.6':
     resolution: {integrity: sha512-OtVf/NmLP0ixNoMAJDRru2CqC5Rjl6sIqLLqvA756MgBS7EIur3Rpvs5mIjTSwHx4/nmBQGQ+aC80SIqp+3iag==}
     engines: {node: '>=18.0.0'}
 
-  '@types/node@25.3.3':
-    resolution: {integrity: sha512-DpzbrH7wIcBaJibpKo9nnSQL0MTRdnWttGyE5haGwK86xgMOkFLp7vEyfQPGLOJh5wNYiJ3V9PmUMDhV9u8kkQ==}
+  '@connectum/reflection@1.0.0-rc.6':
+    resolution: {integrity: sha512-PKh7STIB0p39P+6WbqO41arcObRnFxxJJrpfxw1HLkvNjVDUFcKBhgWh7kSZlBQCKvs2ht/dGYXJ9WFvt1q7cA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@connectum/core': ^1.0.0-rc.6
+
+  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
+    resolution: {integrity: sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog==}
+
+  '@types/node@25.4.0':
+    resolution: {integrity: sha512-9wLpoeWuBlcbBpOY3XmzSTG3oscB6xjBEEtn+pYXTfhyXhIxC5FsBer2KTopBlvKEiW9l13po9fq+SJY/5lkhw==}
 
   '@typescript/vfs@1.6.4':
     resolution: {integrity: sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==}
@@ -192,36 +213,36 @@ packages:
 
 snapshots:
 
-  '@bufbuild/buf-darwin-arm64@1.66.0':
+  '@bufbuild/buf-darwin-arm64@1.66.1':
     optional: true
 
-  '@bufbuild/buf-darwin-x64@1.66.0':
+  '@bufbuild/buf-darwin-x64@1.66.1':
     optional: true
 
-  '@bufbuild/buf-linux-aarch64@1.66.0':
+  '@bufbuild/buf-linux-aarch64@1.66.1':
     optional: true
 
-  '@bufbuild/buf-linux-armv7@1.66.0':
+  '@bufbuild/buf-linux-armv7@1.66.1':
     optional: true
 
-  '@bufbuild/buf-linux-x64@1.66.0':
+  '@bufbuild/buf-linux-x64@1.66.1':
     optional: true
 
-  '@bufbuild/buf-win32-arm64@1.66.0':
+  '@bufbuild/buf-win32-arm64@1.66.1':
     optional: true
 
-  '@bufbuild/buf-win32-x64@1.66.0':
+  '@bufbuild/buf-win32-x64@1.66.1':
     optional: true
 
-  '@bufbuild/buf@1.66.0':
+  '@bufbuild/buf@1.66.1':
     optionalDependencies:
-      '@bufbuild/buf-darwin-arm64': 1.66.0
-      '@bufbuild/buf-darwin-x64': 1.66.0
-      '@bufbuild/buf-linux-aarch64': 1.66.0
-      '@bufbuild/buf-linux-armv7': 1.66.0
-      '@bufbuild/buf-linux-x64': 1.66.0
-      '@bufbuild/buf-win32-arm64': 1.66.0
-      '@bufbuild/buf-win32-x64': 1.66.0
+      '@bufbuild/buf-darwin-arm64': 1.66.1
+      '@bufbuild/buf-darwin-x64': 1.66.1
+      '@bufbuild/buf-linux-aarch64': 1.66.1
+      '@bufbuild/buf-linux-armv7': 1.66.1
+      '@bufbuild/buf-linux-x64': 1.66.1
+      '@bufbuild/buf-win32-arm64': 1.66.1
+      '@bufbuild/buf-win32-x64': 1.66.1
 
   '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.11.0)':
     dependencies:
@@ -278,6 +299,12 @@ snapshots:
       env-var: 7.5.0
       zod: 4.3.6
 
+  '@connectum/healthcheck@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+      '@connectum/core': 1.0.0-rc.6
+
   '@connectum/interceptors@1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
@@ -288,7 +315,19 @@ snapshots:
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@types/node@25.3.3':
+  '@connectum/reflection@1.0.0-rc.6(@connectum/core@1.0.0-rc.6)':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+      '@connectum/core': 1.0.0-rc.6
+      '@lambdalisue/connectrpc-grpcreflect': 0.5.0
+
+  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
+
+  '@types/node@25.4.0':
     dependencies:
       undici-types: 7.18.2
 
