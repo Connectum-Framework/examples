@@ -7,8 +7,8 @@ set -euo pipefail
 SESSION="connectum-redpanda-demo"
 
 # Clear old logs
-> demo/order-service.log
-> demo/inventory-service.log
+: > demo/order-service.log
+: > demo/inventory-service.log
 
 # Kill any existing demo session
 tmux kill-session -t "$SESSION" 2>/dev/null || true
