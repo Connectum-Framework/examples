@@ -1,0 +1,50 @@
+# otel-collector-config.yaml
+#
+# OpenTelemetry Collector configuration for Coroot integration.
+# Routes all telemetry (traces, metrics, logs) via OTLP/HTTP to Coroot's
+# built-in OTLP receiver on port 8080.
+#
+# Architecture: Microservices → OTel Collector → Coroot → ClickHouse
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  otlphttp/coroot:
+    endpoint: http://coroot:8080
+    tls:
+      insecure: true
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/coroot]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/coroot, prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/coroot]

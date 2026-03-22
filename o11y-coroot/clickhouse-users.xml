@@ -1,0 +1,11 @@
+<clickhouse>
+  <users>
+    <default>
+      <!-- Allow connections from Docker network (Coroot, OTel Collector) -->
+      <networks>
+        <ip>::/0</ip>
+        <ip>0.0.0.0/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>

@@ -1,0 +1,203 @@
+# docker-compose.yml — Observability Demo (Coroot + Microservices)
+#
+# Usage:
+#   docker compose up -d                          # Start all services
+#   docker compose --profile node-agent up -d     # Start with node-agent (Linux only)
+#
+# UI: http://localhost:8080 (Coroot)
+# Services:
+#   order-service:     http://localhost:5000
+#   inventory-service: http://localhost:5001
+
+services:
+  # =========================================================================
+  # Application Services
+  # =========================================================================
+  order-service:
+    build:
+      context: ./service
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=debug
+      - HTTP_HEALTH_ENABLED=true
+      - OTEL_SERVICE_NAME=order-service
+      - OTEL_TRACES_EXPORTER=otlp/http
+      - OTEL_METRICS_EXPORTER=otlp/http
+      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - INVENTORY_URL=http://inventory-service:5001
+    depends_on:
+      otel-collector:
+        condition: service_started
+      inventory-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - o11y
+
+  inventory-service:
+    build:
+      context: ./service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=development
+      - PORT=5001
+      - LOG_FORMAT=pretty
+      - LOG_LEVEL=debug
+      - HTTP_HEALTH_ENABLED=true
+      - OTEL_SERVICE_NAME=inventory-service
+      - OTEL_TRACES_EXPORTER=otlp/http
+      - OTEL_METRICS_EXPORTER=otlp/http
+      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - o11y
+
+  # =========================================================================
+  # Storage
+  # =========================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    # Ports exposed only within the Docker network (not to host)
+    # 8123 — HTTP interface (health checks)
+    # 9000 — Native protocol (Coroot connection)
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/default-user.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - o11y
+
+  # =========================================================================
+  # Prometheus (metrics storage — required by Coroot for OTLP metrics)
+  # =========================================================================
+  prometheus:
+    image: prom/prometheus:v2.53.5
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+      - --web.enable-lifecycle
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - o11y
+
+  # =========================================================================
+  # Coroot Server (UI + API + built-in OTLP receiver)
+  # =========================================================================
+  coroot:
+    image: ghcr.io/coroot/coroot:latest
+    command:
+      - run
+      - --bootstrap-prometheus-url=http://prometheus:9090
+      - --bootstrap-prometheus-remote-write-url=http://prometheus:9090/api/v1/write
+      - --bootstrap-clickhouse-address=clickhouse:9000
+      - --auth-anonymous-role=Admin
+    ports:
+      - "8080:8080"   # UI + API
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks:
+      - o11y
+
+  # =========================================================================
+  # OpenTelemetry Collector
+  # =========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics (self-monitoring)
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      coroot:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    networks:
+      - o11y
+
+  # =========================================================================
+  # Coroot Node Agent (optional — Linux host only)
+  # =========================================================================
+  # ⚠️  Requires Linux host with eBPF support.
+  #     Does NOT work on Docker Desktop (macOS/Windows).
+  #     See: https://github.com/coroot/coroot-node-agent/issues/54
+  coroot-node-agent:
+    image: ghcr.io/coroot/coroot-node-agent:latest
+    profiles:
+      - node-agent
+    privileged: true
+    pid: host
+    command:
+      - --collector-endpoint=http://coroot:8080
+      - --scrape-interval=15s
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      coroot:
+        condition: service_healthy
+    networks:
+      - o11y
+
+# =========================================================================
+# Volumes & Networks
+# =========================================================================
+volumes:
+  clickhouse-data:
+  prometheus-data:
+
+networks:
+  o11y:
+    driver: bridge

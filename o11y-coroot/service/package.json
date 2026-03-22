@@ -1,0 +1,40 @@
+{
+  "name": "@connectum/example-o11y-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Connectum service for observability demo (Coroot)",
+  "type": "module",
+  "imports": {
+    "#gen/*": "./gen/*"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts"
+  },
+  "keywords": [
+    "connectum",
+    "otel",
+    "coroot",
+    "observability"
+  ],
+  "author": "Highload.Zone",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectrpc/connect-node": "^2.1.1",
+    "@connectum/core": "1.0.0-rc.6",
+    "@connectum/healthcheck": "1.0.0-rc.6",
+    "@connectum/interceptors": "1.0.0-rc.6",
+    "@connectum/otel": "https://pkg.pr.new/@connectum/otel@66",
+    "@connectum/reflection": "1.0.0-rc.6"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@types/node": "^25.2.0",
+    "typescript": "^5.9.3"
+  }
+}
