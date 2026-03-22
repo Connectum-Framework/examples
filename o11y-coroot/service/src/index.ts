@@ -16,7 +16,7 @@ import { createServer } from "@connectum/core";
 import type { CreateServerOptions } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
-import { initProvider, shutdownProvider } from "@connectum/otel";
+import { createOtelInterceptor, initProvider, shutdownProvider } from "@connectum/otel";
 import { Reflection } from "@connectum/reflection";
 import { orderServiceRoutes } from "./services/orderService.ts";
 import { inventoryServiceRoutes } from "./services/inventoryService.ts";
@@ -52,7 +52,10 @@ const options: CreateServerOptions = {
         Reflection(),
     ],
 
-    interceptors: createDefaultInterceptors(),
+    interceptors: [
+        createOtelInterceptor({ trustRemote: true }),
+        ...createDefaultInterceptors(),
+    ],
 
     shutdown: {
         timeout: 10_000,

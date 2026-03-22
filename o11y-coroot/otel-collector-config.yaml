@@ -24,6 +24,10 @@ exporters:
     endpoint: http://coroot:8080
     tls:
       insecure: true
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
 
 extensions:
   health_check:
@@ -39,7 +43,7 @@ service:
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlphttp/coroot]
+      exporters: [otlphttp/coroot, prometheusremotewrite]
     logs:
       receivers: [otlp]
       processors: [batch]

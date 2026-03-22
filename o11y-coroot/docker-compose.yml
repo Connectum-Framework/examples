@@ -30,9 +30,12 @@ services:
       - OTEL_METRICS_EXPORTER=otlp/http
       - OTEL_LOGS_EXPORTER=otlp/http
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - INVENTORY_URL=http://inventory-service:5001
     depends_on:
       otel-collector:
         condition: service_started
+      inventory-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
       interval: 10s
@@ -175,8 +178,9 @@ services:
       - node-agent
     privileged: true
     pid: host
-    environment:
-      - COROOT_NODE_AGENT_COLLECTOR=http://coroot:8080
+    command:
+      - --collector-endpoint=http://coroot:8080
+      - --scrape-interval=15s
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro

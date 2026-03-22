@@ -2,7 +2,13 @@
 
 Full observability stack for Connectum microservices using [Coroot](https://coroot.com/) — an open-source observability platform with automatic service maps, distributed tracing, metrics, and log analysis.
 
-This example extends the [production-ready](../production-ready) example with a complete Coroot-based monitoring stack, demonstrating how `@connectum/otel` telemetry flows from microservices through OpenTelemetry Collector into Coroot dashboards.
+This example demonstrates how `@connectum/otel` telemetry flows from microservices through OpenTelemetry Collector into Coroot dashboards: distributed traces, structured logs, custom business metrics, and automatic service map discovery.
+
+## Demo
+
+https://github.com/user-attachments/assets/demo.mp4
+
+[Watch full demo video](docs/videos/demo.mp4)
 
 ## Architecture
 
@@ -104,11 +110,55 @@ The script runs health checks, a smoke test, then sends randomized `CreateOrder`
 
 After generating traffic, open **http://localhost:8080** and explore:
 
-- **Service Map** — automatic topology of order-service and inventory-service with request rates, latencies, and error rates
-- **Traces** — distributed traces for each RPC call with span details and timing breakdown
-- **Metrics** — RPC latency histograms, request counts, and resource utilization
-- **Logs** — structured logs correlated with traces (click a trace to see associated logs)
-- **Inspections** — Coroot's automatic checks for SLO violations, latency anomalies, and error rate spikes
+### Service Map
+
+Automatic topology showing order-service calling inventory-service via ConnectRPC, with request rates and latencies.
+
+![Service Map](docs/screenshots/service-map.png)
+
+### Distributed Tracing
+
+Full trace chain across services: `CreateOrder` (order-service) → `CheckStock` client span → `CheckStock` server span (inventory-service).
+
+![Distributed Trace](docs/screenshots/distributed-trace.png)
+
+Each span includes OpenTelemetry semantic attributes — RPC method, service, status code, network details:
+
+![Span Attributes](docs/screenshots/span-attributes.png)
+
+### Traces Overview
+
+Latency & error heatmap with filterable trace list across all services and operations:
+
+![Traces Overview](docs/screenshots/traces-overview.png)
+
+### Service Logs
+
+Structured OTel logs from `@connectum/otel` `getLogger()` with message histogram and log stream:
+
+![Service Logs](docs/screenshots/service-logs.png)
+
+Click any log entry to see full attributes including trace correlation, inventory data, and service metadata:
+
+![Log Detail](docs/screenshots/log-detail.png)
+
+### Logs Explorer
+
+Centralized log search across all services with OpenTelemetry source filtering:
+
+![Logs Explorer](docs/screenshots/logs-explorer.png)
+
+### Service Tracing Tab
+
+Per-service tracing view with latency heatmap and individual trace drill-down:
+
+![Service Tracing](docs/screenshots/service-tracing.png)
+
+### Custom Metrics Dashboard
+
+Business metrics from `getMeter()` — order rates by product, stock availability, inventory levels:
+
+![Dashboard Demo](docs/screenshots/dashboard-demo.png)
 
 ## Services and Ports
 
@@ -164,7 +214,7 @@ docker compose down -v
 
 ## Technologies
 
-- [Connectum](https://github.com/nicktomlin/connectum) — gRPC/ConnectRPC microservice framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC microservice framework
 - [Coroot](https://coroot.com/) — Open-source observability platform
 - [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) — Vendor-agnostic telemetry pipeline
 - [ClickHouse](https://clickhouse.com/) — Column-oriented database for traces and logs

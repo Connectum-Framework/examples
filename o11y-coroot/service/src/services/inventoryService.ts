@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import type { ConnectRouter } from "@connectrpc/connect";
-import { getLogger } from "@connectum/otel";
+import { getLogger, getMeter } from "@connectum/otel";
 import {
     InventoryService,
     type GetInventoryRequest,
@@ -19,13 +19,24 @@ const stock = new Map<string, number>([
     ["gizmo-1", 150],
 ]);
 
-let _log: ReturnType<typeof getLogger> | undefined;
-function log() { return (_log ??= getLogger("InventoryService")); }
+const logger = getLogger();
+
+const meter = getMeter();
+const stockChecks = meter.createCounter("inventory.stock_checks", { description: "Total stock check requests" });
+const stockAvailable = meter.createCounter("inventory.stock_checks.available", { description: "Stock checks where product was available" });
+const stockUnavailable = meter.createCounter("inventory.stock_checks.unavailable", { description: "Stock checks where product was unavailable" });
+
+meter.createObservableGauge("inventory.stock_level", { description: "Current stock level per product" })
+    .addCallback((result) => {
+        for (const [productId, quantity] of stock) {
+            result.observe(quantity, { "product.id": productId });
+        }
+    });
 
 export function inventoryServiceRoutes(router: ConnectRouter): void {
     router.service(InventoryService, {
         async getInventory(_request: GetInventoryRequest) {
-            log().info(`Listing ${stock.size} product(s)`, {
+            logger.info(`Listing ${stock.size} product(s)`, {
                 "inventory.count": stock.size,
             });
 
@@ -44,7 +55,15 @@ export function inventoryServiceRoutes(router: ConnectRouter): void {
             const currentStock = stock.get(request.productId) ?? 0;
             const available = currentStock >= request.quantity;
 
-            log().info(
+            // Record metrics
+            stockChecks.add(1, { "product.id": request.productId });
+            if (available) {
+                stockAvailable.add(1, { "product.id": request.productId });
+            } else {
+                stockUnavailable.add(1, { "product.id": request.productId });
+            }
+
+            logger.info(
                 `Stock check: ${request.productId} available=${available} currentStock=${currentStock}`,
                 {
                     "inventory.productId": request.productId,
