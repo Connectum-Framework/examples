@@ -14,6 +14,9 @@ export const inventoryEventBus = createEventBus({
     group: "inventory-service",
     middleware: {
         retry: { maxRetries: 2, backoff: "fixed", initialDelay: 200 },
-        dlq: { topic: "dead-letter-queue" },
+        dlq: {
+            topic: "dead-letter-queue",
+            errorSerializer: (err: unknown) => err instanceof Error ? err.message : String(err),
+        },
     },
 });

@@ -25,6 +25,7 @@ const CONNECTUM_PACKAGES = [
   "events-nats",
   "events-kafka",
   "events-redis",
+  "events-amqp",
 ];
 
 // __dirname resolves to the real file location (examples/), not the symlink.

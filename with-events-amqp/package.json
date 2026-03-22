@@ -1,0 +1,47 @@
+{
+  "name": "@connectum/example-with-events-amqp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Connectum EventBus example with AMQP/RabbitMQ — 2 microservices + saga pattern",
+  "type": "module",
+  "imports": {
+    "#gen/*": "./gen/*",
+    "#*": "./src/*"
+  },
+  "scripts": {
+    "start:order": "node src/order-service.ts",
+    "start:inventory": "node src/inventory-service.ts",
+    "dev:order": "node --watch src/order-service.ts",
+    "dev:inventory": "node --watch src/inventory-service.ts",
+    "typecheck": "tsc --noEmit",
+    "buf:generate": "buf generate",
+    "buf:lint": "buf lint",
+    "build:proto": "pnpm run buf:generate",
+    "test": "node --test tests/e2e/**/*.test.ts",
+    "test:e2e": "node --test tests/e2e/**/*.test.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "keywords": ["connectrpc", "grpc", "connectum", "example", "events", "amqp", "rabbitmq", "saga"],
+  "author": "Highload.Zone",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=25.2.0" },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectum/core": "1.0.0-rc.6",
+    "@connectum/events": "1.0.0-rc.6",
+    "@connectum/events-amqp": "1.0.0-rc.6",
+    "@connectum/healthcheck": "1.0.0-rc.6",
+    "@connectum/interceptors": "1.0.0-rc.6",
+    "@connectum/reflection": "1.0.0-rc.6"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@connectrpc/connect-node": "^2.1.1",
+    "@types/node": "^25.2.0",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": { "onlyBuiltDependencies": ["@bufbuild/buf"] }
+}

@@ -39,7 +39,7 @@ export function orderServiceRoutes(router: ConnectRouter): void {
             console.log(`[OrderService] Cancelling order ${request.orderId}: ${request.reason}`);
             await orderEventBus.publish(OrderCancelledSchema, create(OrderCancelledSchema, {
                 orderId: request.orderId, reason: request.reason,
-            }));
+            }), { topic: "orders.cancelled" });
             order.status = "cancelled";
             console.log(`[OrderService] OrderCancelled event published for ${request.orderId}`);
             return create(CancelOrderResponseSchema, { orderId: request.orderId, status: "cancelled" });
