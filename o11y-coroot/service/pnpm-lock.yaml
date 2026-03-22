@@ -27,8 +27,8 @@ importers:
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
       '@connectum/otel':
-        specifier: https://pkg.pr.new/@connectum/otel@66
-        version: https://pkg.pr.new/@connectum/otel@66(@bufbuild/protobuf@2.11.0)
+        specifier: 1.0.0-rc.6
+        version: 1.0.0-rc.6(@bufbuild/protobuf@2.11.0)
       '@connectum/reflection':
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(@connectum/core@1.0.0-rc.6)
@@ -159,9 +159,8 @@ packages:
     resolution: {integrity: sha512-OtVf/NmLP0ixNoMAJDRru2CqC5Rjl6sIqLLqvA756MgBS7EIur3Rpvs5mIjTSwHx4/nmBQGQ+aC80SIqp+3iag==}
     engines: {node: '>=18.0.0'}
 
-  '@connectum/otel@https://pkg.pr.new/@connectum/otel@66':
-    resolution: {integrity: sha512-+A2Ns43CdeK8ZklRksHfVktRBlns7pW0J0WKava6O7Fndn9QD0rr0Fh2BGipvIj5214ccbNQxS1OuOkm5awW/w==, tarball: https://pkg.pr.new/@connectum/otel@66}
-    version: 1.0.0-rc.6
+  '@connectum/otel@1.0.0-rc.6':
+    resolution: {integrity: sha512-lSK8lxiTM33ELZvMYefRW5pPRQnZN6QGA1PH1wh1epms1jM+3GccKPFXQhDGNaVxf3BImU3HkVFigb6+6agtGA==}
     engines: {node: '>=18.0.0'}
 
   '@connectum/reflection@1.0.0-rc.6':
@@ -571,7 +570,7 @@ snapshots:
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/otel@https://pkg.pr.new/@connectum/otel@66(@bufbuild/protobuf@2.11.0)':
+  '@connectum/otel@1.0.0-rc.6(@bufbuild/protobuf@2.11.0)':
     dependencies:
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@opentelemetry/api': 1.9.0
