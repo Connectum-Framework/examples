@@ -6,7 +6,8 @@ This example demonstrates how `@connectum/otel` telemetry flows from microservic
 
 ## Demo
 
-<video src="docs/videos/demo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/bbfe33ee-f8a2-4652-8a72-aa6e63972b36
+
 
 ## Architecture
 
