@@ -48,7 +48,7 @@ Coroot includes a **built-in OTLP/HTTP receiver** on port 8080. Applications can
 **Status**: [Open issue #54](https://github.com/coroot/coroot-node-agent/issues/54)
 
 Error on Docker Desktop macOS:
-```
+```text
 kernel tracing is not available: stat /sys/kernel/debug/tracing: no such file or directory
 ```
 
@@ -72,7 +72,7 @@ kernel tracing is not available: stat /sys/kernel/debug/tracing: no such file or
 
 ### 2.1 Option A: Microservices → OTel Collector → Coroot (RECOMMENDED)
 
-```
+```text
 ┌─────────────────┐    OTLP/HTTP     ┌──────────────────┐   OTLP/HTTP    ┌─────────┐
 │  order-service   │───────────────→ │  OTel Collector   │─────────────→ │  Coroot  │
 │  (port 5000)     │    :4318        │  (4317/4318)      │   :8080       │  (:8080) │
@@ -92,7 +92,7 @@ kernel tracing is not available: stat /sys/kernel/debug/tracing: no such file or
 
 ### 2.2 Option B: Microservices → Coroot Directly
 
-```
+```text
 ┌─────────────────┐    OTLP/HTTP
 │  order-service   │───────────────→ ┌─────────┐
 │  (port 5000)     │    :8080       │  Coroot  │──→ ClickHouse
@@ -193,7 +193,7 @@ logs:     [otlp] → [batch] → [otlphttp/coroot]
 
 ## 6. Minimal Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Docker Network: o11y                         │
 │                                                                     │
@@ -245,7 +245,7 @@ Host ports exposed:
 
 ## 8. Example File Structure
 
-```
+```text
 examples/o11y-coroot/
 ├── docker-compose.yml              # All services: Coroot + CH + OTel + microservices
 ├── otel-collector-config.yaml      # OTel Collector → Coroot routing

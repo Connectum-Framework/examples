@@ -24,7 +24,8 @@ server.on("ready", () => {
     healthcheckManager.update(ServingStatus.SERVING);
     const addr = server.address;
     console.log(`\nOrder Service ready on ${addr?.address}:${addr?.port}`);
-    console.log(`AMQP: ${process.env.AMQP_URL ?? "amqp://localhost:5672"}`);
+    const amqpUrl = (process.env.AMQP_URL ?? "amqp://localhost:5672").replace(/\/\/[^@]+@/, "//***:***@");
+    console.log(`AMQP: ${amqpUrl}`);
     console.log(`\nTest with curl:`);
     console.log(`  curl -X POST http://localhost:${addr?.port}/orders.v1.OrderService/CreateOrder \\`);
     console.log(`    -H "Content-Type: application/json" \\`);

@@ -24,7 +24,8 @@ server.on("ready", () => {
     healthcheckManager.update(ServingStatus.SERVING);
     const addr = server.address;
     console.log(`\nInventory Service ready on ${addr?.address}:${addr?.port}`);
-    console.log(`AMQP: ${process.env.AMQP_URL ?? "amqp://localhost:5672"}`);
+    const amqpUrl = (process.env.AMQP_URL ?? "amqp://localhost:5672").replace(/\/\/[^@]+@/, "//***:***@");
+    console.log(`AMQP: ${amqpUrl}`);
     console.log(`\n  curl -X POST http://localhost:${addr?.port}/orders.v1.InventoryService/GetInventory \\`);
     console.log(`    -H "Content-Type: application/json" -d '{}'`);
     console.log("\nPress Ctrl+C to shutdown gracefully\n");
