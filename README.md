@@ -49,6 +49,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
 | [with-events-amqp](with-events-amqp/) | EventBus with RabbitMQ | AMQP adapter, topic exchange, Management UI | Ready |
 | [with-events-dlq](with-events-dlq/) | EventBus Dead Letter Queue | DLQ service, retry policies, failed event inspection | Ready |
+| [o11y-coroot](o11y-coroot/) | Observability with Coroot | Distributed tracing, custom metrics, structured logs, service map | Ready |
 
 ## Prerequisites
 
