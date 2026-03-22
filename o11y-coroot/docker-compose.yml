@@ -26,9 +26,9 @@ services:
       - LOG_LEVEL=debug
       - HTTP_HEALTH_ENABLED=true
       - OTEL_SERVICE_NAME=order-service
-      - OTEL_TRACES_EXPORTER=otlp/http
-      - OTEL_METRICS_EXPORTER=otlp/http
-      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     depends_on:
       otel-collector:
@@ -55,9 +55,9 @@ services:
       - LOG_LEVEL=debug
       - HTTP_HEALTH_ENABLED=true
       - OTEL_SERVICE_NAME=inventory-service
-      - OTEL_TRACES_EXPORTER=otlp/http
-      - OTEL_METRICS_EXPORTER=otlp/http
-      - OTEL_LOGS_EXPORTER=otlp/http
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
     depends_on:
       otel-collector:
@@ -127,7 +127,7 @@ services:
       - --bootstrap-prometheus-url=http://prometheus:9090
       - --bootstrap-prometheus-remote-write-url=http://prometheus:9090/api/v1/write
       - --bootstrap-clickhouse-address=clickhouse:9000
-      - --auth-anonymous-role=Admin
+      - --auth-anonymous-role=Viewer
     ports:
       - "8080:8080"   # UI + API
     depends_on:

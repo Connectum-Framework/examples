@@ -24,6 +24,8 @@
     "@connectum/reflection": "1.0.0-rc.6"
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
     "@types/node": "^25.2.0",
     "typescript": "^5.9.3"
   }

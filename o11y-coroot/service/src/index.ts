@@ -11,15 +11,26 @@
  * with different env vars.
  */
 
+import type { ConnectRouter } from "@connectrpc/connect";
 import { createServer } from "@connectum/core";
 import type { CreateServerOptions } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { initProvider, shutdownProvider } from "@connectum/otel";
 import { Reflection } from "@connectum/reflection";
+import { orderServiceRoutes } from "./services/orderService.ts";
+import { inventoryServiceRoutes } from "./services/inventoryService.ts";
 
 const serviceName = process.env.OTEL_SERVICE_NAME ?? "o11y-service";
 const port = Number(process.env.PORT) || 5000;
+
+// Select routes based on service name
+const serviceRoutes: Array<(router: ConnectRouter) => void> = [];
+if (serviceName.includes("order")) {
+    serviceRoutes.push(orderServiceRoutes);
+} else if (serviceName.includes("inventory")) {
+    serviceRoutes.push(inventoryServiceRoutes);
+}
 
 // ── Initialize OpenTelemetry ────────────────────────────────────────────────
 // Must be called before server start to register exporters.
@@ -31,9 +42,7 @@ console.log(`Starting ${serviceName} on port ${port}...`);
 
 // ── Server configuration ────────────────────────────────────────────────────
 const options: CreateServerOptions = {
-    // No gRPC service routes — this is a minimal o11y demo.
-    // Healthcheck + Reflection are registered as protocol plugins.
-    services: [],
+    services: serviceRoutes,
 
     port,
     host: "0.0.0.0",

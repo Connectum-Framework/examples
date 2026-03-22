@@ -23,8 +23,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCREENSHOTS_DIR = resolve(__dirname, "../docs/screenshots");
-const BASE_URL = process.argv.includes("--base-url")
-    ? process.argv[process.argv.indexOf("--base-url") + 1]!
+const baseUrlIdx = process.argv.indexOf("--base-url");
+const BASE_URL = baseUrlIdx !== -1 && process.argv[baseUrlIdx + 1]
+    ? process.argv[baseUrlIdx + 1]
     : "http://localhost:8080";
 
 const VIEWPORT = { width: 1920, height: 1080 };
@@ -38,7 +39,8 @@ interface ScreenshotTask {
 
 /** Detect the Coroot project ID from the redirect URL */
 async function detectProjectId(page: Page): Promise<string> {
-    await page.goto(BASE_URL, { waitUntil: "networkidle", timeout: LOAD_TIMEOUT });
+    await page.goto(BASE_URL, { waitUntil: "domcontentloaded", timeout: LOAD_TIMEOUT });
+    await page.waitForLoadState("networkidle").catch(() => {});
     await page.waitForTimeout(3000);
     const url = page.url();
     const match = url.match(/\/p\/([^/]+)/);
@@ -382,7 +384,7 @@ const tasks: ScreenshotTask[] = [
             const otelLogs = page.locator("label:has-text('OpenTelemetry')").first();
             if (await otelLogs.isVisible({ timeout: 2000 }).catch(() => false)) {
                 const input = otelLogs.locator("input[type='checkbox']");
-                const isChecked = await input.isChecked().catch(() => true);
+                const isChecked = await input.isChecked().catch(() => false);
                 if (!isChecked) {
                     await otelLogs.click({ force: true });
                     await page.waitForTimeout(500);
@@ -393,7 +395,7 @@ const tasks: ScreenshotTask[] = [
             const containerLogs = page.locator("label:has-text('Container logs')").first();
             if (await containerLogs.isVisible({ timeout: 2000 }).catch(() => false)) {
                 const input = containerLogs.locator("input[type='checkbox']");
-                const isChecked = await input.isChecked().catch(() => true);
+                const isChecked = await input.isChecked().catch(() => false);
                 if (!isChecked) {
                     await containerLogs.click({ force: true });
                     await page.waitForTimeout(500);

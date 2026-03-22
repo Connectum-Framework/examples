@@ -34,6 +34,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy application source (native TypeScript — no build needed)
 COPY package.json ./
 COPY src/ ./src/
+COPY gen/ ./gen/
 
 # Set ownership
 RUN chown -R connectum:connectum /app
@@ -51,7 +52,7 @@ EXPOSE 5000
 
 # Health check via HTTP endpoint from @connectum/healthcheck
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/healthz || exit 1
+    CMD ["sh", "-c", "curl -f http://localhost:${PORT}/healthz || exit 1"]
 
 # Start with native TypeScript support
 CMD ["node", "--experimental-strip-types", "src/index.ts"]
