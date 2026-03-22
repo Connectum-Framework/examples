@@ -47,6 +47,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
 | [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
 | [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
+| [with-events-amqp](with-events-amqp/) | EventBus with RabbitMQ | AMQP adapter, topic exchange, Management UI | Ready |
 | [with-events-dlq](with-events-dlq/) | EventBus Dead Letter Queue | DLQ service, retry policies, failed event inspection | Ready |
 
 ## Prerequisites

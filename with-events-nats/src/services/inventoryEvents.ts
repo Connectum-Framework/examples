@@ -12,7 +12,7 @@ export const inventoryEventRoutes: EventRoute = (events) => {
             reservations.set(event.orderId, { orderId: event.orderId, product: event.product, quantity: event.quantity, status: "reserved" });
             await inventoryEventBus.publish(InventoryReservedSchema, create(InventoryReservedSchema, {
                 orderId: event.orderId, product: event.product, quantity: event.quantity,
-            }));
+            }), { topic: "inventory.reserved" });
             console.log(`[InventoryEvents] InventoryReserved published for ${event.orderId}`);
             await ctx.ack();
         },
