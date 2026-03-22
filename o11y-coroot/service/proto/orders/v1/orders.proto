@@ -1,0 +1,66 @@
+syntax = "proto3";
+package orders.v1;
+
+// ── Order Service ───────────────────────────────────────────────────────────
+
+message CreateOrderRequest {
+  repeated OrderItem items = 1;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message CreateOrderResponse {
+  string order_id = 1;
+  string status = 2;
+  int32 total_items = 3;
+}
+
+message GetOrdersRequest {}
+
+message GetOrdersResponse {
+  repeated OrderInfo orders = 1;
+}
+
+message OrderInfo {
+  string order_id = 1;
+  repeated OrderItem items = 2;
+  string status = 3;
+  string created_at = 4;
+}
+
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc GetOrders(GetOrdersRequest) returns (GetOrdersResponse);
+}
+
+// ── Inventory Service ───────────────────────────────────────────────────────
+
+message GetInventoryRequest {}
+
+message GetInventoryResponse {
+  repeated InventoryItem items = 1;
+}
+
+message InventoryItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  string status = 3;
+}
+
+message CheckStockRequest {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message CheckStockResponse {
+  bool available = 1;
+  int32 current_stock = 2;
+}
+
+service InventoryService {
+  rpc GetInventory(GetInventoryRequest) returns (GetInventoryResponse);
+  rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
+}
