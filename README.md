@@ -103,7 +103,7 @@ See [runn/README.md](runn/README.md) for details.
 
 ## Dependencies
 
-All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.6`). Just `pnpm install` in any example directory to get started.
+All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.10`). Just `pnpm install` in any example directory to get started.
 
 ## License
 
