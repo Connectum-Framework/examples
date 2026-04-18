@@ -73,10 +73,10 @@ pnpm test
 
 ## Package Versions
 
-Currently configured for `1.0.0-rc.4`. Update versions in `package.json` after publishing new compiled releases.
+Currently configured for `1.0.0-rc.10`. Update versions in `package.json` after publishing new compiled releases.
 
 ## Important Notes
 
-- The current `1.0.0-rc.4` on npm publishes raw `.ts` source files, which Node.js cannot type-strip from `node_modules`. Tests will only pass with compiled tarballs or a future npm release that includes `dist/`.
+- Starting with `1.0.0-rc.8`, npm publishes compiled `dist/` artifacts (ESM `.js` + `.d.ts` + source maps) via tsup, so cross-runtime tests work directly against published versions without tarballs.
 - Each test creates its own server on port 0 (random) and uses `createHealthcheckManager()` to avoid shared state between tests.
 - Health check tests use raw HTTP/2 client (`node:http2`) since the server runs on HTTP/2 plaintext.
