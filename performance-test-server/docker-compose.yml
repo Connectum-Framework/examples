@@ -1,6 +1,22 @@
 services:
   server:
     build: .
+    # OTel export scenario (port 8085) is opt-in. When OTEL_EXPORT_ENABLED=1
+    # the server initializes the @connectum/otel provider with env-driven OTLP
+    # exporter settings and binds the extra port. All other scenarios work
+    # without these env vars; the provider stays uninitialized.
+    environment:
+      OTEL_EXPORT_ENABLED: "${OTEL_EXPORT_ENABLED:-0}"
+      OTEL_SERVICE_NAME: "${OTEL_SERVICE_NAME:-performance-test-server}"
+      OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-otlp/grpc}"
+      OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-otlp/grpc}"
+      OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-none}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
+      # BatchSpanProcessor tuning — realistic production-ish defaults
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-512}"
+      OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-2048}"
+      OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-1000}"
+      OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-10000}"
     healthcheck:
       test: >
         node -e "const h=require('node:http2'),c=h.connect('https://localhost:8080',
@@ -13,6 +29,25 @@ services:
       interval: 3s
       timeout: 5s
       retries: 10
+      start_period: 5s
+
+  # =========================================================================
+  # OpenTelemetry Collector (only started for the otel-export profile)
+  # =========================================================================
+  # Accepts OTLP/gRPC on :4317 and OTLP/HTTP on :4318, then drops everything
+  # via a debug exporter. The goal is to measure export-side CPU cost, not
+  # backend write throughput — see otel-collector-config.yaml for rationale.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    profiles: ["otel-export"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "components"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
       start_period: 5s
 
   k6-interceptor-overhead:
@@ -36,3 +71,27 @@ services:
       server: { condition: service_healthy }
     command: run /scripts/basic-load.js
     profiles: ["load"]
+
+  # =========================================================================
+  # OTel OTLP export overhead scenario (profile: otel-export)
+  # =========================================================================
+  # Measures p50/p95/p99 latency delta and throughput delta between the
+  # baseline (port 8081) and full-chain-with-real-OTLP-exporter (port 8085).
+  # Requires OTEL_EXPORT_ENABLED=1 on the server and a running otel-collector.
+  k6-otel-export:
+    image: grafana/k6:latest
+    volumes:
+      - ./k6:/scripts
+      - ./k6/results:/results
+    environment:
+      PROTOCOL: https
+      BASE_HOST: server
+      BASELINE_PORT: "8081"
+      OTEL_EXPORT_PORT: "8085"
+      # k6 writes a machine-readable summary here for CI/bench tracking.
+      K6_OUT: "json=/results/otel-export-overhead.json"
+    depends_on:
+      server: { condition: service_healthy }
+      otel-collector: { condition: service_healthy }
+    command: run /scripts/otel-export-overhead.js
+    profiles: ["otel-export"]

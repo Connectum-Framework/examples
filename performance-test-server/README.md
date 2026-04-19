@@ -4,17 +4,18 @@ Dedicated server for k6 performance benchmarking with configurable interceptor c
 
 ## Purpose
 
-This server runs **5 parallel instances** on different ports, each with a different interceptor configuration:
+This server runs **5 parallel instances** on different ports, each with a different interceptor configuration, plus an **optional 6th instance** for measuring OTLP export overhead end-to-end:
 
 | Port | Configuration | Purpose |
 |------|---------------|---------|
 | 8081 | **Baseline** (no interceptors) | Measure baseline latency without any overhead |
 | 8082 | **Validation only** | Measure validation interceptor overhead |
 | 8083 | **Logger only** | Measure logger interceptor overhead |
-| 8084 | **Tracing only** | Measure tracing interceptor overhead |
-| 8080 | **Full chain** (all interceptors) | Measure total overhead with all interceptors |
+| 8084 | **Tracing only** (no-op exporter) | Measure tracing interceptor overhead |
+| 8080 | **Full chain** (all interceptors, no-op exporter) | Measure total overhead with all interceptors |
+| 8085 | **OTel export** — full chain + real OTLP exporter (opt-in via `OTEL_EXPORT_ENABLED=1`) | Measure end-to-end cost of the stock `@connectum/otel` export path (BatchSpanProcessor + otlp-transformer + OTLP/gRPC) |
 
-This allows k6 benchmarks to accurately measure the overhead introduced by each interceptor.
+This allows k6 benchmarks to accurately measure the overhead introduced by each interceptor, and — with the OTel export scenario — the CPU cost of actually shipping spans over the wire.
 
 ## Requirements
 
@@ -94,10 +95,39 @@ Stress-tests the full-chain configuration with 100 concurrent VUs for 7 minutes:
 docker compose --profile load up k6-basic-load --build --abort-on-container-exit
 ```
 
+### OTel OTLP Export Overhead
+
+Measures the p50/p95/p99 latency delta and throughput delta between the baseline (port 8081) and the full-chain-with-real-OTLP-exporter configuration (port 8085). Runs for ~5 minutes at 100 VUs:
+
+```bash
+OTEL_EXPORT_ENABLED=1 docker compose --profile otel-export up \
+  --build --abort-on-container-exit
+```
+
+What this measures that the `k6-interceptor-overhead` scenario does *not*:
+
+- Real `BatchSpanProcessor` + `@opentelemetry/otlp-transformer` serialization cost per exported span
+- OTLP/gRPC wire transport cost (`@grpc/grpc-js`)
+- End-to-end CPU pressure of the full OTel export pipeline under sustained load
+
+The collector runs locally in Docker and drops all telemetry via a `debug` exporter — the goal is export-side CPU profiling, not backend write throughput. See `otel-collector-config.yaml`.
+
+k6 writes a machine-readable JSON summary to `k6/results/otel-export-overhead.json` (gitignored) for CI / bench-tracking tooling.
+
+**Expected overhead range** (informational — actual numbers depend on the installed `@opentelemetry/otlp-transformer` version):
+
+| Metric | Baseline (8081) | OTel export (8085) | Overhead | Relative |
+|--------|-----------------|--------------------|----------|----------|
+| p50 latency | ~1–3 ms | ~1.5–4 ms | +0.5–1 ms | 1.2×–1.5× |
+| p95 latency | ~2–5 ms | ~3–8 ms | +1–3 ms | 1.3×–2× |
+| p99 latency | ~5–10 ms | ~8–20 ms | +3–10 ms | 1.5×–2.5× |
+
+A **relative overhead >1.5×** on p95 — or any sudden jump from a previous run — is a signal to investigate the `@opentelemetry/otlp-transformer` version. See Connectum recommendations R1.2 and upstream issues [#6221](https://github.com/open-telemetry/opentelemetry-js/issues/6221), PR [#6225](https://github.com/open-telemetry/opentelemetry-js/pull/6225), PR [#6390](https://github.com/open-telemetry/opentelemetry-js/pull/6390), issue [#6570](https://github.com/open-telemetry/opentelemetry-js/issues/6570).
+
 ### Cleanup
 
 ```bash
-docker compose --profile load down --rmi local -v
+docker compose --profile load --profile otel-export down --rmi local -v
 ```
 
 ### Environment Variables
@@ -106,14 +136,30 @@ k6 scripts accept the following environment variables (set via `docker-compose.y
 
 | Variable | Default | Used by |
 |----------|---------|---------|
-| `PROTOCOL` | `https` | interceptor-overhead |
-| `BASE_HOST` | `server` | interceptor-overhead |
+| `PROTOCOL` | `https` | interceptor-overhead, otel-export-overhead |
+| `BASE_HOST` | `server` | interceptor-overhead, otel-export-overhead |
 | `BASE_URL` | `https://server:8080` | basic-load |
-| `BASELINE_PORT` | `8081` | interceptor-overhead |
+| `BASELINE_PORT` | `8081` | interceptor-overhead, otel-export-overhead |
 | `VALIDATION_PORT` | `8082` | interceptor-overhead |
 | `LOGGER_PORT` | `8083` | interceptor-overhead |
 | `TRACING_PORT` | `8084` | interceptor-overhead |
 | `FULLCHAIN_PORT` | `8080` | interceptor-overhead |
+| `OTEL_EXPORT_PORT` | `8085` | otel-export-overhead |
+
+The server-side OTel export scenario (port 8085) is controlled via standard `OTEL_*` env vars. Defaults are set in `docker-compose.yml`; override by exporting before `docker compose up`:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `OTEL_EXPORT_ENABLED` | `0` | Set to `1` to bind port 8085 and initialize the OTel provider |
+| `OTEL_SERVICE_NAME` | `performance-test-server` | Resource `service.name` attribute |
+| `OTEL_TRACES_EXPORTER` | `otlp/grpc` | `console`, `otlp/http`, `otlp/grpc`, or `none` |
+| `OTEL_METRICS_EXPORTER` | `otlp/grpc` | same values as above |
+| `OTEL_LOGS_EXPORTER` | `none` | same values as above |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Collector endpoint |
+| `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | `512` | BatchSpanProcessor batch size |
+| `OTEL_BSP_MAX_QUEUE_SIZE` | `2048` | BatchSpanProcessor queue size |
+| `OTEL_BSP_SCHEDULE_DELAY` | `1000` | BatchSpanProcessor flush interval (ms) |
+| `OTEL_BSP_EXPORT_TIMEOUT` | `10000` | Single export attempt timeout (ms) |
 
 ## Testing
 
@@ -136,6 +182,9 @@ curl http://localhost:8084/grpc.health.v1.Health/Check
 
 # Full chain
 curl http://localhost:8080/grpc.health.v1.Health/Check
+
+# OTel export (only when OTEL_EXPORT_ENABLED=1)
+curl http://localhost:8085/grpc.health.v1.Health/Check
 ```
 
 ### Manual Test
@@ -261,6 +310,7 @@ Benchmark scripts are located in the `k6/` directory:
 
 - `k6/interceptor-overhead.js` - Uses **all ports** to compare interceptor overhead
 - `k6/basic-load.js` - Uses port 8080 (full chain) with ramping VUs
+- `k6/otel-export-overhead.js` - Uses **port 8081 (baseline) + port 8085 (OTel export)** to measure end-to-end OTLP export cost under 100 VUs sustained load
 
 ## Troubleshooting
 
