@@ -17,14 +17,14 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectum/core':
-        specifier: 1.0.0-rc.7
-        version: 1.0.0-rc.7
+        specifier: 1.0.0-rc.10
+        version: 1.0.0-rc.10
       '@connectum/interceptors':
-        specifier: 1.0.0-rc.7
-        version: 1.0.0-rc.7(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
+        specifier: 1.0.0-rc.10
+        version: 1.0.0-rc.10(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))
       '@connectum/otel':
-        specifier: 1.0.0-rc.7
-        version: 1.0.0-rc.7(@bufbuild/protobuf@2.11.0)
+        specifier: 1.0.0-rc.10
+        version: 1.0.0-rc.10(@bufbuild/protobuf@2.11.0)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
@@ -138,17 +138,17 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/core@1.0.0-rc.7':
-    resolution: {integrity: sha512-1x5sthjO9yk88MTJKPwMv234/wXxisErtyvxHyD/cDJR6iyIrM31mQmp4MMgV3GlAIcNKqjSVUI3MrSbeYw6fg==}
-    engines: {node: '>=18.0.0'}
+  '@connectum/core@1.0.0-rc.10':
+    resolution: {integrity: sha512-IiF+wLI0f3hbMSEQefgG8M3c4Y9ZQ/wXhTcaT58EN7xfa9tdy/pr03yK0iuN5h7kNVPrIMK5nVnwRBAwWtwUOg==}
+    engines: {node: '>=20.0.0'}
 
-  '@connectum/interceptors@1.0.0-rc.7':
-    resolution: {integrity: sha512-D05/Otft7K56sEjmySW6+SeG/QsxbmGkkVbcxfUXib1BVUG0l0ZwKbQTG1NTE0+koqpWG4VWbywuJ8xpVfPK6A==}
-    engines: {node: '>=18.0.0'}
+  '@connectum/interceptors@1.0.0-rc.10':
+    resolution: {integrity: sha512-B9J7UC7W+oAU6vILBAta++lTRsPkhKizsAjUs6b9qeLDBFrjGSYOCtrHGnIlqJtdttkQL/R2G/t6Rtvkx8o+WA==}
+    engines: {node: '>=20.0.0'}
 
-  '@connectum/otel@1.0.0-rc.7':
-    resolution: {integrity: sha512-O14qZsL9LGbvy6LZkJV4s1ck5aazSmdWhJw7rAqPc6QIAUxyWJywgF9ynCctZhL4JTsqpyu3XBHZe4tzAT3tHA==}
-    engines: {node: '>=18.0.0'}
+  '@connectum/otel@1.0.0-rc.10':
+    resolution: {integrity: sha512-V/F8Rkakl2TVcxyddqplyPzEazSceM0mgZ1Htk1OzLBJHdXG7MFbPe2FNzYP6AV3kk9+V6f4OLgLZiF6GSAJrg==}
+    engines: {node: '>=20.0.0'}
 
   '@grpc/grpc-js@1.14.3':
     resolution: {integrity: sha512-Iq8QQQ/7X3Sac15oB6p0FmUg/klxQvXLeileoqrTRGJYLV+/9tubbr9ipz0GKHjmXVsgFPo/+W+2cA8eNcR+XA==}
@@ -500,7 +500,7 @@ snapshots:
       '@bufbuild/protovalidate': 1.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
 
-  '@connectum/core@1.0.0-rc.7':
+  '@connectum/core@1.0.0-rc.10':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
@@ -508,17 +508,17 @@ snapshots:
       env-var: 7.5.0
       zod: 4.3.6
 
-  '@connectum/interceptors@1.0.0-rc.7(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
+  '@connectum/interceptors@1.0.0-rc.10(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))':
     dependencies:
       '@bufbuild/protobuf': 2.11.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.11.0)(@bufbuild/protovalidate@1.1.1(@bufbuild/protobuf@2.11.0))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.11.0))
-      '@connectum/core': 1.0.0-rc.7
+      '@connectum/core': 1.0.0-rc.10
       cockatiel: 3.2.1
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/otel@1.0.0-rc.7(@bufbuild/protobuf@2.11.0)':
+  '@connectum/otel@1.0.0-rc.10(@bufbuild/protobuf@2.11.0)':
     dependencies:
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.11.0)
       '@opentelemetry/api': 1.9.0
