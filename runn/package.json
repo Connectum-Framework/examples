@@ -18,7 +18,14 @@
     "test": "docker compose up --build --exit-code-from tests --abort-on-container-exit",
     "test:observe": "docker compose --profile observability up --build"
   },
-  "keywords": ["connectrpc", "grpc", "connectum", "example", "e2e", "runn"],
+  "keywords": [
+    "connectrpc",
+    "grpc",
+    "connectum",
+    "example",
+    "e2e",
+    "runn"
+  ],
   "author": "Highload.Zone",
   "license": "Apache-2.0",
   "engines": {
@@ -40,14 +47,5 @@
     "@bufbuild/protoc-gen-es": "^2.11.0",
     "@types/node": "^25.2.0",
     "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@bufbuild/buf"
-    ],
-    "overrides": {
-      "protobufjs@<7.5.5": "7.5.5",
-      "protobufjs@>=8.0.0 <8.0.1": "8.0.1"
-    }
   }
 }

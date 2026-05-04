@@ -39,15 +39,5 @@
     "@bufbuild/protoc-gen-es": "^2.11.0",
     "@types/node": "^25.2.0",
     "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@bufbuild/buf",
-      "protobufjs"
-    ],
-    "overrides": {
-      "protobufjs@<7.5.5": "7.5.5",
-      "protobufjs@>=8.0.0 <8.0.1": "8.0.1"
-    }
   }
 }
