@@ -17,7 +17,13 @@
     "test:all": "npm run test:node && npm run test:bun",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["connectrpc", "grpc", "connectum", "cross-runtime", "smoke-test"],
+  "keywords": [
+    "connectrpc",
+    "grpc",
+    "connectum",
+    "cross-runtime",
+    "smoke-test"
+  ],
   "author": "Highload.Zone",
   "license": "Apache-2.0",
   "dependencies": {
@@ -37,8 +43,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["@bufbuild/buf"]
   }
 }
