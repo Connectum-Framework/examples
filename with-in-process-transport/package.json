@@ -1,0 +1,47 @@
+{
+  "name": "@connectum/example-with-in-process-transport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-process transport example — two services calling each other without HTTP/2 loopback",
+  "type": "module",
+  "imports": {
+    "#gen/*": "./gen/*",
+    "#*": "./src/*"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "buf:generate": "buf generate",
+    "buf:lint": "buf lint",
+    "build:proto": "pnpm run buf:generate",
+    "test": "node --test tests/**/*.test.ts",
+    "bench": "node bench/latency.ts"
+  },
+  "keywords": [
+    "connectrpc",
+    "grpc",
+    "connectum",
+    "example",
+    "in-process",
+    "local-transport"
+  ],
+  "author": "Highload.Zone",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@connectum/core": "1.0.0-rc.11",
+    "@connectum/interceptors": "1.0.0-rc.11"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.65.0",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@connectrpc/connect-node": "^2.1.1",
+    "@types/node": "^25.2.0",
+    "typescript": "^5.9.3"
+  }
+}
