@@ -90,7 +90,7 @@ Both services expose three RPC methods with the same authorization levels:
 Request
   │
   ▼
-defaultInterceptors     (error handler, timeout, bulkhead)
+defaultInterceptors     (error handler, validation)
   │
   ▼
 jwtAuth                 (extract + verify JWT, set AuthContext)

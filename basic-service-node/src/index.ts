@@ -24,7 +24,8 @@ console.log("🚀 Starting Basic Service Example...\n");
  *
  * Interceptors are passed explicitly — core has no built-in interceptors.
  * Use createDefaultInterceptors() from @connectum/interceptors for the
- * production-ready chain (error handler, timeout, bulkhead, etc.).
+ * default chain (error handler + validation; resilience interceptors
+ * such as timeout, bulkhead, circuitBreaker, retry are opt-in).
  */
 const options: CreateServerOptions = {
     // Register services

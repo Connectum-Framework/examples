@@ -19,7 +19,7 @@ console.log("Starting Custom Interceptor Example...\n");
  * Create server with custom interceptors appended after the default chain.
  *
  * Interceptor execution order:
- * 1. Default chain (errorHandler, timeout, bulkhead, circuitBreaker, retry, fallback, serializer)
+ * 1. Default chain (errorHandler, validation; resilience interceptors are opt-in)
  * 2. apiKeyInterceptor  — checks x-api-key for SecureEcho
  * 3. rateLimitInterceptor — rate-limits RateLimitedEcho
  */

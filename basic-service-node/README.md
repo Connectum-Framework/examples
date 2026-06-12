@@ -8,7 +8,7 @@ Demonstrates:
 - Greeter service with two RPC methods
 - Health checks (gRPC + HTTP) via `@connectum/healthcheck`
 - Server reflection via `@connectum/reflection`
-- Default interceptors (error handler, timeout, bulkhead) via `@connectum/interceptors`
+- Default interceptors (error handler, validation) via `@connectum/interceptors`
 - Graceful shutdown
 
 ## Prerequisites
