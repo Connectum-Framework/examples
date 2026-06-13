@@ -1,6 +1,6 @@
 # Basic Service — Node.js
 
-A minimal gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum), running on **Node.js 18+**. `@connectum/*` packages ship compiled JavaScript and type declarations, so no special loader or build step is needed.
+A minimal gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum), running on **Node.js 22+**. `@connectum/*` packages ship compiled JavaScript and type declarations, so no special loader or build step is needed.
 
 Demonstrates:
 
@@ -8,12 +8,12 @@ Demonstrates:
 - Greeter service with two RPC methods
 - Health checks (gRPC + HTTP) via `@connectum/healthcheck`
 - Server reflection via `@connectum/reflection`
-- Default interceptors (error handler, timeout, bulkhead) via `@connectum/interceptors`
+- Default interceptors (error handler, validation) via `@connectum/interceptors`
 - Graceful shutdown
 
 ## Prerequisites
 
-- **Node.js** >= 18.0.0
+- **Node.js** >= 22.13.0
 - **pnpm** >= 10
 
 ## Quick Start

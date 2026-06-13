@@ -8,7 +8,7 @@ Demonstrates:
 - Greeter service with two RPC methods
 - Health checks (gRPC + HTTP) via `@connectum/healthcheck`
 - Server reflection via `@connectum/reflection`
-- Default interceptors (error handler, timeout, bulkhead) via `@connectum/interceptors`
+- Default interceptors (error handler, validation) via `@connectum/interceptors`
 - Graceful shutdown
 
 ## Prerequisites
@@ -119,7 +119,7 @@ curl \
 
 The same Connectum service can run on different runtimes:
 
-- **[basic-service-node](../basic-service-node/)** — Node.js 18+ (direct execution, no loader needed)
+- **[basic-service-node](../basic-service-node/)** — Node.js 22+ (direct execution, no loader needed)
 - **[basic-service-tsx](../basic-service-tsx/)** — Any Node.js via tsx (universal, no version constraint)
 
 ## License

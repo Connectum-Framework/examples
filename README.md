@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="Node.js"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-Compiled-blue" alt="TypeScript"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
 </p>
@@ -34,7 +34,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 |---------|-------------|------------|--------|
 | [basic-service-node](basic-service-node/) | Basic service — Node.js | Direct execution, `@connectum/*` packages ship compiled JS | Ready |
 | [basic-service-bun](basic-service-bun/) | Basic service — Bun | Zero-config TypeScript, no loader needed | Ready |
-| [basic-service-tsx](basic-service-tsx/) | Basic service — tsx | Universal TS runner, works on any Node.js 18+ | Ready |
+| [basic-service-tsx](basic-service-tsx/) | Basic service — tsx | Universal TS runner, works on any Node.js 22+ | Ready |
 | [performance-test-server](performance-test-server/) | k6 benchmarking server | 5 parallel servers, interceptor overhead measurement, ports 8080-8084 | Ready |
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
@@ -53,7 +53,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 18.0.0, or [Bun](https://bun.sh/) >= 1.3.6, or [tsx](https://tsx.is/) >= 4.21 (for TypeScript source in your project)
+- [Node.js](https://nodejs.org/) >= 22.13.0, or [Bun](https://bun.sh/) >= 1.3.6, or [tsx](https://tsx.is/) >= 4.21 (for TypeScript source in your project)
 - [pnpm](https://pnpm.io/) >= 10
 
 ## Quick Start

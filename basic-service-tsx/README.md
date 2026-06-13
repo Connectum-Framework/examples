@@ -1,6 +1,6 @@
 # Basic Service — tsx
 
-A minimal gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum), running on **any Node.js 18+** via [tsx](https://tsx.is/) — fast TypeScript execution powered by esbuild.
+A minimal gRPC/ConnectRPC service built with [Connectum](https://github.com/Connectum-Framework/connectum), running on **any Node.js 22+** via [tsx](https://tsx.is/) — fast TypeScript execution powered by esbuild.
 
 Demonstrates:
 
@@ -8,12 +8,12 @@ Demonstrates:
 - Greeter service with two RPC methods
 - Health checks (gRPC + HTTP) via `@connectum/healthcheck`
 - Server reflection via `@connectum/reflection`
-- Default interceptors (error handler, timeout, bulkhead) via `@connectum/interceptors`
+- Default interceptors (error handler, validation) via `@connectum/interceptors`
 - Graceful shutdown
 
 ## Prerequisites
 
-- **Node.js** >= 18.0.0
+- **Node.js** >= 22.13.0
 - **pnpm** >= 10
 
 ## Quick Start
@@ -36,7 +36,7 @@ The server starts on `http://localhost:5000`.
 
 ## Why tsx?
 
-`@connectum/*` packages ship compiled JavaScript and type declarations, so they work on any Node.js 18+ without a loader. **tsx** adds value by handling your own `.ts` source files via [esbuild](https://esbuild.github.io/):
+`@connectum/*` packages ship compiled JavaScript and type declarations, so they work on any Node.js 22+ without a loader. **tsx** adds value by handling your own `.ts` source files via [esbuild](https://esbuild.github.io/):
 
 - **No build step for your code** — tsx transforms your `.ts` files on the fly
 - **Fast startup** — esbuild is one of the fastest TS transformers
@@ -124,13 +124,13 @@ curl \
 | Node.js native | >= 22.6.0 | Yes (type stripping) | None |
 | Bun | >= 1.3.6 | Yes (built-in) | Bun runtime |
 
-Choose tsx when you want **zero-config TypeScript execution** for your own source files on any Node.js 18+.
+Choose tsx when you want **zero-config TypeScript execution** for your own source files on any Node.js 22+.
 
 ## Alternative Runtimes
 
 The same Connectum service can run on different runtimes:
 
-- **[basic-service-node](../basic-service-node/)** — Node.js 18+ (direct execution, no loader needed)
+- **[basic-service-node](../basic-service-node/)** — Node.js 22+ (direct execution, no loader needed)
 - **[basic-service-bun](../basic-service-bun/)** — Bun runtime (built-in TS support, no loader needed)
 
 ## License

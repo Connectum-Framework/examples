@@ -174,14 +174,10 @@ interceptors: [] // NO interceptors - pure baseline
 ### Validation Only (Port 8082)
 
 ```typescript
+// Validation is enabled by default; resilience interceptors are opt-in,
+// so only errorHandler needs to be disabled explicitly.
 interceptors: createDefaultInterceptors({
   errorHandler: false,
-  timeout: false,
-  bulkhead: false,
-  circuitBreaker: false,
-  retry: false,
-  validation: true,
-  serializer: false,
 })
 ```
 
@@ -212,8 +208,13 @@ interceptors: [
 interceptors: [
   ...createDefaultInterceptors({
     errorHandler: { logErrors: true, includeStackTrace: true },
+    // Resilience interceptors are opt-in — enabled explicitly here
+    // so this configuration measures the full chain overhead.
+    timeout: true,
+    bulkhead: true,
+    circuitBreaker: true,
+    retry: true,
     serializer: true,
-    validation: true,
   }),
   createLoggerInterceptor({ level: "error", skipHealthCheck: true }),
   createOtelInterceptor({
