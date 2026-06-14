@@ -7,10 +7,10 @@
       "dependencies": {
         "@bufbuild/protobuf": "^2.11.0",
         "@connectrpc/connect": "^2.1.1",
-        "@connectum/core": "1.0.0-rc.4",
-        "@connectum/healthcheck": "1.0.0-rc.4",
-        "@connectum/interceptors": "1.0.0-rc.4",
-        "@connectum/reflection": "1.0.0-rc.4",
+        "@connectum/core": "1.0.0-rc.11",
+        "@connectum/healthcheck": "1.0.0-rc.11",
+        "@connectum/interceptors": "1.0.0-rc.11",
+        "@connectum/reflection": "1.0.0-rc.11",
       },
       "devDependencies": {
         "@bufbuild/buf": "^1.65.0",
@@ -56,13 +56,13 @@
 
     "@connectrpc/validate": ["@connectrpc/validate@0.2.0", "", { "peerDependencies": { "@bufbuild/protobuf": "^2.9.0", "@bufbuild/protovalidate": "^1.0.0", "@connectrpc/connect": "^2.0.3" } }, "sha512-u1hdyt1WaFkKpuT/3J2wYlCjYLkYHMZamoatgxTIsV5Q8H9fO2px3zecmb0Q47YDjkZqnX6z0PAEstK+dNYiEQ=="],
 
-    "@connectum/core": ["@connectum/core@1.0.0-rc.4", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-node": "^2.1.1", "env-var": "^7.5.0", "zod": "^4.3.6" } }, "sha512-8NA9Pz6NCMKXL8V8OGu5kOI2WOClSYqNxsNH4JEnryanqiIoqdrFQ1GdazmB7Gfgf5UM3Qm5/VRVmWFsAIpiDw=="],
+    "@connectum/core": ["@connectum/core@1.0.0-rc.11", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-node": "^2.1.1", "env-var": "^7.5.0", "zod": "^4.3.6" } }, "sha512-xtH+Ce59gmHdE8pqiE7LK27doEiu5xdQbSARKNTi90f9RJVOGhuQLTYU+uB+T1TqukkGub+94y7CxxLn1rpBPw=="],
 
-    "@connectum/healthcheck": ["@connectum/healthcheck@1.0.0-rc.4", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1" }, "peerDependencies": { "@connectum/core": "^1.0.0-rc.4" } }, "sha512-NgHp8q6M9AONaOVAt2oUgyLYCAlwOHMK9bRrajZb73uV405t/ADqm+8u++7OLzS6JqRvbzNc34J1BPeniRCbrQ=="],
+    "@connectum/healthcheck": ["@connectum/healthcheck@1.0.0-rc.11", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1" }, "peerDependencies": { "@connectum/core": "^1.0.0-rc.11" } }, "sha512-wzPvu9oxH1mEilPeEGBL/GsNZt9XfloPqr81H7T9meIt07C4R93wg2loqn2kwHzYUTJ9U+tuwlq4GHWFOQEIiw=="],
 
-    "@connectum/interceptors": ["@connectum/interceptors@1.0.0-rc.4", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/validate": "^0.2.0", "@connectum/core": "^1.0.0-rc.4", "cockatiel": "^3.2.1" } }, "sha512-9P0krN7Pcf8QJY3xRtH/OR2r6RS0eIHelrB9D0XJoq+Hrz8iybAgGS2FYXc5a0lGc88aKWO3MqP+3IKZs1HA/A=="],
+    "@connectum/interceptors": ["@connectum/interceptors@1.0.0-rc.11", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/validate": "^0.2.0", "@connectum/core": "^1.0.0-rc.11", "cockatiel": "^3.2.1" } }, "sha512-O9oQab2OT1qcMhu0EcjYqCpLAYoe1dCLcIbOSHNWM/jlL4eGonR2s6WUzpvZcozVFILPloQ9i6kvieLQK8ArJA=="],
 
-    "@connectum/reflection": ["@connectum/reflection@1.0.0-rc.4", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@lambdalisue/connectrpc-grpcreflect": "^0.5.0" }, "peerDependencies": { "@connectum/core": "^1.0.0-rc.4" } }, "sha512-WXseidGlbd40ARB9Wx4FSO2x7GHfPEwJFKOViQIe1nwX1uWzfNiI/BNKt+Otv20J0/4HllX12IN8Zu9YNKWU/g=="],
+    "@connectum/reflection": ["@connectum/reflection@1.0.0-rc.11", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@lambdalisue/connectrpc-grpcreflect": "^0.5.0" }, "peerDependencies": { "@connectum/core": "^1.0.0-rc.11" } }, "sha512-qpF3XPuruO5ZgQy+FWNq9GogCjLep8DQ5weSbb+SZM7Y/fJvcemO86JxyKFKpQSWGH8Fnv4y1hJufK/RTKgEBw=="],
 
     "@lambdalisue/connectrpc-grpcreflect": ["@lambdalisue/connectrpc-grpcreflect@0.5.0", "", { "dependencies": { "@bufbuild/protobuf": "^2.10.1", "@connectrpc/connect": "^2.1.1" } }, "sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog=="],
 

@@ -1,8 +1,8 @@
 {
-  "name": "@connectum/example-performance-test-server",
-  "version": "0.2.0-alpha.2",
+  "name": "@connectum/example-with-in-process-transport",
+  "version": "0.1.0",
   "private": true,
-  "description": "Dedicated server for k6 performance benchmarking with configurable interceptor chains",
+  "description": "In-process transport example — two services calling each other without HTTP/2 loopback",
   "type": "module",
   "imports": {
     "#gen/*": "./gen/*",
@@ -14,25 +14,29 @@
     "typecheck": "tsc --noEmit",
     "buf:generate": "buf generate",
     "buf:lint": "buf lint",
-    "build:proto": "pnpm run buf:generate"
+    "build:proto": "pnpm run buf:generate",
+    "test": "node --test tests/**/*.test.ts",
+    "bench": "node bench/latency.ts"
   },
   "keywords": [
-    "performance",
-    "benchmarking",
-    "k6",
-    "connectum"
+    "connectrpc",
+    "grpc",
+    "connectum",
+    "example",
+    "in-process",
+    "local-transport"
   ],
   "author": "Highload.Zone",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
+    "@connectrpc/connect-node": "^2.1.1",
     "@connectum/core": "1.0.0-rc.11",
-    "@connectum/interceptors": "1.0.0-rc.11",
-    "@connectum/otel": "1.0.0-rc.11"
+    "@connectum/interceptors": "1.0.0-rc.11"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.65.0",
