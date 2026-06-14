@@ -81,7 +81,7 @@ Both services expose three RPC methods with the same authorization levels:
 | Method | Auth Level | CodeBased | ProtoBased |
 |--------|-----------|-----------|------------|
 | `SayHello` | Public | `rules: [{ methods: [...], effect: "allow" }]` | `option (method_auth) = { public: true }` |
-| `SayGoodbye` | Authenticated | `rules: [{ methods: [...], effect: "allow" }]` | No option → `defaultPolicy: "deny"` requires auth |
+| `SayGoodbye` | Authenticated | `rules: [{ methods: [...], effect: "allow" }]` | No option → service `default_policy: "allow"` (any authenticated user) |
 | `SaySecret` | Admin only | `rules: [{ requires: { roles: ["admin"] } }]` | `option (method_auth) = { requires: { roles: "admin" } }` |
 
 ### Interceptor Chain

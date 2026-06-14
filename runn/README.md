@@ -40,12 +40,13 @@ pnpm test:observe
 ## Structure
 
 ```
-runbooks/           # runn YAML runbooks (10 files, ~38 scenarios)
+runbooks/           # runn YAML runbooks (10 files, 54 steps)
 src/
   index.ts          # Test server: all Connectum packages enabled
   services/
-    greeterService.ts   # GreeterService (3 authorization levels)
-    testService.ts      # TestService (SlowMethod, ErrorMethod, GetTestTokens)
+    codeBasedService.ts   # CodeBasedService (code-based authz, 3 levels)
+    protoBasedService.ts  # ProtoBasedService (proto-option authz, 3 levels)
+    testService.ts        # TestService (SlowMethod, ErrorMethod, GetTestTokens)
 proto/              # Protobuf definitions
 gen/                # Generated code (buf generate)
 ```

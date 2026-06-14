@@ -18,7 +18,7 @@ This allows k6 benchmarks to accurately measure the overhead introduced by each 
 
 ## Requirements
 
-- **Node.js**: >=25.2.0
+- **Node.js**: >=25.2.0 (runs `node src/index.ts` directly — native TypeScript)
 - **pnpm**: >=10
 
 ## Installation

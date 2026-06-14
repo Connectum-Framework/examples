@@ -167,10 +167,10 @@ with-events-dlq/
 
 ## DLQ & Retry Configuration
 
-Both services share the same middleware configuration — retry with fixed backoff, and DLQ routing to `dead-letter-queue` on final failure:
+Both services use the same retry and DLQ routing — retry with fixed backoff, and DLQ routing to `dead-letter-queue` on final failure:
 
 ```typescript
-// orderEventBus.ts / inventoryEventBus.ts
+// orderEventBus.ts
 export const orderEventBus = createEventBus({
     adapter: NatsAdapter({ servers: NATS_URL, stream: "orders" }),
     routes: [orderEventRoutes],
@@ -182,12 +182,24 @@ export const orderEventBus = createEventBus({
 });
 ```
 
+`inventoryEventBus.ts` adds an optional `errorSerializer` to control how the
+failure reason is captured in the DLQ metadata:
+
+```typescript
+// inventoryEventBus.ts — dlq block
+dlq: {
+    topic: "dead-letter-queue",
+    errorSerializer: (err: unknown) => (err instanceof Error ? err.message : String(err)),
+},
+```
+
 | Option | Value | Description |
 |--------|-------|-------------|
 | `retry.maxRetries` | `2` | Maximum number of redelivery attempts before giving up |
 | `retry.backoff` | `"fixed"` | Wait the same `initialDelay` between every attempt |
 | `retry.initialDelay` | `200` | Milliseconds between retry attempts |
 | `dlq.topic` | `"dead-letter-queue"` | Topic where exhausted events are published |
+| `dlq.errorSerializer` | `(err) => string` | Optional: formats the failure reason stored in DLQ metadata (Inventory Service only) |
 
 ## DLQ Metadata
 

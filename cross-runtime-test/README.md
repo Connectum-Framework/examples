@@ -6,7 +6,7 @@ Verifies that the compiled (tsup) distribution of @connectum packages works corr
 
 ## Supported Runtimes
 
-- **Node.js** >= 22.6.0 (for type stripping in test source code)
+- **Node.js** >= 25.2.0 (the test harness runs `node --test` on `.ts` sources — native type stripping)
 - **Bun** (planned)
 
 ## Test Coverage
@@ -73,7 +73,7 @@ pnpm test
 
 ## Package Versions
 
-Currently configured for `1.0.0-rc.10`. Update versions in `package.json` after publishing new compiled releases.
+Currently configured for `1.0.0-rc.11`. Update versions in `package.json` after publishing new compiled releases.
 
 ## Important Notes
 

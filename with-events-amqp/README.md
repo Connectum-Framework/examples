@@ -147,13 +147,12 @@ In the RabbitMQ Management UI under the Exchanges tab, the `orders` topic exchan
 
 ### Step 4. Queues — Order and Inventory
 
-The Queues tab shows durable queues created by the adapter, one per consumer group per topic:
+The Queues tab shows durable queues created by the adapter — one per consumer group (`${exchange}.${group}`), each bound to every routing key that group subscribes to:
 
-| Queue | Bound Routing Key | Consumer Group |
-|-------|-------------------|----------------|
-| `order-service.inventory.reserved` | `inventory.reserved` | order-service |
-| `inventory-service.orders.v1.OrderCreated` | `orders.v1.OrderCreated` | inventory-service |
-| `inventory-service.orders.cancelled` | `orders.cancelled` | inventory-service |
+| Queue | Bound Routing Keys | Consumer Group |
+|-------|--------------------|----------------|
+| `orders.order-service` | `inventory.reserved` | order-service |
+| `orders.inventory-service` | `orders.v1.OrderCreated`, `orders.cancelled` | inventory-service |
 
 ![Queues](screenshots/screenshot-queues.png)
 

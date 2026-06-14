@@ -32,6 +32,11 @@ message CodeVerifyRequest {
 }
 ```
 
+> **Note:** This is the intended shape. Connectum does not yet ship a generated
+> `connectum/options.proto`, so this snippet example uses temporary option stubs
+> in [`extensions.ts`](extensions.ts) (field numbers `50001`/`50002`). They will
+> be replaced with generated code once the proto options are published.
+
 ## Dependencies
 
 - `@bufbuild/protobuf` — Proto message handling

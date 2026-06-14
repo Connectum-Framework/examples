@@ -62,4 +62,4 @@ This starts:
 
 ## Documentation
 
-See [Docker Containerization](../../docs/en/production/docker.md) for the full guide including image optimization tips and Alpine variant details.
+See [Docker Containerization](../../docs/en/guide/production/docker.md) for the full guide including image optimization tips and Alpine variant details.

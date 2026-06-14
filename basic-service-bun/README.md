@@ -108,7 +108,8 @@ curl \
 | `pnpm build:proto` | Generate TypeScript from `.proto` files |
 | `pnpm typecheck` | Run `tsc --noEmit` |
 | `pnpm buf:lint` | Lint proto files |
-| `pnpm test` | Run tests via `bun test` |
+| `pnpm test` | Run tests via `node --test` (compiled packages, portable) |
+| `pnpm test:bun` | Run the same tests via `bun test` |
 
 ## Known Limitations
 

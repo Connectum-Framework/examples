@@ -40,8 +40,9 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [cross-runtime-test](cross-runtime-test/) | Cross-runtime compatibility testing | Node.js smoke tests for compiled packages (Bun planned) | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
+| [with-in-process-transport](with-in-process-transport/) | In-process transport — co-located services | Two services in one server call each other with no HTTP/2 hop; HTTP/2 loopback parity, polyglot client | Ready |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
-| [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
+| [runn](runn/) | E2E test suite — runn | Docker-based, 10 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
 | [auth](auth/) | JWT authentication + authorization | Token validation, proto-based authz rules, declarative RBAC | Ready |
 | [with-events-nats](with-events-nats/) | EventBus with NATS | Pub/sub events, saga pattern, JetStream | Ready |
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
@@ -89,7 +90,7 @@ See [production-ready/README.md](production-ready/README.md) for details.
 
 The [runn](runn/) example provides a comprehensive E2E test suite using [runn](https://github.com/k1LoW/runn) YAML runbooks:
 
-- **9 runbooks, 30 scenarios** covering all @connectum/* packages
+- **10 runbooks, 54 steps** covering all @connectum/* packages
 - **Packages tested:** core, healthcheck, reflection, auth, interceptors, otel, events
 - **Docker Compose** — server + runn tests + OpenTelemetry Collector
 
@@ -103,7 +104,7 @@ See [runn/README.md](runn/README.md) for details.
 
 ## Dependencies
 
-All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.10`). Just `pnpm install` in any example directory to get started.
+All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.11`). Just `pnpm install` in any example directory to get started.
 
 ## License
 
