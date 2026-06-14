@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package fleet.v1;
+
+import "connectum/auth/v1/options.proto";
+
+// FleetService is the vehicle system of record (a leaf service).
+//
+// It is an INTERNAL service: it is reached only by the trip handler via a
+// cross-service ctx.call, never by external clients. The service-level
+// `public: true` option marks every RPC as public, so the gateway-facing JWT
+// auth and proto authz interceptors skip it. An internal ctx.call carries no
+// Authorization header (Connectum does not auto-propagate inbound headers), so
+// without this annotation an in-process call from the trip handler would be
+// rejected as unauthenticated by the same interceptor chain that protects the
+// edge. In production the network boundary is enforced by Istio mTLS + an
+// AuthorizationPolicy that only admits the trips ServiceAccount (see istio/).
+service FleetService {
+  option (connectum.auth.v1.service_auth) = { public: true };
+
+  // GetVehicle returns a vehicle by id, or NOT_FOUND if unknown.
+  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse) {}
+}
+
+message GetVehicleRequest {
+  string id = 1;
+}
+
+message GetVehicleResponse {
+  Vehicle vehicle = 1;
+}
+
+message Vehicle {
+  string id = 1;
+  string model = 2;
+  bool available = 3;
+}

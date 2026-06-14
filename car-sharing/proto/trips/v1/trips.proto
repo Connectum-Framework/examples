@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package trips.v1;
+
+import "connectum/auth/v1/options.proto";
+
+// TripService is the EDGE service — the only one external clients call.
+//
+// Its handler orchestrates two internal services via ctx.call:
+//   1. fleet.v1.FleetService/GetVehicle — checks availability; an unavailable
+//      vehicle yields FAILED_PRECONDITION.
+//   2. billing.v1.BillingService/OpenTab — opens the billing tab once the trip
+//      starts.
+//
+// Authorization is declared in proto and enforced by the gateway interceptors:
+//   - service_auth.default_policy = "allow": any AUTHENTICATED caller may invoke
+//     methods that carry no method-level rule. StartTrip therefore requires a
+//     valid JWT (no token -> UNAUTHENTICATED) but no particular role — exactly
+//     the "logged-in user starts a trip" edge contract.
+service TripService {
+  option (connectum.auth.v1.service_auth) = { default_policy: "allow" };
+
+  // StartTrip starts a trip for (user_id, vehicle_id). Requires a valid JWT.
+  // Returns FAILED_PRECONDITION if the vehicle is unavailable, NOT_FOUND if the
+  // vehicle is unknown (propagated from FleetService).
+  rpc StartTrip(StartTripRequest) returns (StartTripResponse) {}
+}
+
+message StartTripRequest {
+  string user_id = 1;
+  string vehicle_id = 2;
+}
+
+message StartTripResponse {
+  Trip trip = 1;
+}
+
+message Trip {
+  string id = 1;
+  // Trip status: "STARTED" once the vehicle is reserved and the tab is open.
+  string status = 2;
+}

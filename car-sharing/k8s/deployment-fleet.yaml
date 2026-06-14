@@ -1,0 +1,90 @@
+# fleet — internal leaf service (the vehicle system of record). Mounts only
+# FleetService; no outbound ctx.call. Reachable only by the trips ServiceAccount
+# (enforced by Istio AuthorizationPolicy + mTLS), never from outside the mesh.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: fleet
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: car-sharing
+    version: stable
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fleet
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fleet
+        version: stable
+    spec:
+      serviceAccountName: fleet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 20
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: fleet
+      containers:
+        - name: fleet
+          image: ghcr.io/your-org/car-sharing:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 5000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: fleet-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: grpc
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: grpc
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]

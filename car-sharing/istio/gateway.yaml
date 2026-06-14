@@ -1,0 +1,48 @@
+# Istio ingress Gateway + VirtualService — the single external entry point.
+# External gRPC clients hit the ingress gateway on :443; it routes /trips.v1.* to
+# the trips Service. Auth (JWT) is enforced inside the trips process, not here —
+# the gateway only terminates TLS and routes.
+---
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: car-sharing-gateway
+  namespace: car-sharing
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: grpc-tls
+        protocol: HTTP2
+      tls:
+        mode: SIMPLE
+        credentialName: car-sharing-tls # cert-manager / manually created Secret
+      hosts:
+        - "api.car-sharing.example.com"
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: trips-external
+  namespace: car-sharing
+spec:
+  hosts:
+    - "api.car-sharing.example.com"
+  gateways:
+    - car-sharing-gateway
+  http:
+    - match:
+        - uri:
+            prefix: "/trips.v1.TripService/"
+      timeout: 15s
+      retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: unavailable,deadline-exceeded
+      route:
+        - destination:
+            host: trips.car-sharing.svc.cluster.local
+            port:
+              number: 5000

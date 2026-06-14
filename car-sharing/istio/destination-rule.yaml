@@ -1,0 +1,82 @@
+# DestinationRules — connection pooling, outlier detection, and stable/canary
+# subsets for each service. mTLS uses ISTIO_MUTUAL (the sidecar-managed identity),
+# matching the STRICT PeerAuthentication.
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: trips
+  namespace: car-sharing
+spec:
+  host: trips.car-sharing.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      http:
+        h2UpgradePolicy: UPGRADE
+        maxRequestsPerConnection: 100
+      tcp:
+        maxConnections: 200
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: ROUND_ROBIN
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: fleet
+  namespace: car-sharing
+spec:
+  host: fleet.car-sharing.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      http:
+        h2UpgradePolicy: UPGRADE
+        maxRequestsPerConnection: 100
+      tcp:
+        maxConnections: 100
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: ROUND_ROBIN
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: billing
+  namespace: car-sharing
+spec:
+  host: billing.car-sharing.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      http:
+        h2UpgradePolicy: UPGRADE
+        maxRequestsPerConnection: 100
+      tcp:
+        maxConnections: 100
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: ROUND_ROBIN

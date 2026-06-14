@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: car-sharing
+  labels:
+    app.kubernetes.io/part-of: car-sharing
+    # Enable Istio sidecar injection for the whole namespace.
+    istio-injection: enabled

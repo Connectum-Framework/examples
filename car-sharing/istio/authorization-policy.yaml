@@ -1,0 +1,60 @@
+# Authorization policies — the network-level trust boundary that backs the
+# application-level `public` annotation on fleet/billing.
+#
+# fleet and billing are marked `public` in proto (they skip JWT auth), so the
+# ONLY thing stopping arbitrary callers is the mesh: these policies admit
+# fleet/billing traffic exclusively from the trips ServiceAccount principal.
+# trips itself admits ingress only from the Istio ingress gateway; external auth
+# (JWT) is then enforced inside the trips process.
+---
+# fleet: only the trips ServiceAccount may call it.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: fleet-allow-trips
+  namespace: car-sharing
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fleet
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/car-sharing/sa/trips"
+---
+# billing: only the trips ServiceAccount may call it.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: billing-allow-trips
+  namespace: car-sharing
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/car-sharing/sa/trips"
+---
+# trips: admit traffic only from the Istio ingress gateway. The gateway is the
+# single external entry point; the trips process then verifies the JWT.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: trips-allow-ingress
+  namespace: car-sharing
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trips
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"

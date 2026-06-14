@@ -1,0 +1,62 @@
+# ClusterIP Services. Their in-cluster DNS names are exactly the *_ADDR values in
+# the ConfigMap, so `ctx.call` from the trips role reaches fleet/billing here:
+#   fleet.car-sharing.svc.cluster.local:5000
+#   billing.car-sharing.svc.cluster.local:5000
+# appProtocol: grpc hints HTTP/2 to Istio so it negotiates h2 end to end.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trips
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: trips
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: trips
+  ports:
+    - name: grpc
+      port: 5000
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: fleet
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: fleet
+  ports:
+    - name: grpc
+      port: 5000
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: billing
+  ports:
+    - name: grpc
+      port: 5000
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: grpc

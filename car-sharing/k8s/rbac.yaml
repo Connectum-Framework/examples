@@ -1,0 +1,29 @@
+# One ServiceAccount per role. These identities are the basis for Istio's
+# AuthorizationPolicy: in istio/authorization-policy.yaml, fleet and billing only
+# admit traffic from the `trips` ServiceAccount principal, so the internal
+# `public` services are reachable solely by the gateway — the mesh enforces the
+# trust boundary that the application-level `public` annotation assumes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trips
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: trips
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fleet
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: fleet
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: billing
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: billing
+# No RoleBindings: none of the services need Kubernetes API access.
