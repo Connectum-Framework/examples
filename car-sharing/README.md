@@ -96,9 +96,13 @@ See `src/topology.ts` (env → `enabledServices` + `perServiceEnvResolver`).
 
 ## Run locally (monolith)
 
+This example uses the 1.0.0 service-catalog API (`defineService`, `ctx.call`).
+Until it is published, install against local `@connectum/*` tarballs with
+`CONNECTUM_LOCAL=1` (see the repository's development setup docs). When 1.0.0 is
+published, a plain `pnpm install` works.
+
 ```bash
-# Install (published @connectum/* versions) and generate proto code.
-pnpm install
+CONNECTUM_LOCAL=1 pnpm install
 pnpm buf:generate     # gen/ — message types + catalog.gen.ts (ctx.call typing)
 pnpm typecheck
 pnpm test             # in-process e2e: gateway auth, ctx.call, error paths

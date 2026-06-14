@@ -26,7 +26,7 @@
 
 ---
 
-Ready-to-run examples demonstrating Connectum features — from a minimal greeter service to production deployment configs with Docker, Kubernetes, Istio, and Envoy.
+Ready-to-run examples demonstrating Connectum features — from a one-service [quickstart](getting-started/) to a monolith-or-microservices [HR system](hris/) and an enterprise [car-sharing](car-sharing/) deployment on Kubernetes + Istio.
 
 ## Examples
 
