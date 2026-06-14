@@ -281,6 +281,11 @@ export const orderEventBus = createEventBus({
 
 This example uses the default Connectum conventions (topic exchange, `${exchange}.${group}` queues, protobuf payloads). When you need to integrate with an **externally defined AMQP contract** -- a partner's direct exchange, named durable queues with DLQ arguments, JSON bodies -- `AmqpAdapter` supports explicit topology, queue overrides, and serialization control:
 
+> **Availability:** the explicit topology, `serialization`, `queueOverrides`, and
+> per-message-confirm controls shown below are part of the `@connectum/events-amqp`
+> **1.0.0** adapter API. Upgrade the dependency to `>=1.0.0` to use them; the
+> `1.0.0-rc.11` this example currently pins exposes only the default conventions.
+
 ```typescript
 const adapter = AmqpAdapter({
     url: AMQP_URL,
