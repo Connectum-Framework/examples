@@ -1,0 +1,17 @@
+# prometheus.yml — Prometheus configuration for Coroot
+#
+# Prometheus acts as a metrics storage backend for Coroot.
+# - OTLP metrics arrive via remote write from the OTel Collector
+# - Node-agent metrics are scraped directly for service/container discovery
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape coroot-node-agent for container metrics (CPU, memory, network, etc.)
+  # Required for Coroot's Applications, Service Map, and health inspections
+  - job_name: coroot-node-agent
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["coroot-node-agent:80"]
