@@ -49,6 +49,6 @@ pnpm start:tsx      # tsx (any Node.js 22+)
 
 ## Next
 
-- [with-service-catalog](../with-service-catalog/) — cross-service calls with
-  `ctx.call`.
+- [hris](../hris/) — the same codebase running as a monolith **or** as
+  microservices, with cross-service `ctx.call` and an event bus.
 - [Service Catalog guide](https://connectum.dev/en/guide/service-communication/service-catalog).

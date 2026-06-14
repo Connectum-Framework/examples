@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package timeoff.v1;
+
+// TimeOffService approves leave requests. Its handler validates the employee
+// via a cross-service ctx.call to directory.v1.DirectoryService, then publishes
+// a LeaveApproved event that payroll.v1.PayrollService consumes.
+service TimeOffService {
+  // RequestLeave validates the employee exists (via the directory), approves
+  // the request, and emits LeaveApproved. Returns NOT_FOUND when the employee
+  // is unknown.
+  rpc RequestLeave(RequestLeaveRequest) returns (RequestLeaveResponse) {}
+}
+
+message RequestLeaveRequest {
+  string employee_id = 1;
+  int32 days = 2;
+}
+
+message RequestLeaveResponse {
+  LeaveRequest leave_request = 1;
+}
+
+message LeaveRequest {
+  string id = 1;
+  // Approval status: "APPROVED" in this demo (always approved once validated).
+  string status = 2;
+}

@@ -37,11 +37,10 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
-| [with-service-catalog](with-service-catalog/) | Declarative cross-service calls | `defineService` + buf-generated catalog + `ctx.call`, in-process auto-routing | Ready |
+| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus saga | Ready |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
 | [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
 | [auth](auth/) | JWT authentication + authorization | Token validation, proto-based authz rules, declarative RBAC | Ready |
-| [with-events-nats](with-events-nats/) | EventBus with NATS | Pub/sub events, saga pattern, JetStream | Ready |
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
 | [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
 | [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
@@ -58,7 +57,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 ```bash
 git clone https://github.com/Connectum-Framework/examples.git
-cd examples/basic-service-node
+cd examples/getting-started
 pnpm install
 pnpm dev
 ```
