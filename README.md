@@ -32,13 +32,10 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 | Example | Description | Highlights | Status |
 |---------|-------------|------------|--------|
-| [basic-service-node](basic-service-node/) | Basic service — Node.js | Direct execution, `@connectum/*` packages ship compiled JS | Ready |
-| [basic-service-bun](basic-service-bun/) | Basic service — Bun | Zero-config TypeScript, no loader needed | Ready |
-| [basic-service-tsx](basic-service-tsx/) | Basic service — tsx | Universal TS runner, works on any Node.js 22+ | Ready |
+| [getting-started](getting-started/) | Quickstart — one service | `defineService`, health, reflection, default interceptors, graceful shutdown; Node/Bun/tsx | Ready |
 | [performance-test-server](performance-test-server/) | k6 benchmarking server | 5 parallel servers, interceptor overhead measurement, ports 8080-8084 | Ready |
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
-| [cross-runtime-test](cross-runtime-test/) | Cross-runtime compatibility testing | Node.js smoke tests for compiled packages (Bun planned) | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
 | [with-service-catalog](with-service-catalog/) | Declarative cross-service calls | `defineService` + buf-generated catalog + `ctx.call`, in-process auto-routing | Ready |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
