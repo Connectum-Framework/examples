@@ -101,20 +101,13 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster)", () => {
         assert.equal(tabCount(), 0);
     });
 
-    it("StartTrip with an UNKNOWN vehicle surfaces Code.NotFound from the fleet via ctx.call", async () => {
-        // Asserted over the IN-PROCESS client, not the gRPC loopback. The fleet
-        // GetVehicle throws Code.NotFound, and that ConnectError propagates back
-        // through `ctx.call` carrying the in-process router transport's response
-        // metadata (content-length/content-type). Re-emitting that metadata as
-        // gRPC error trailers on the outer call is illegal HTTP/2 (content-length
-        // is not a valid trailer), so the gRPC loopback client observes an
-        // NGHTTP2 protocol error instead of a clean NotFound. This is a verified
-        // monolith/in-process limitation (see README); the in-process client
-        // surfaces the original code faithfully, which is what this assertion
-        // checks (it mirrors hris's localClient style).
-        const tripsLocal = server.localClient(TripService);
+    it("StartTrip with an UNKNOWN vehicle surfaces Code.NotFound over the gRPC client", async () => {
+        // The fleet's NotFound travels back through TripService's ctx.call and
+        // out to the external gRPC client. The framework strips the in-process
+        // framing headers, so the client sees a clean Code.NotFound rather than
+        // an HTTP/2 trailer (protocol) error.
         await assert.rejects(
-            tripsLocal.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "ghost" }), {
+            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "ghost" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,

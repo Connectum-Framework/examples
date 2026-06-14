@@ -111,25 +111,15 @@ an unavailable vehicle, `NOT_FOUND` propagated from fleet, and the gateway
 rejecting unauthenticated / invalid-token requests while the public fleet service
 is reachable without a token.
 
-### A known `ctx.call` error-propagation limitation
+### `ctx.call` error propagation
 
-**Verified in monolith mode** (the in-process path): when a `ctx.call` to an
-internal service throws (e.g. fleet's `NOT_FOUND`), the `ConnectError` comes back
-over the in-process router transport carrying response metadata such as
-`content-length` / `content-type`. Re-emitting that metadata as **gRPC error
-trailers on the outer call is illegal HTTP/2** (`content-length` is not a valid
-trailer), so an external gRPC client observes a generic stream/protocol error
-instead of a clean `NOT_FOUND`.
-
-The e2e asserts the propagated `NOT_FOUND` over the **in-process client**, which
-surfaces the original code faithfully. The `content-length` here is a signature of
-the in-process router transport serializing the inner error as a Connect/JSON
-response; a real gRPC hop returns errors as `grpc-status` trailers and would not
-attach `content-length`, so **split-mode behavior is not verified here and likely
-differs**. If you need clean downstream error codes at the edge regardless of
-transport, translate them in the trip handler (catch the `ctx.call` `ConnectError`
-and re-throw a fresh one without metadata) — this example deliberately does not, to
-keep the handler minimal.
+When a `ctx.call` to an internal service throws (e.g. fleet's `NOT_FOUND`), the
+`ConnectError` travels back through the trip handler and out to the external
+gRPC client with its `Code` intact — the e2e asserts exactly this over the gRPC
+loopback. The framework strips the in-process transport's framing headers
+(`content-length` / `content-type`) from the propagated error, so they never
+leak into the outer call's gRPC trailers (which would otherwise be illegal
+HTTP/2). No edge-level error translation is needed.
 
 ## Build the image
 

@@ -106,4 +106,15 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
         const balance = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-003" }));
         assert.equal(balance.balance?.remainingDays, 18 - 4);
     });
+
+    it("HTTP/2 gRPC: a ctx.call error surfaces the downstream Code (not a protocol error)", async () => {
+        // The directory's NotFound travels back through TimeOffService's
+        // ctx.call and out to an external gRPC client. The framework strips the
+        // in-process framing headers, so the client sees Code.NotFound rather
+        // than an HTTP/2 trailer (protocol) error.
+        await assert.rejects(
+            grpcTimeOff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "ghost", days: 1 })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
+        );
+    });
 });
