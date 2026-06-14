@@ -10,7 +10,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { ConnectRouter } from "@connectrpc/connect";
+import { defineService } from "@connectum/core";
 import { EchoService } from "#gen/echo/v1/echo_pb.ts";
 import { type EchoRequest, EchoResponseSchema } from "#gen/echo/v1/echo_pb.ts";
 
@@ -28,46 +28,42 @@ function buildEchoResponse(request: EchoRequest) {
 }
 
 /**
- * Register Echo service routes
- *
- * @param router - ConnectRouter instance
+ * Echo service definition
  */
-export function echoServiceRoutes(router: ConnectRouter): void {
-    router.service(EchoService, {
-        /**
-         * Echo returns the same message it receives.
-         * No special interceptor protection.
-         *
-         * @param request - EchoRequest with message
-         * @returns EchoResponse with message and timestamp
-         */
-        async echo(request: EchoRequest) {
-            console.log(`Echo: "${request.message}"`);
-            return buildEchoResponse(request);
-        },
+export const echoServiceRoutes = defineService(EchoService, {
+    /**
+     * Echo returns the same message it receives.
+     * No special interceptor protection.
+     *
+     * @param request - EchoRequest with message
+     * @returns EchoResponse with message and timestamp
+     */
+    async echo(request: EchoRequest) {
+        console.log(`Echo: "${request.message}"`);
+        return buildEchoResponse(request);
+    },
 
-        /**
-         * SecureEcho requires API key authentication (handled by apiKeyInterceptor).
-         * The service logic is identical to Echo.
-         *
-         * @param request - EchoRequest with message
-         * @returns EchoResponse with message and timestamp
-         */
-        async secureEcho(request: EchoRequest) {
-            console.log(`SecureEcho: "${request.message}"`);
-            return buildEchoResponse(request);
-        },
+    /**
+     * SecureEcho requires API key authentication (handled by apiKeyInterceptor).
+     * The service logic is identical to Echo.
+     *
+     * @param request - EchoRequest with message
+     * @returns EchoResponse with message and timestamp
+     */
+    async secureEcho(request: EchoRequest) {
+        console.log(`SecureEcho: "${request.message}"`);
+        return buildEchoResponse(request);
+    },
 
-        /**
-         * RateLimitedEcho is protected by rate limiting (handled by rateLimitInterceptor).
-         * The service logic is identical to Echo.
-         *
-         * @param request - EchoRequest with message
-         * @returns EchoResponse with message and timestamp
-         */
-        async rateLimitedEcho(request: EchoRequest) {
-            console.log(`RateLimitedEcho: "${request.message}"`);
-            return buildEchoResponse(request);
-        },
-    });
-}
+    /**
+     * RateLimitedEcho is protected by rate limiting (handled by rateLimitInterceptor).
+     * The service logic is identical to Echo.
+     *
+     * @param request - EchoRequest with message
+     * @returns EchoResponse with message and timestamp
+     */
+    async rateLimitedEcho(request: EchoRequest) {
+        console.log(`RateLimitedEcho: "${request.message}"`);
+        return buildEchoResponse(request);
+    },
+});

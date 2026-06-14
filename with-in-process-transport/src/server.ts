@@ -21,23 +21,22 @@ import { ordersServiceRoutes } from "#services/ordersService.ts";
  * @param port - TCP port to bind (0 = random for tests).
  */
 export function buildServer(port = 5000): Server {
-    // Forward declaration: ordersService closes over the server, but the
-    // server needs the routes up front. We create the routes lazily by
-    // wrapping `ordersServiceRoutes(server)` after we have the instance.
+    // Forward declaration: OrdersService closes over the server, but the
+    // server needs its service definitions up front. We resolve the server
+    // lazily via a thunk that reads `serverRef` once it has been assigned
+    // below — the thunk is only invoked at request time, never during
+    // registration.
     let serverRef: Server | undefined;
 
     const server = createServer({
         services: [
             inventoryServiceRoutes,
-            // Lazy adapter: createServer() invokes route builders synchronously,
-            // so we route through a closure that reads `serverRef` once it
-            // has been assigned below.
-            (router) => {
+            ordersServiceRoutes(() => {
                 if (!serverRef) {
                     throw new Error("server reference not yet bound");
                 }
-                ordersServiceRoutes(serverRef)(router);
-            },
+                return serverRef;
+            }),
         ],
         port,
         host: "127.0.0.1",

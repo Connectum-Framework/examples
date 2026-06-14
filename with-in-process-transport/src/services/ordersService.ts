@@ -12,8 +12,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { ConnectRouter } from "@connectrpc/connect";
-import type { Server } from "@connectum/core";
+import { defineService } from "@connectum/core";
+import type { Server, ServiceDefinition } from "@connectum/core";
 import { InventoryService } from "#gen/inventory/v1/inventory_pb.ts";
 import {
     type CreateOrderRequest,
@@ -22,39 +22,41 @@ import {
 } from "#gen/orders/v1/orders_pb.ts";
 
 /**
- * Build OrdersService routes wired to the provided server for in-process
- * composition.
+ * Build the OrdersService definition wired to the hosting server for
+ * in-process composition.
  *
- * @param server - The Connectum server (used as a service registry).
- * @returns A function that registers OrdersService on a ConnectRouter.
+ * The server is read lazily through `getServer` so the definition can be
+ * constructed before `createServer()` returns: the thunk is only invoked at
+ * request time, by which point the server reference is bound.
+ *
+ * @param getServer - Resolver for the Connectum server (used as a service registry).
+ * @returns The OrdersService definition.
  */
-export function ordersServiceRoutes(server: Server) {
-    return (router: ConnectRouter) => {
-        router.service(OrdersService, {
-            async createOrder(request: CreateOrderRequest) {
-                // Polyglot routing: `server.client(InventoryService)`
-                //   - if InventoryService is registered locally → uses createLocalTransport
-                //     (no HTTP/2, no socket, no serialization across the wire);
-                //   - if not registered, would fall back to `options.fallback` transport.
-                const inventory = server.client(InventoryService);
+export function ordersServiceRoutes(getServer: () => Server): ServiceDefinition {
+    return defineService(OrdersService, {
+        async createOrder(request: CreateOrderRequest) {
+            // Polyglot routing: `server.client(InventoryService)`
+            //   - if InventoryService is registered locally → uses createLocalTransport
+            //     (no HTTP/2, no socket, no serialization across the wire);
+            //   - if not registered, would fall back to `options.fallback` transport.
+            const inventory = getServer().client(InventoryService);
 
-                const reservation = await inventory.reserve({
-                    sku: request.sku,
-                    quantity: request.quantity,
-                });
+            const reservation = await inventory.reserve({
+                sku: request.sku,
+                quantity: request.quantity,
+            });
 
-                const orderId = reservation.reserved
-                    ? `ord_${Date.now().toString(36)}_${Math.random()
-                          .toString(36)
-                          .slice(2, 8)}`
-                    : "";
+            const orderId = reservation.reserved
+                ? `ord_${Date.now().toString(36)}_${Math.random()
+                      .toString(36)
+                      .slice(2, 8)}`
+                : "";
 
-                return create(CreateOrderResponseSchema, {
-                    orderId,
-                    reserved: reservation.reserved,
-                    remainingStock: reservation.remaining,
-                });
-            },
-        });
-    };
+            return create(CreateOrderResponseSchema, {
+                orderId,
+                reserved: reservation.reserved,
+                remainingStock: reservation.remaining,
+            });
+        },
+    });
 }

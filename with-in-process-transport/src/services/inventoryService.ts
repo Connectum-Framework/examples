@@ -8,7 +8,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { defineService } from "@connectum/core";
 import {
     type CheckStockRequest,
     CheckStockResponseSchema,
@@ -34,52 +35,50 @@ export function resetStock(): void {
 }
 
 /**
- * Register InventoryService routes on a ConnectRouter.
+ * InventoryService definition.
  */
-export function inventoryServiceRoutes(router: ConnectRouter): void {
-    router.service(InventoryService, {
-        async checkStock(request: CheckStockRequest) {
-            // Read-tolerant by design: an unknown SKU reports `available: 0`
-            // rather than throwing. A check is informational, whereas
-            // `reserve` is a mutation that must fail loudly (NotFound) on a
-            // missing SKU.
-            const available = stock.get(request.sku) ?? 0;
-            return create(CheckStockResponseSchema, {
-                sku: request.sku,
-                available,
-            });
-        },
+export const inventoryServiceRoutes = defineService(InventoryService, {
+    async checkStock(request: CheckStockRequest) {
+        // Read-tolerant by design: an unknown SKU reports `available: 0`
+        // rather than throwing. A check is informational, whereas
+        // `reserve` is a mutation that must fail loudly (NotFound) on a
+        // missing SKU.
+        const available = stock.get(request.sku) ?? 0;
+        return create(CheckStockResponseSchema, {
+            sku: request.sku,
+            available,
+        });
+    },
 
-        async reserve(request: ReserveRequest) {
-            const current = stock.get(request.sku);
-            if (current === undefined) {
-                throw new ConnectError(
-                    `SKU not found: ${request.sku}`,
-                    Code.NotFound,
-                );
-            }
-            // `quantity` is a signed int32 on the wire, so a negative value is
-            // representable. Guard against it: without this check a negative
-            // quantity passes `current < quantity` and *increases* stock via
-            // `current - quantity`, corrupting inventory and reporting success.
-            if (request.quantity <= 0) {
-                throw new ConnectError(
-                    `quantity must be positive, got ${request.quantity}`,
-                    Code.InvalidArgument,
-                );
-            }
-            if (current < request.quantity) {
-                return create(ReserveResponseSchema, {
-                    reserved: false,
-                    remaining: current,
-                });
-            }
-            const remaining = current - request.quantity;
-            stock.set(request.sku, remaining);
+    async reserve(request: ReserveRequest) {
+        const current = stock.get(request.sku);
+        if (current === undefined) {
+            throw new ConnectError(
+                `SKU not found: ${request.sku}`,
+                Code.NotFound,
+            );
+        }
+        // `quantity` is a signed int32 on the wire, so a negative value is
+        // representable. Guard against it: without this check a negative
+        // quantity passes `current < quantity` and *increases* stock via
+        // `current - quantity`, corrupting inventory and reporting success.
+        if (request.quantity <= 0) {
+            throw new ConnectError(
+                `quantity must be positive, got ${request.quantity}`,
+                Code.InvalidArgument,
+            );
+        }
+        if (current < request.quantity) {
             return create(ReserveResponseSchema, {
-                reserved: true,
-                remaining,
+                reserved: false,
+                remaining: current,
             });
-        },
-    });
-}
+        }
+        const remaining = current - request.quantity;
+        stock.set(request.sku, remaining);
+        return create(ReserveResponseSchema, {
+            reserved: true,
+            remaining,
+        });
+    },
+});

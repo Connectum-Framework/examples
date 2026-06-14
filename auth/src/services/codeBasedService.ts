@@ -11,7 +11,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { ConnectRouter } from "@connectrpc/connect";
+import { defineService } from "@connectum/core";
 import {
     CodeBasedService,
     type SayGoodbyeRequest,
@@ -23,48 +23,46 @@ import {
 } from "#gen/codebased/v1/codebased_pb.ts";
 import { getAuthContext, requireAuthContext } from "@connectum/auth";
 
-export function codeBasedServiceRoutes(router: ConnectRouter): void {
-    router.service(CodeBasedService, {
-        // Auth rules defined in src/index.ts (programmatic rules)
-        async sayHello(request: SayHelloRequest) {
-            const name = request.name || "World";
-            const auth = getAuthContext();
+export const codeBasedServiceRoutes = defineService(CodeBasedService, {
+    // Auth rules defined in src/index.ts (programmatic rules)
+    async sayHello(request: SayHelloRequest) {
+        const name = request.name || "World";
+        const auth = getAuthContext();
 
-            const greeting = auth
-                ? `Hello, ${name}! (authenticated as ${auth.subject})`
-                : `Hello, ${name}!`;
+        const greeting = auth
+            ? `Hello, ${name}! (authenticated as ${auth.subject})`
+            : `Hello, ${name}!`;
 
-            console.log(`[CodeBased/SayHello] ${greeting}`);
+        console.log(`[CodeBased/SayHello] ${greeting}`);
 
-            return create(SayHelloResponseSchema, {
-                message: greeting,
-            });
-        },
+        return create(SayHelloResponseSchema, {
+            message: greeting,
+        });
+    },
 
-        async sayGoodbye(request: SayGoodbyeRequest) {
-            const name = request.name || "World";
-            const auth = requireAuthContext();
+    async sayGoodbye(request: SayGoodbyeRequest) {
+        const name = request.name || "World";
+        const auth = requireAuthContext();
 
-            const message = `Goodbye, ${name}! (from ${auth.name ?? auth.subject})`;
-            console.log(`[CodeBased/SayGoodbye] ${message}`);
+        const message = `Goodbye, ${name}! (from ${auth.name ?? auth.subject})`;
+        console.log(`[CodeBased/SayGoodbye] ${message}`);
 
-            return create(SayGoodbyeResponseSchema, {
-                message,
-            });
-        },
+        return create(SayGoodbyeResponseSchema, {
+            message,
+        });
+    },
 
-        async saySecret(request: SaySecretRequest) {
-            const name = request.name || "World";
-            const auth = requireAuthContext();
+    async saySecret(request: SaySecretRequest) {
+        const name = request.name || "World";
+        const auth = requireAuthContext();
 
-            const message = `Hello, ${name}!`;
-            const secret = `The admin secret is 42. Verified by ${auth.subject} with roles: ${auth.roles.join(", ")}`;
-            console.log(`[CodeBased/SaySecret] ${secret}`);
+        const message = `Hello, ${name}!`;
+        const secret = `The admin secret is 42. Verified by ${auth.subject} with roles: ${auth.roles.join(", ")}`;
+        console.log(`[CodeBased/SaySecret] ${secret}`);
 
-            return create(SaySecretResponseSchema, {
-                message,
-                secret,
-            });
-        },
-    });
-}
+        return create(SaySecretResponseSchema, {
+            message,
+            secret,
+        });
+    },
+});

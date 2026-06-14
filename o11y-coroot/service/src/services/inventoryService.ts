@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import type { ConnectRouter } from "@connectrpc/connect";
+import { defineService } from "@connectum/core";
 import { getLogger, getMeter } from "@connectum/otel";
 import {
     InventoryService,
@@ -33,50 +33,48 @@ meter.createObservableGauge("inventory.stock_level", { description: "Current sto
         }
     });
 
-export function inventoryServiceRoutes(router: ConnectRouter): void {
-    router.service(InventoryService, {
-        async getInventory(_request: GetInventoryRequest) {
-            logger.info(`Listing ${stock.size} product(s)`, {
-                "inventory.count": stock.size,
-            });
+export const inventoryServiceRoutes = defineService(InventoryService, {
+    async getInventory(_request: GetInventoryRequest) {
+        logger.info(`Listing ${stock.size} product(s)`, {
+            "inventory.count": stock.size,
+        });
 
-            return create(GetInventoryResponseSchema, {
-                items: [...stock.entries()].map(([productId, quantity]) =>
-                    create(InventoryItemSchema, {
-                        productId,
-                        quantity,
-                        status: quantity > 0 ? "in_stock" : "out_of_stock",
-                    }),
-                ),
-            });
-        },
+        return create(GetInventoryResponseSchema, {
+            items: [...stock.entries()].map(([productId, quantity]) =>
+                create(InventoryItemSchema, {
+                    productId,
+                    quantity,
+                    status: quantity > 0 ? "in_stock" : "out_of_stock",
+                }),
+            ),
+        });
+    },
 
-        async checkStock(request: CheckStockRequest) {
-            const currentStock = stock.get(request.productId) ?? 0;
-            const available = currentStock >= request.quantity;
+    async checkStock(request: CheckStockRequest) {
+        const currentStock = stock.get(request.productId) ?? 0;
+        const available = currentStock >= request.quantity;
 
-            // Record metrics
-            stockChecks.add(1, { "product.id": request.productId });
-            if (available) {
-                stockAvailable.add(1, { "product.id": request.productId });
-            } else {
-                stockUnavailable.add(1, { "product.id": request.productId });
-            }
+        // Record metrics
+        stockChecks.add(1, { "product.id": request.productId });
+        if (available) {
+            stockAvailable.add(1, { "product.id": request.productId });
+        } else {
+            stockUnavailable.add(1, { "product.id": request.productId });
+        }
 
-            logger.info(
-                `Stock check: ${request.productId} available=${available} currentStock=${currentStock}`,
-                {
-                    "inventory.productId": request.productId,
-                    "inventory.requestedQuantity": request.quantity,
-                    "inventory.currentStock": currentStock,
-                    "inventory.available": available,
-                },
-            );
+        logger.info(
+            `Stock check: ${request.productId} available=${available} currentStock=${currentStock}`,
+            {
+                "inventory.productId": request.productId,
+                "inventory.requestedQuantity": request.quantity,
+                "inventory.currentStock": currentStock,
+                "inventory.available": available,
+            },
+        );
 
-            return create(CheckStockResponseSchema, {
-                available,
-                currentStock,
-            });
-        },
-    });
-}
+        return create(CheckStockResponseSchema, {
+            available,
+            currentStock,
+        });
+    },
+});
