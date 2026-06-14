@@ -58,7 +58,7 @@ if (server.hasService(InventoryService)) { /* local */ }
 
 ## Files
 
-```
+```text
 src/
 ├── server.ts                       # buildServer() — registers both services
 ├── services/inventoryService.ts    # stock map, CheckStock + Reserve handlers

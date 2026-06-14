@@ -39,6 +39,10 @@ export function resetStock(): void {
 export function inventoryServiceRoutes(router: ConnectRouter): void {
     router.service(InventoryService, {
         async checkStock(request: CheckStockRequest) {
+            // Read-tolerant by design: an unknown SKU reports `available: 0`
+            // rather than throwing. A check is informational, whereas
+            // `reserve` is a mutation that must fail loudly (NotFound) on a
+            // missing SKU.
             const available = stock.get(request.sku) ?? 0;
             return create(CheckStockResponseSchema, {
                 sku: request.sku,
@@ -52,6 +56,16 @@ export function inventoryServiceRoutes(router: ConnectRouter): void {
                 throw new ConnectError(
                     `SKU not found: ${request.sku}`,
                     Code.NotFound,
+                );
+            }
+            // `quantity` is a signed int32 on the wire, so a negative value is
+            // representable. Guard against it: without this check a negative
+            // quantity passes `current < quantity` and *increases* stock via
+            // `current - quantity`, corrupting inventory and reporting success.
+            if (request.quantity <= 0) {
+                throw new ConnectError(
+                    `quantity must be positive, got ${request.quantity}`,
+                    Code.InvalidArgument,
                 );
             }
             if (current < request.quantity) {

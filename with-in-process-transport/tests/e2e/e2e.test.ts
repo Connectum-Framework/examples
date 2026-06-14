@@ -10,7 +10,7 @@
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import type { Server } from "@connectum/core";
 import { InventoryService } from "#gen/inventory/v1/inventory_pb.ts";
@@ -86,6 +86,24 @@ describe("E2E: in-process transport", () => {
         const stock = await inv.checkStock({ sku: "SKU-1" });
         assert.equal(stock.sku, "SKU-1");
         assert.equal(stock.available, 100);
+    });
+
+    it("reserve rejects non-positive quantity with InvalidArgument and leaves stock intact", async () => {
+        const inv = server.client(InventoryService);
+        // A negative int32 quantity is representable on the wire, and zero is a
+        // no-op reservation; the handler must reject both instead of silently
+        // mutating stock (a negative quantity would otherwise *increase* it).
+        for (const quantity of [-5, 0]) {
+            resetStock();
+            await assert.rejects(
+                inv.reserve({ sku: "SKU-1", quantity }),
+                (err: unknown) =>
+                    err instanceof ConnectError && err.code === Code.InvalidArgument,
+                `quantity ${quantity} must be rejected with InvalidArgument`,
+            );
+            const stockAfter = await inv.checkStock({ sku: "SKU-1" });
+            assert.equal(stockAfter.available, 100, `stock must stay intact for quantity ${quantity}`);
+        }
     });
 
     it("polyglot: in-process and HTTP transports observe consistent state", async () => {
