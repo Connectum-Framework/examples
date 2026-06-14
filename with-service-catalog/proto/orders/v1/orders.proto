@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package orders.v1;
+
+// OrdersService composes other in-process services to fulfill an order.
+service OrdersService {
+  // CreateOrder reserves inventory via the InventoryService (in-process),
+  // and returns the created order id and reservation status.
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {}
+}
+
+message CreateOrderRequest {
+  string sku = 1;
+  int32 quantity = 2;
+  string customer_id = 3;
+}
+
+message CreateOrderResponse {
+  string order_id = 1;
+  bool reserved = 2;
+  int32 remaining_stock = 3;
+}

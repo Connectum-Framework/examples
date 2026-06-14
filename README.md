@@ -40,6 +40,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [cross-runtime-test](cross-runtime-test/) | Cross-runtime compatibility testing | Node.js smoke tests for compiled packages (Bun planned) | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
+| [with-service-catalog](with-service-catalog/) | Declarative cross-service calls | `defineService` + buf-generated catalog + `ctx.call`, in-process auto-routing | Ready |
 | [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
 | [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
 | [auth](auth/) | JWT authentication + authorization | Token validation, proto-based authz rules, declarative RBAC | Ready |
