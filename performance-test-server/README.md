@@ -11,7 +11,7 @@ This server runs **5 parallel instances** on different ports, each with a differ
 | 8081 | **Baseline** (no interceptors) | Measure baseline latency without any overhead |
 | 8082 | **Validation only** | Measure validation interceptor overhead |
 | 8083 | **Logger only** | Measure logger interceptor overhead |
-| 8084 | **Tracing only** | Measure tracing interceptor overhead |
+| 8084 | **OTel (tracing + metrics) only** | Measure OTel interceptor overhead |
 | 8080 | **Full chain** (all interceptors) | Measure total overhead with all interceptors |
 
 This allows k6 benchmarks to accurately measure the overhead introduced by each interceptor.
@@ -119,38 +119,45 @@ k6 scripts accept the following environment variables (set via `docker-compose.y
 
 ### Health Check
 
-Verify all servers are running:
+This server does not register a `grpc.health.v1.Health` service, so verify
+liveness against the only service it exposes — `greeter.v1.GreeterService/SayHello`
+over the Connect protocol with JSON. This mirrors the readiness probe used by the
+example's own `docker-compose.yml` healthcheck:
 
 ```bash
 # Baseline (no interceptors)
-curl http://localhost:8081/grpc.health.v1.Health/Check
-
-# Validation only
-curl http://localhost:8082/grpc.health.v1.Health/Check
-
-# Logger only
-curl http://localhost:8083/grpc.health.v1.Health/Check
-
-# Tracing only
-curl http://localhost:8084/grpc.health.v1.Health/Check
-
-# Full chain
-curl http://localhost:8080/grpc.health.v1.Health/Check
+curl -X POST http://localhost:8081/greeter.v1.GreeterService/SayHello \
+  -H 'Content-Type: application/json' \
+  -H 'Connect-Protocol-Version: 1' \
+  -d '{"name":"health"}'
 ```
+
+Repeat for the other ports (8082 validation, 8083 logger, 8084 OTel, 8080 full chain).
 
 ### Manual Test
 
-Test individual configurations:
+Test individual configurations. The local run mode (`node src/index.ts`, no
+TLS) serves HTTP/1.1, and no gRPC Server Reflection service is registered,
+so use the Connect protocol with JSON instead of `grpcurl`:
 
 ```bash
 # Baseline (fastest - no interceptors)
-grpcurl -plaintext -d '{"name": "Baseline"}' localhost:8081 greeter.v1.GreeterService/SayHello
+curl -X POST http://localhost:8081/greeter.v1.GreeterService/SayHello \
+  -H 'Content-Type: application/json' \
+  -H 'Connect-Protocol-Version: 1' \
+  -d '{"name": "Baseline"}'
 
 # Validation only
-grpcurl -plaintext -d '{"name": "Validation"}' localhost:8082 greeter.v1.GreeterService/SayHello
+curl -X POST http://localhost:8082/greeter.v1.GreeterService/SayHello \
+  -H 'Content-Type: application/json' \
+  -H 'Connect-Protocol-Version: 1' \
+  -d '{"name": "Validation"}'
 
 # Full chain (slowest - all interceptors)
-grpcurl -plaintext -d '{"name": "FullChain"}' localhost:8080 greeter.v1.GreeterService/SayHello
+curl -X POST http://localhost:8080/greeter.v1.GreeterService/SayHello \
+  -H 'Content-Type: application/json' \
+  -H 'Connect-Protocol-Version: 1' \
+  -d '{"name": "FullChain"}'
 ```
 
 ## Service Implementation

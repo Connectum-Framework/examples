@@ -19,8 +19,8 @@ Three services and one integration event:
 The product is deliberately thin — the point is the framework wiring.
 
 > **Note:** this example uses the service-catalog API (`defineService`,
-> `ctx.call`, `catalog`) and the EventBus, which ship in **1.0.0**. Until it is
-> published, run against local packages with `CONNECTUM_LOCAL=1` (see below).
+> `ctx.call`, `catalog`) and the EventBus, shipped in **1.0.0** (published on
+> npm).
 
 ## The headline: one codebase, two topologies
 
@@ -123,17 +123,12 @@ it is simply never resolved through `ctx.call`.
 Requires Node.js >= 25.2.0 (native TypeScript) and pnpm >= 10.
 
 ```bash
-# This example uses the 1.0.0 service-catalog + EventBus APIs. Until they are
-# published, install against local @connectum/* tarballs (CONNECTUM_LOCAL — see
-# the repository's development setup docs):
-CONNECTUM_LOCAL=1 pnpm install
+pnpm install
 
 pnpm build:proto   # buf generate → gen/ (incl. catalog.gen.ts with all 3 services)
 pnpm typecheck     # ctx.call is typed by the generated catalog
 pnpm test          # monolith e2e: ctx.call validation + event-driven balance decrement
 ```
-
-When 1.0.0 is published, a plain `pnpm install` works (no `CONNECTUM_LOCAL`).
 
 ### Monolith (one process, requires NATS)
 

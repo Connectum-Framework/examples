@@ -85,9 +85,9 @@ See [car-sharing/README.md](car-sharing/README.md) for details.
 ## Dependencies
 
 The catalog examples (getting-started, hris, car-sharing) use the 1.0.0
-service-catalog API. Until it is published, install them against local packages
-with `CONNECTUM_LOCAL=1` (see each example's README). The remaining examples use
-published `@connectum/*` packages from npm — just `pnpm install`.
+service-catalog API, which is published on npm — install them with `pnpm install`
+like the other examples. Every example uses published `@connectum/*` packages
+from npm, so `pnpm install` is all you need.
 
 ## License
 

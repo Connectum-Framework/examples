@@ -4,8 +4,8 @@ The Connectum quickstart. One service, and almost no wiring — health checks,
 reflection, the default interceptor chain and graceful shutdown all come from a
 single `createServer` call.
 
-> Uses the 1.0.0 API (`defineService`). Until it is published, install against
-> local packages with `CONNECTUM_LOCAL=1` (see below).
+> Uses the 1.0.0 API (`defineService`). The published packages install with a
+> plain `pnpm install`; use `CONNECTUM_LOCAL=1` only for local-package development (see below).
 
 ## What it shows
 
@@ -24,7 +24,7 @@ single `createServer` call.
 Requires Node.js >= 25.2.0 (or Bun, or tsx) and pnpm >= 10.
 
 ```bash
-CONNECTUM_LOCAL=1 pnpm install   # local packages until 1.0.0 is published
+pnpm install                     # @connectum/*@^1.0.0 from npm (use CONNECTUM_LOCAL=1 only for local-package dev)
 pnpm build:proto                 # buf generate → gen/
 pnpm start                       # http://localhost:5000
 pnpm test                        # e2e over a real gRPC client
