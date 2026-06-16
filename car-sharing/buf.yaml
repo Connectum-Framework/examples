@@ -1,0 +1,19 @@
+version: v2
+modules:
+  # The example's own service protos.
+  - path: proto
+  # The auth options.proto (connectum.auth.v1.method_auth / service_auth),
+  # shipped inside @connectum/auth. Declared as a workspace module so the
+  # `import "connectum/auth/v1/options.proto"` in the service protos resolves.
+  # `pnpm install` MUST run before `buf generate` (it populates node_modules).
+  - path: node_modules/@connectum/auth/proto
+lint:
+  use:
+    - STANDARD
+  except:
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,7 @@
+allowBuilds:
+  '@bufbuild/buf': true
+  esbuild: true
+  # protobufjs is pulled transitively by @connectum/otel's OTLP/gRPC exporters
+  # (@grpc/grpc-js → @grpc/proto-loader → protobufjs). Allow its build so the
+  # deps-status check buf runs before generate does not fail on an ignored build.
+  protobufjs: true

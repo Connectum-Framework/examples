@@ -1,7 +1,0 @@
-# namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: connectum
-  labels:
-    istio-injection: enabled

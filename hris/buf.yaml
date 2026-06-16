@@ -1,0 +1,17 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    # PayrollEventHandlers is an event-handler service (each RPC is a
+    # subscription), so the conventional "...Service" suffix and per-RPC
+    # request/response messages do not apply.
+    - SERVICE_SUFFIX
+breaking:
+  use:
+    - FILE

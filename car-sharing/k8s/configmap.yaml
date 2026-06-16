@@ -1,0 +1,66 @@
+# Per-role configuration. Each Deployment sets SERVICES to its own proto
+# typeName so the framework mounts only that service locally; everything else is
+# routed via `ctx.call` to the *_ADDR endpoints below (the in-cluster DNS names
+# of the peer Services). This is what makes one image run as three pods with
+# cross-service `ctx.call` flowing over the mesh.
+#
+# OTEL_* turns on the OpenTelemetry exporter per role (the example enables OTel
+# only when OTEL_EXPORTER_OTLP_ENDPOINT is set — see src/observability.ts).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trips-config
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: trips
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  # The trips (edge/gateway) role mounts only TripService; fleet and billing
+  # are reached over the network.
+  SERVICES: "trips.v1.TripService"
+  FLEET_ADDR: "http://fleet.car-sharing.svc.cluster.local:5000"
+  BILLING_ADDR: "http://billing.car-sharing.svc.cluster.local:5000"
+  # OpenTelemetry
+  OTEL_SERVICE_NAME: "trips"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fleet-config
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: fleet
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  # Leaf service: mounts only FleetService, makes no outbound ctx.call.
+  SERVICES: "fleet.v1.FleetService"
+  OTEL_SERVICE_NAME: "fleet"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-config
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  # Leaf service: mounts only BillingService.
+  SERVICES: "billing.v1.BillingService"
+  OTEL_SERVICE_NAME: "billing"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"

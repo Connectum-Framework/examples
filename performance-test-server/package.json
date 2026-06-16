@@ -25,14 +25,14 @@
   "author": "Highload.Zone",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=25.2.0"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
-    "@connectum/core": "1.0.0-rc.11",
-    "@connectum/interceptors": "1.0.0-rc.11",
-    "@connectum/otel": "1.0.0-rc.11"
+    "@connectum/core": "^1.0.0",
+    "@connectum/interceptors": "^1.0.0",
+    "@connectum/otel": "^1.0.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.65.0",

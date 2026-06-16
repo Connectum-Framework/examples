@@ -26,24 +26,19 @@
 
 ---
 
-Ready-to-run examples demonstrating Connectum features — from a minimal greeter service to production deployment configs with Docker, Kubernetes, Istio, and Envoy.
+Ready-to-run examples demonstrating Connectum features — from a one-service [quickstart](getting-started/) to a monolith-or-microservices [HR system](hris/) and an enterprise [car-sharing](car-sharing/) deployment on Kubernetes + Istio.
 
 ## Examples
 
 | Example | Description | Highlights | Status |
 |---------|-------------|------------|--------|
-| [basic-service-node](basic-service-node/) | Basic service — Node.js | Direct execution, `@connectum/*` packages ship compiled JS | Ready |
-| [basic-service-bun](basic-service-bun/) | Basic service — Bun | Zero-config TypeScript, no loader needed | Ready |
-| [basic-service-tsx](basic-service-tsx/) | Basic service — tsx | Universal TS runner, works on any Node.js 22+ | Ready |
+| [getting-started](getting-started/) | Quickstart — one service | `defineService`, health, reflection, default interceptors, graceful shutdown; Node/Bun/tsx | Ready |
 | [performance-test-server](performance-test-server/) | k6 benchmarking server | 5 parallel servers, interceptor overhead measurement, ports 8080-8084 | Ready |
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
-| [cross-runtime-test](cross-runtime-test/) | Cross-runtime compatibility testing | Node.js smoke tests for compiled packages (Bun planned) | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
-| [production-ready](production-ready/) | Production deployment bundle | Docker, Compose, K8s, Istio, Envoy | Ready |
-| [runn](runn/) | E2E test suite — runn | Docker-based, 9 runbooks covering all @connectum/* packages, gRPC reflection | Ready |
-| [auth](auth/) | JWT authentication + authorization | Token validation, proto-based authz rules, declarative RBAC | Ready |
-| [with-events-nats](with-events-nats/) | EventBus with NATS | Pub/sub events, saga pattern, JetStream | Ready |
+| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus saga | Ready |
+| [car-sharing](car-sharing/) | Enterprise deploy — Kubernetes + Istio | Split microservices + JWT/proto authz gateway + OpenTelemetry; k8s/Istio manifests (mTLS, canary) | Ready |
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
 | [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
 | [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
@@ -60,7 +55,7 @@ Ready-to-run examples demonstrating Connectum features — from a minimal greete
 
 ```bash
 git clone https://github.com/Connectum-Framework/examples.git
-cd examples/basic-service-node
+cd examples/getting-started
 pnpm install
 pnpm dev
 ```
@@ -73,37 +68,26 @@ Test with grpcurl:
 grpcurl -plaintext -d '{"name": "World"}' localhost:5000 greeter.v1.GreeterService/SayHello
 ```
 
-## Production Ready
+## Enterprise deployment
 
-The [production-ready](production-ready/) example provides a complete deployment bundle:
+The [car-sharing](car-sharing/) example demonstrates a split-microservices
+deployment with a JWT/proto-authz gateway and OpenTelemetry, plus the manifests
+to run it:
 
-- **Docker** — Multi-stage Dockerfiles (Debian ~200MB, Alpine ~140MB), non-root user, built-in health check
-- **Docker Compose** — Service stack with OpenTelemetry Collector, Jaeger, Prometheus, Grafana
-- **Kubernetes** — Deployment, Service, HPA, RBAC, TLS secrets
-- **Istio** — mTLS, AuthorizationPolicy, canary deployments, header-based routing
-- **Envoy Gateway** — Routing, rate limiting, Swagger UI
+- **Kubernetes** — per-service Deployment / Service / HPA / RBAC, single
+  role-selectable image (`SERVICES` env), `perServiceEnvResolver` wiring
+  cross-service `ctx.call` across pods.
+- **Istio** — PeerAuthentication mTLS (STRICT), AuthorizationPolicy, VirtualService /
+  DestinationRule, a canary example.
 
-See [production-ready/README.md](production-ready/README.md) for details.
-
-## E2E Testing
-
-The [runn](runn/) example provides a comprehensive E2E test suite using [runn](https://github.com/k1LoW/runn) YAML runbooks:
-
-- **9 runbooks, 30 scenarios** covering all @connectum/* packages
-- **Packages tested:** core, healthcheck, reflection, auth, interceptors, otel, events
-- **Docker Compose** — server + runn tests + OpenTelemetry Collector
-
-```bash
-cd runn
-pnpm install && pnpm build:proto
-docker compose up --build --exit-code-from tests --abort-on-container-exit
-```
-
-See [runn/README.md](runn/README.md) for details.
+See [car-sharing/README.md](car-sharing/README.md) for details.
 
 ## Dependencies
 
-All examples use published `@connectum/*` packages from npm (currently `1.0.0-rc.10`). Just `pnpm install` in any example directory to get started.
+The catalog examples (getting-started, hris, car-sharing) use the 1.0.0
+service-catalog API, which is published on npm — install them with `pnpm install`
+like the other examples. Every example uses published `@connectum/*` packages
+from npm, so `pnpm install` is all you need.
 
 ## License
 

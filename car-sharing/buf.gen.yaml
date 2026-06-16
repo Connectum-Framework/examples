@@ -1,0 +1,29 @@
+version: v2
+clean: true
+# No explicit `inputs`: buf generate defaults to the local workspace defined by
+# buf.yaml (both the `proto` module and the `@connectum/auth/proto` module). This
+# matters for the catalog plugin below: a single workspace input means buf
+# invokes each plugin ONCE over every file from both modules, so
+# `protoc-gen-connectum-catalog strategy:all` aggregates all services into one
+# catalog.gen.ts. (Listing the two modules as separate `inputs` would invoke the
+# plugin per input; the services-less auth module would then emit — and clobber —
+# an empty catalog.)
+plugins:
+  # Message + service descriptors (protobuf-es). Also emits options_pb.ts for the
+  # imported auth proto, which the service _pb.ts files reference.
+  - local: protoc-gen-es
+    out: gen
+    opt:
+      - target=ts
+      - import_extension=.ts
+  # Connectum service catalog: runtime serviceCatalog + ConnectumCallMap
+  # augmentation that types ctx.call.
+  #
+  # strategy: all is REQUIRED — the catalog aggregates every service into a
+  # single catalog.gen.ts.
+  - local: protoc-gen-connectum-catalog
+    strategy: all
+    out: gen
+    opt:
+      - target=ts
+      - import_extension=.ts

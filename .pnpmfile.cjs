@@ -17,6 +17,7 @@ const CONNECTUM_PACKAGES = [
   "auth",
   "interceptors",
   "healthcheck",
+  "protoc-gen-catalog",
   "reflection",
   "cli",
   "otel",

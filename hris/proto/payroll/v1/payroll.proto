@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package payroll.v1;
+
+import "connectum/events/v1/options.proto";
+import "google/protobuf/empty.proto";
+
+// PayrollService tracks each employee's remaining leave balance. It subscribes
+// to LeaveApproved events (emitted by timeoff.v1.TimeOffService) and decrements
+// the balance.
+service PayrollService {
+  // GetBalance returns the remaining leave-days balance for an employee.
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse) {}
+}
+
+message GetBalanceRequest {
+  string employee_id = 1;
+}
+
+message GetBalanceResponse {
+  Balance balance = 1;
+}
+
+message Balance {
+  string employee_id = 1;
+  int32 remaining_days = 2;
+}
+
+// LeaveApproved is the integration event published by TimeOffService after a
+// leave request is approved. PayrollService consumes it to decrement the
+// balance.
+message LeaveApproved {
+  string leave_request_id = 1;
+  string employee_id = 2;
+  int32 days = 3;
+}
+
+// PayrollEventHandlers is an event-handler service: each RPC is a subscription.
+// The (connectum.events.v1.event).topic option pins the topic so the publisher
+// (TimeOffService) and the subscriber agree on it explicitly, independent of
+// process topology.
+service PayrollEventHandlers {
+  // OnLeaveApproved decrements the employee's leave balance.
+  rpc OnLeaveApproved(LeaveApproved) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "timeoff.leave-approved";
+  }
+}

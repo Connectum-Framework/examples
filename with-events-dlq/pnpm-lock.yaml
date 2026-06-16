@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-eI23sIVI2JPAWSO4tHJIyh9lMA8EE9YtRgItvZ1Cxl0=
+pnpmfileChecksum: sha256-67N1pxel7+7xAibq49pDwRA2VdI1q0PZkWzV6GHRLhA=
 
 importers:
 
@@ -17,23 +17,23 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.12.0)
       '@connectum/core':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11
+        specifier: ^1.0.0
+        version: 1.0.0
       '@connectum/events':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11
+        specifier: ^1.0.0
+        version: 1.0.0
       '@connectum/events-nats':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(@connectum/events@1.0.0-rc.11)
+        specifier: ^1.0.0
+        version: 1.0.0(@connectum/events@1.0.0)
       '@connectum/healthcheck':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(@connectum/core@1.0.0-rc.11)
+        specifier: ^1.0.0
+        version: 1.0.0(@connectum/core@1.0.0)
       '@connectum/interceptors':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))
+        specifier: ^1.0.0
+        version: 1.0.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))
       '@connectum/reflection':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(@connectum/core@1.0.0-rc.11)
+        specifier: ^1.0.0
+        version: 1.0.0(@connectum/core@1.0.0)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
@@ -138,8 +138,20 @@ packages:
       '@bufbuild/protobuf': ^2.7.0
       '@connectrpc/connect': 2.1.1
 
+  '@connectrpc/connect-node@2.1.2':
+    resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.7.0
+      '@connectrpc/connect': 2.1.2
+
   '@connectrpc/connect@2.1.1':
     resolution: {integrity: sha512-JzhkaTvM73m2K1URT6tv53k2RwngSmCXLZJgK580qNQOXRzZRR/BCMfZw3h+90JpnG6XksP5bYT+cz0rpUzUWQ==}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.7.0
+
+  '@connectrpc/connect@2.1.2':
+    resolution: {integrity: sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
 
@@ -150,55 +162,55 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/core@1.0.0-rc.11':
-    resolution: {integrity: sha512-xtH+Ce59gmHdE8pqiE7LK27doEiu5xdQbSARKNTi90f9RJVOGhuQLTYU+uB+T1TqukkGub+94y7CxxLn1rpBPw==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/core@1.0.0':
+    resolution: {integrity: sha512-6xlM4EngNAbM6RJEdVBvDOXyWeQGMPgVMWoprrh9NOlGDddqxd49qYhagyM7qKF5nGrU6Y6mN+INS+RXD4GXeg==}
+    engines: {node: '>=22.13.0'}
 
-  '@connectum/events-nats@1.0.0-rc.11':
-    resolution: {integrity: sha512-88ZtQaAWvIcVW9+LXA+NN1DEenp60a5+gnWvBZCERAtDLwwiiUakI2WwDZ7lbyjn+60wRa7eccexfWd/00ZV7A==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/events-nats@1.0.0':
+    resolution: {integrity: sha512-My40XIaSgmhBh6t75CEn/kv9tog8pDyYp+EupTm9iVCGTCMNrP9KW4gxDfI77WIPpbBuFHNYQVk5rSee2MKa4g==}
+    engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/events': ^1.0.0-rc.11
+      '@connectum/events': ^1.0.0
 
-  '@connectum/events@1.0.0-rc.11':
-    resolution: {integrity: sha512-Z3HnaWuwJeKqSDyN9JB0xD7wxkjZ0h4UZBVQRAvyDDXHYQrLJPdicsg37bfj2DJMHRD5YeQUfCi/Q3ueQfBzIA==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/events@1.0.0':
+    resolution: {integrity: sha512-6zErcHhAERF/YDRAh23hFIiksCfUmCBhQPg9OIUtc22g7JBYq2x59puWm6ABXu2bv6Ud4si2CxhUOL1im/9U/g==}
+    engines: {node: '>=22.13.0'}
 
-  '@connectum/healthcheck@1.0.0-rc.11':
-    resolution: {integrity: sha512-wzPvu9oxH1mEilPeEGBL/GsNZt9XfloPqr81H7T9meIt07C4R93wg2loqn2kwHzYUTJ9U+tuwlq4GHWFOQEIiw==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/healthcheck@1.0.0':
+    resolution: {integrity: sha512-brzgMu4WY/kVlBDTHe2Xw/DDrygxx8Cwj7fiyS1KVx56kgXYmVuumJoKgODwpIK0Lz7PwCXeLNma973fHgd+OQ==}
+    engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/core': ^1.0.0-rc.11
+      '@connectum/core': ^1.0.0
 
-  '@connectum/interceptors@1.0.0-rc.11':
-    resolution: {integrity: sha512-O9oQab2OT1qcMhu0EcjYqCpLAYoe1dCLcIbOSHNWM/jlL4eGonR2s6WUzpvZcozVFILPloQ9i6kvieLQK8ArJA==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/interceptors@1.0.0':
+    resolution: {integrity: sha512-sgKO+Kgi4QuIOIFdANloj9xI5Uzmdl7KhallUqxsS6z+GqPe87B5gvzWROqK/YWe7oXpos0N76InHYow/7frsg==}
+    engines: {node: '>=22.13.0'}
 
-  '@connectum/reflection@1.0.0-rc.11':
-    resolution: {integrity: sha512-qpF3XPuruO5ZgQy+FWNq9GogCjLep8DQ5weSbb+SZM7Y/fJvcemO86JxyKFKpQSWGH8Fnv4y1hJufK/RTKgEBw==}
-    engines: {node: '>=20.0.0'}
+  '@connectum/reflection@1.0.0':
+    resolution: {integrity: sha512-yx2WWtT+Tzah62EDrKuSBW1jPOOq4uqXfm5bGEoIwgIrORid1H1oY9KXPt/dV6WyiQeASqHk1ZxGVIHqr9UGZA==}
+    engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/core': ^1.0.0-rc.11
+      '@connectum/core': ^1.0.0
 
   '@lambdalisue/connectrpc-grpcreflect@0.5.0':
     resolution: {integrity: sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog==}
 
-  '@nats-io/jetstream@3.3.1':
-    resolution: {integrity: sha512-oTIxM47pQfv4zCMlLN7FtARxSclMlUUPPn9I3VxRwMH+N2jkj1WCApu+tSL778KuljxfG8txi/MPwoWSXqbbQQ==}
+  '@nats-io/jetstream@3.4.0':
+    resolution: {integrity: sha512-GzHQodNJ942+R5LRb8PuZ5ugVWVWMRiufxUYLLVWkXKfwDXYN+Owo0d7L/b9O7BPyrbYD7jQWAC6+ZVuXa9Gyw==}
 
-  '@nats-io/nats-core@3.3.1':
-    resolution: {integrity: sha512-myFXGTo4cCfKrsLDjkoEz7FjjjvSfBRjun7Qx3n3Z5OzW4JUY8Ou7VQsGAdXLQxHN3ae/XNXvmXxshDoFPex4w==}
+  '@nats-io/nats-core@3.4.0':
+    resolution: {integrity: sha512-QMDM86EUNm+wudlKC67HLar/KHHQUvJGLfb4jbahje3pUk3K9afeck9fwsxBZF0eUFox6T/TA6m/t+lQqf+QsQ==}
 
   '@nats-io/nkeys@2.0.3':
     resolution: {integrity: sha512-JVt56GuE6Z89KUkI4TXUbSI9fmIfAmk6PMPknijmuL72GcD+UgIomTcRWiNvvJKxA01sBbmIPStqJs5cMRBC3A==}
     engines: {node: '>=18.0.0'}
 
-  '@nats-io/nuid@2.0.3':
-    resolution: {integrity: sha512-TpA3HEBna/qMVudy+3HZr5M3mo/L1JPofpVT4t0HkFGkz2Cn9wrlrQC8tvR8Md5Oa9//GtGG26eN0qEWF5Vqew==}
-    engines: {node: '>= 18.x'}
+  '@nats-io/nuid@3.0.0':
+    resolution: {integrity: sha512-QbXZDrxmYlrn5AD06gYcUTmEHwxn96HBQMIk7XTjDlEcx6FPzVBBPjp4AMRh1lEv6B4iJ6Xb/Uz61JugPXFRQg==}
+    engines: {node: '>= 22.x'}
 
-  '@nats-io/transport-node@3.3.1':
-    resolution: {integrity: sha512-GBvY0VcvyQEILgy5bjpqU1GpDYmSF06bW59I7cewZuNGS9u3AoV/gf+a+3ep45T/Z+UC661atq/b7x+QV12w+Q==}
+  '@nats-io/transport-node@3.4.0':
+    resolution: {integrity: sha512-hH7u7ejIBTFEJIZ8rIcMrHJI6wl+HhpO5sVFs1+ppmXa8RuB2+Lh1+UwTzZ5xTNNm1TKcRkYy+2qCV56qp8RxA==}
     engines: {node: '>= 18.0.0'}
 
   '@types/node@25.6.0':
@@ -209,9 +221,9 @@ packages:
     peerDependencies:
       typescript: '*'
 
-  cockatiel@3.2.1:
-    resolution: {integrity: sha512-gfrHV6ZPkquExvMh9IOkKsBzNDk6sDuZ6DdBGUBkvFnTCqCxzpuq48RySgP0AnaqQkw2zynOFj9yly6T1Q2G5Q==}
-    engines: {node: '>=16'}
+  cockatiel@4.0.0:
+    resolution: {integrity: sha512-XpUZJnogsd03BGB19T9sv7Xb8SwvD8JddZV2Tlp0LNspopZ6Idv24ZwCl8vAGJ6JwODZ0zLRYVj3NWvmRcUDqA==}
+    engines: {node: '>=22'}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -245,8 +257,8 @@ packages:
   undici-types@7.19.2:
     resolution: {integrity: sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg==}
 
-  zod@4.4.2:
-    resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -318,56 +330,65 @@ snapshots:
       '@bufbuild/protobuf': 2.12.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
 
+  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+
   '@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
 
-  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.0
+
+  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
 
-  '@connectum/core@1.0.0-rc.11':
+  '@connectum/core@1.0.0':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node': 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))
       env-var: 7.5.0
-      zod: 4.4.2
+      zod: 4.4.3
 
-  '@connectum/events-nats@1.0.0-rc.11(@connectum/events@1.0.0-rc.11)':
+  '@connectum/events-nats@1.0.0(@connectum/events@1.0.0)':
     dependencies:
-      '@connectum/events': 1.0.0-rc.11
-      '@nats-io/jetstream': 3.3.1
-      '@nats-io/transport-node': 3.3.1
+      '@connectum/events': 1.0.0
+      '@nats-io/jetstream': 3.4.0
+      '@nats-io/transport-node': 3.4.0
 
-  '@connectum/events@1.0.0-rc.11':
-    dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectum/core': 1.0.0-rc.11
-
-  '@connectum/healthcheck@1.0.0-rc.11(@connectum/core@1.0.0-rc.11)':
+  '@connectum/events@1.0.0':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectum/core': 1.0.0-rc.11
+      '@connectum/core': 1.0.0
 
-  '@connectum/interceptors@1.0.0-rc.11(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))':
+  '@connectum/healthcheck@1.0.0(@connectum/core@1.0.0)':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      '@connectum/core': 1.0.0-rc.11
-      cockatiel: 3.2.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@connectum/core': 1.0.0
+
+  '@connectum/interceptors@1.0.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))
+      '@connectum/core': 1.0.0
+      cockatiel: 4.0.0
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/reflection@1.0.0-rc.11(@connectum/core@1.0.0-rc.11)':
+  '@connectum/reflection@1.0.0(@connectum/core@1.0.0)':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectum/core': 1.0.0-rc.11
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@connectum/core': 1.0.0
       '@lambdalisue/connectrpc-grpcreflect': 0.5.0
 
   '@lambdalisue/connectrpc-grpcreflect@0.5.0':
@@ -375,26 +396,26 @@ snapshots:
       '@bufbuild/protobuf': 2.12.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
 
-  '@nats-io/jetstream@3.3.1':
+  '@nats-io/jetstream@3.4.0':
     dependencies:
-      '@nats-io/nats-core': 3.3.1
+      '@nats-io/nats-core': 3.4.0
 
-  '@nats-io/nats-core@3.3.1':
+  '@nats-io/nats-core@3.4.0':
     dependencies:
       '@nats-io/nkeys': 2.0.3
-      '@nats-io/nuid': 2.0.3
+      '@nats-io/nuid': 3.0.0
 
   '@nats-io/nkeys@2.0.3':
     dependencies:
       tweetnacl: 1.0.3
 
-  '@nats-io/nuid@2.0.3': {}
+  '@nats-io/nuid@3.0.0': {}
 
-  '@nats-io/transport-node@3.3.1':
+  '@nats-io/transport-node@3.4.0':
     dependencies:
-      '@nats-io/nats-core': 3.3.1
+      '@nats-io/nats-core': 3.4.0
       '@nats-io/nkeys': 2.0.3
-      '@nats-io/nuid': 2.0.3
+      '@nats-io/nuid': 3.0.0
 
   '@types/node@25.6.0':
     dependencies:
@@ -407,7 +428,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  cockatiel@3.2.1: {}
+  cockatiel@4.0.0: {}
 
   debug@4.4.3:
     dependencies:
@@ -425,4 +446,4 @@ snapshots:
 
   undici-types@7.19.2: {}
 
-  zod@4.4.2: {}
+  zod@4.4.3: {}

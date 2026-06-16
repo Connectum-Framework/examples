@@ -8,7 +8,10 @@
     "#gen/*": "./gen/*"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/index.ts"
+    "start": "node --experimental-strip-types src/index.ts",
+    "buf:generate": "buf generate",
+    "build:proto": "pnpm run buf:generate",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "connectum",
@@ -25,11 +28,11 @@
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
     "@connectrpc/connect-node": "^2.1.1",
-    "@connectum/core": "1.0.0-rc.11",
-    "@connectum/healthcheck": "1.0.0-rc.11",
-    "@connectum/interceptors": "1.0.0-rc.11",
-    "@connectum/otel": "1.0.0-rc.11",
-    "@connectum/reflection": "1.0.0-rc.11"
+    "@connectum/core": "^1.0.0",
+    "@connectum/healthcheck": "^1.0.0",
+    "@connectum/interceptors": "^1.0.0",
+    "@connectum/otel": "^1.0.0",
+    "@connectum/reflection": "^1.0.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.65.0",

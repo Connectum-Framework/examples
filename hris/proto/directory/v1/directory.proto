@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package directory.v1;
+
+// DirectoryService is the employee system of record (leaf service).
+service DirectoryService {
+  // GetEmployee returns an employee by id, or NOT_FOUND if unknown.
+  rpc GetEmployee(GetEmployeeRequest) returns (GetEmployeeResponse) {}
+}
+
+message GetEmployeeRequest {
+  string id = 1;
+}
+
+message GetEmployeeResponse {
+  Employee employee = 1;
+}
+
+message Employee {
+  string id = 1;
+  string name = 2;
+  string department = 3;
+}
