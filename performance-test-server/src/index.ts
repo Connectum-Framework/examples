@@ -56,14 +56,10 @@ const validationOptions: CreateServerOptions = {
     port: 8082,
     host: "0.0.0.0",
     tls: tlsConfig,
+    // Validation is enabled by default; resilience interceptors are opt-in,
+    // so only errorHandler needs to be disabled explicitly.
     interceptors: createDefaultInterceptors({
         errorHandler: false,
-        timeout: false,
-        bulkhead: false,
-        circuitBreaker: false,
-        retry: false,
-        validation: true,
-        serializer: false,
     }),
 };
 
@@ -115,8 +111,13 @@ const fullChainOptions: CreateServerOptions = {
                 logErrors: true,
                 includeStackTrace: true,
             },
+            // Resilience interceptors are opt-in — enable them explicitly
+            // so this configuration measures the full chain overhead.
+            timeout: true,
+            bulkhead: true,
+            circuitBreaker: true,
+            retry: true,
             serializer: true,
-            validation: true,
         }),
         createLoggerInterceptor({
             level: "error",

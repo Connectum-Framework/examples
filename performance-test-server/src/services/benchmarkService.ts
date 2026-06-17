@@ -5,44 +5,40 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { ConnectRouter } from "@connectrpc/connect";
+import { defineService } from "@connectum/core";
 import { GreeterService } from "#gen/greeter/v1/greeter_pb.ts";
 import { type SayGoodbyeRequest, SayGoodbyeResponseSchema, type SayHelloRequest, SayHelloResponseSchema } from "#gen/greeter/v1/greeter_pb.ts";
 
 /**
- * Register Benchmark service routes (minimal overhead implementation)
- *
- * @param router - ConnectRouter instance
+ * Benchmark service definition (minimal overhead implementation)
  */
-export function benchmarkServiceRoutes(router: ConnectRouter): void {
-    router.service(GreeterService, {
-        /**
-         * Minimal SayHello implementation (no console logs, minimal processing)
-         *
-         * @param request - SayHello request
-         * @returns Greeting response
-         */
-        async sayHello(request: SayHelloRequest) {
-            // No logging, no async operations - pure minimal response
-            const name = request.name || "Benchmark";
+export const benchmarkServiceRoutes = defineService(GreeterService, {
+    /**
+     * Minimal SayHello implementation (no console logs, minimal processing)
+     *
+     * @param request - SayHello request
+     * @returns Greeting response
+     */
+    async sayHello(request: SayHelloRequest) {
+        // No logging, no async operations - pure minimal response
+        const name = request.name || "Benchmark";
 
-            return create(SayHelloResponseSchema, {
-                message: `Hello, ${name}!`,
-            });
-        },
+        return create(SayHelloResponseSchema, {
+            message: `Hello, ${name}!`,
+        });
+    },
 
-        /**
-         * Minimal SayGoodbye implementation
-         *
-         * @param request - SayGoodbye request
-         * @returns Goodbye response
-         */
-        async sayGoodbye(request: SayGoodbyeRequest) {
-            const name = request.name || "Benchmark";
+    /**
+     * Minimal SayGoodbye implementation
+     *
+     * @param request - SayGoodbye request
+     * @returns Goodbye response
+     */
+    async sayGoodbye(request: SayGoodbyeRequest) {
+        const name = request.name || "Benchmark";
 
-            return create(SayGoodbyeResponseSchema, {
-                message: `Goodbye, ${name}!`,
-            });
-        },
-    });
-}
+        return create(SayGoodbyeResponseSchema, {
+            message: `Goodbye, ${name}!`,
+        });
+    },
+});

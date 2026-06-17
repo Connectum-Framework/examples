@@ -1,0 +1,33 @@
+# Canary rollout example for the fleet service: 90% of in-mesh `ctx.call`
+# traffic goes to the `stable` subset, 10% to `canary`. To use it, deploy a
+# second fleet Deployment whose pods carry `version: canary` (otherwise the
+# canary subset has no endpoints), then `kubectl apply` this file in place of
+# istio/virtual-service.yaml's fleet entry. Shift the weights to progress or
+# roll back the rollout.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: fleet
+  namespace: car-sharing
+spec:
+  hosts:
+    - fleet.car-sharing.svc.cluster.local
+  http:
+    - timeout: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: unavailable,deadline-exceeded
+      route:
+        - destination:
+            host: fleet.car-sharing.svc.cluster.local
+            subset: stable
+            port:
+              number: 5000
+          weight: 90
+        - destination:
+            host: fleet.car-sharing.svc.cluster.local
+            subset: canary
+            port:
+              number: 5000
+          weight: 10

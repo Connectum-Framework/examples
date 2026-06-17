@@ -1,0 +1,126 @@
+# Two topologies from ONE image, selected by the `SERVICES` env and a compose
+# profile. Config only — not part of the automated test run (the e2e suite runs
+# the monolith in-process with an in-memory bus; see tests/e2e).
+#
+#   docker compose --profile mono  up    # all services in one process
+#   docker compose --profile split up    # directory + timeoff + payroll split
+#
+# Both profiles share the same `nats` broker. The split profile shows the headline:
+# identical handler code, three processes, ctx.call auto-routing across the network
+# and LeaveApproved flowing over NATS to the payroll role.
+
+services:
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - hris
+    profiles: ["mono", "split"]
+
+  # ── Topology A: monolith — every service in one process (SERVICES unset) ──
+  mono:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NATS_URL=nats://nats:4222
+      # SERVICES unset → monolith (all services local).
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["mono"]
+
+  # ── Topology B: microservices — one role per process (SERVICES per role) ──
+  directory:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - NATS_URL=nats://nats:4222
+      - SERVICES=directory.v1.DirectoryService
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["split"]
+
+  timeoff:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - NATS_URL=nats://nats:4222
+      - SERVICES=timeoff.v1.TimeOffService
+      # TimeOff calls the directory over the network; the resolver maps the
+      # directory typeName to this URL.
+      - DIRECTORY_ADDR=http://directory:5001
+    depends_on:
+      nats:
+        condition: service_healthy
+      directory:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["split"]
+
+  payroll:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+      - NATS_URL=nats://nats:4222
+      - SERVICES=payroll.v1.PayrollService
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5003/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["split"]
+
+networks:
+  hris:
+    driver: bridge

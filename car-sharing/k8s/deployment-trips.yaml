@@ -1,0 +1,100 @@
+# trips — the EDGE/gateway role. Mounts only TripService and enforces JWT auth +
+# proto authz. Reaches fleet and billing via `ctx.call` over the mesh (the
+# *_ADDR endpoints in trips-config). This is the only service exposed to
+# external clients (through the Istio ingress gateway / VirtualService).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trips
+  namespace: car-sharing
+  labels:
+    app.kubernetes.io/name: trips
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: car-sharing
+    version: stable
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trips
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trips
+        version: stable
+    spec:
+      serviceAccountName: trips
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Must be >= shutdown.timeout in buildServer() (10s) + SIGTERM buffer.
+      terminationGracePeriodSeconds: 20
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: trips
+      containers:
+        - name: trips
+          image: ghcr.io/your-org/car-sharing:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 5000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: trips-config
+          env:
+            # JWT signing secret — only the gateway role needs it.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: trips-jwt
+                  key: JWT_SECRET
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: grpc
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: grpc
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                # Let endpoints de-register before SIGTERM.
+                command: ["sh", "-c", "sleep 5"]

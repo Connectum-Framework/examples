@@ -218,4 +218,4 @@ docker compose down -v
 - [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) — Vendor-agnostic telemetry pipeline
 - [ClickHouse](https://clickhouse.com/) — Column-oriented database for traces and logs
 - [Prometheus](https://prometheus.io/) — Metrics storage and querying
-- [@connectum/otel](../../docs/en/packages/otel.md) — OpenTelemetry instrumentation for Connectum
+- [@connectum/otel](https://connectum.dev/en/packages/otel) — OpenTelemetry instrumentation for Connectum

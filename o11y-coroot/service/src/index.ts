@@ -11,9 +11,8 @@
  * with different env vars.
  */
 
-import type { ConnectRouter } from "@connectrpc/connect";
 import { createServer } from "@connectum/core";
-import type { CreateServerOptions } from "@connectum/core";
+import type { CreateServerOptions, ServiceDefinition } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { createOtelInterceptor, initProvider, shutdownProvider } from "@connectum/otel";
@@ -25,7 +24,7 @@ const serviceName = process.env.OTEL_SERVICE_NAME ?? "o11y-service";
 const port = Number(process.env.PORT) || 5000;
 
 // Select routes based on service name
-const serviceRoutes: Array<(router: ConnectRouter) => void> = [];
+const serviceRoutes: ServiceDefinition[] = [];
 if (serviceName.includes("order")) {
     serviceRoutes.push(orderServiceRoutes);
 } else if (serviceName.includes("inventory")) {

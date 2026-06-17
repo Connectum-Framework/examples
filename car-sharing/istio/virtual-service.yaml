@@ -1,0 +1,46 @@
+# In-mesh VirtualServices — default routing + retry/timeout policy for traffic
+# between pods (e.g. the trips -> fleet / trips -> billing `ctx.call`s). All
+# in-mesh traffic goes to the `stable` subset until a canary rollout shifts it
+# (see canary-virtual-service.yaml).
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: fleet
+  namespace: car-sharing
+spec:
+  hosts:
+    - fleet.car-sharing.svc.cluster.local
+  http:
+    - timeout: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: unavailable,deadline-exceeded
+      route:
+        - destination:
+            host: fleet.car-sharing.svc.cluster.local
+            subset: stable
+            port:
+              number: 5000
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: billing
+  namespace: car-sharing
+spec:
+  hosts:
+    - billing.car-sharing.svc.cluster.local
+  http:
+    - timeout: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: unavailable,deadline-exceeded
+      route:
+        - destination:
+            host: billing.car-sharing.svc.cluster.local
+            subset: stable
+            port:
+              number: 5000

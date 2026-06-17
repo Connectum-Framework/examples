@@ -1,0 +1,14 @@
+# Mesh-wide mTLS STRICT for the namespace. Every pod-to-pod call (including the
+# trips -> fleet / trips -> billing `ctx.call`s) is mutually authenticated and
+# encrypted by the sidecars. This is the transport-security precondition that
+# makes the internal `public` services safe: only in-mesh, mTLS-verified callers
+# can reach them, and the AuthorizationPolicy narrows that further to the trips
+# identity.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: car-sharing
+spec:
+  mtls:
+    mode: STRICT

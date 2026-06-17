@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package billing.v1;
+
+import "connectum/auth/v1/options.proto";
+
+// BillingService opens a billing tab for a trip (a leaf service).
+//
+// Like FleetService, it is INTERNAL: only the trip handler calls it via
+// ctx.call, so it is marked `public: true` (skip authn + authz). The trust
+// boundary is the mesh: Istio mTLS + AuthorizationPolicy restrict who may reach
+// it in production (see istio/).
+service BillingService {
+  option (connectum.auth.v1.service_auth) = { public: true };
+
+  // OpenTab opens a billing tab for the given trip and returns it.
+  rpc OpenTab(OpenTabRequest) returns (OpenTabResponse) {}
+}
+
+message OpenTabRequest {
+  string trip_id = 1;
+}
+
+message OpenTabResponse {
+  Tab tab = 1;
+}
+
+message Tab {
+  string id = 1;
+  bool open = 2;
+}

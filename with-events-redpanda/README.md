@@ -155,14 +155,13 @@ curl -X POST http://localhost:5001/orders.v1.OrderService/CreateOrder \
 
 ### Step 3. Topics — All Created Topics
 
-In Redpanda Console under the Topics tab, we can see 4 business topics:
+In Redpanda Console under the Topics tab, we can see 3 business topics:
 
 | Topic | Description |
 |-------|-------------|
 | `orders.v1.OrderCreated` | Default topic (from `schema.typeName`) |
 | `orders.cancelled` | Custom topic (proto option) |
 | `inventory.reserved` | Custom topic (proto option) |
-| `orders.v1.InventoryReserved` | Default topic (published by inventory) |
 
 ![Topics](screenshots/screenshot-topics.png)
 

@@ -4,7 +4,7 @@
 FROM node:25-slim AS deps
 
 # Install pnpm (pinned version)
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+RUN npm install -g pnpm@10.12.1
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN pnpm install --frozen-lockfile --prod
 # =============================================================================
 FROM node:25-slim AS proto
 
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+RUN npm install -g pnpm@10.12.1
 
 WORKDIR /app
 

@@ -63,11 +63,13 @@ sequenceDiagram
     User->>OS: CreateOrder {product: "FAIL"}
     OS->>NATS: publish OrderCreated
     OS-->>User: {status: "pending"}
-    NATS->>IS: deliver OrderCreated (attempt 1)
-    IS->>IS: throw Error("Simulated failure")
-    NATS->>IS: redeliver OrderCreated (attempt 2 — retry)
-    IS->>IS: throw Error("Simulated failure")
-    IS->>DLQ: publish to dead-letter-queue (dlq.attempt=2)
+    NATS->>IS: deliver OrderCreated (deliveryCount 1)
+    IS->>IS: handler attempt 1 → throw Error("Simulated failure")
+    Note over IS: in-process retry, wait 200ms (NATS does not redeliver)
+    IS->>IS: handler attempt 2 → throw Error("Simulated failure")
+    Note over IS: in-process retry, wait 200ms
+    IS->>IS: handler attempt 3 → throw Error("Simulated failure")
+    IS->>DLQ: publish to dead-letter-queue (dlq.attempt=1)
     DLQ->>IS: deliver DLQ event
     IS->>IS: DLQ Monitor captures metadata
 ```
@@ -131,7 +133,7 @@ curl -X POST http://localhost:5001/orders.v1.OrderService/CreateOrder \
 # After ~1 second: inspect DLQ events captured by the DLQ monitor
 curl -X POST http://localhost:5002/orders.v1.InventoryService/GetDlqEvents \
   -H "Content-Type: application/json" -d '{}'
-# → {"events":[{"originalTopic":"orders.v1.OrderCreated","originalEventId":"...","error":"Simulated failure for product FAIL","attempt":"2"}]}
+# → {"events":[{"originalTopic":"orders.v1.OrderCreated","originalEventId":"...","error":"Simulated failure for product FAIL","attempt":"1"}]}
 ```
 
 ### Stopping

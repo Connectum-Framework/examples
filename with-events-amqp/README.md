@@ -147,13 +147,12 @@ In the RabbitMQ Management UI under the Exchanges tab, the `orders` topic exchan
 
 ### Step 4. Queues — Order and Inventory
 
-The Queues tab shows durable queues created by the adapter, one per consumer group per topic:
+The Queues tab shows durable queues created by the adapter, one per consumer group (each queue is bound to all of that group's topic routing keys). Each queue is named `${exchange}.${group}` (here the exchange is `orders`):
 
-| Queue | Bound Routing Key | Consumer Group |
-|-------|-------------------|----------------|
-| `order-service.inventory.reserved` | `inventory.reserved` | order-service |
-| `inventory-service.orders.v1.OrderCreated` | `orders.v1.OrderCreated` | inventory-service |
-| `inventory-service.orders.cancelled` | `orders.cancelled` | inventory-service |
+| Queue | Bound Routing Keys | Consumer Group |
+|-------|--------------------|----------------|
+| `orders.order-service` | `inventory.reserved` | order-service |
+| `orders.inventory-service` | `orders.v1.OrderCreated`, `orders.cancelled` | inventory-service |
 
 ![Queues](screenshots/screenshot-queues.png)
 
@@ -277,6 +276,51 @@ export const orderEventBus = createEventBus({
 ```
 
 `AmqpAdapter` connects to RabbitMQ and uses a topic exchange with durable queues per group, ensuring at-least-once delivery with manual acknowledgement.
+
+## External AMQP Contract
+
+This example uses the default Connectum conventions (topic exchange, `${exchange}.${group}` queues, protobuf payloads). When you need to integrate with an **externally defined AMQP contract** -- a partner's direct exchange, named durable queues with DLQ arguments, JSON bodies -- `AmqpAdapter` supports explicit topology, queue overrides, and serialization control:
+
+```typescript
+const adapter = AmqpAdapter({
+    url: AMQP_URL,
+    exchange: "partner.direct",
+    exchangeType: "direct",
+    // contentType label for the wire; the application publishes
+    // pre-serialized JSON bytes through the adapter directly
+    serialization: { contentType: "application/json" },
+    // Declare the partner topology on connect (re-applied after recovery);
+    // topologyMode: "check" verifies existence only, "skip" leaves it to the app
+    topology: {
+        exchanges: [{ name: "partner.dlx", type: "direct" }],
+        queues: [
+            { name: "partner.dead.v1", durable: true },
+            {
+                name: "partner.inbound.v1",
+                durable: true,
+                arguments: {
+                    "x-dead-letter-exchange": "partner.dlx",
+                    "x-dead-letter-routing-key": "inbound.dead",
+                },
+            },
+        ],
+        bindings: [
+            { queue: "partner.dead.v1", source: "partner.dlx", routingKey: "inbound.dead" },
+            { queue: "partner.inbound.v1", source: "partner.direct", routingKey: "inbound" },
+        ],
+    },
+    // Consumer group "partner" attaches to the contract queue
+    // instead of the default "partner.direct.partner"
+    queueOverrides: {
+        partner: { queue: "partner.inbound.v1" },
+    },
+    // Per-message confirms: each publish resolves on its own broker ack;
+    // mandatory rejects unroutable publishes with AmqpUnroutableError
+    publisherOptions: { persistent: true, mandatory: true },
+});
+```
+
+Note: with `mandatory: true` (default `correlationHeader: true`) the adapter stamps a private `x-connectum-publish-id` header on mandatory publishes -- visible to external consumers. Set `publisherOptions.correlationHeader: false` for a clean wire (mandatory publishes are then serialized one at a time). See the [@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp) for topology modes, recovery options, and the full error taxonomy.
 
 ## Docker Compose
 
