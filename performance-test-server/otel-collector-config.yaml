@@ -31,6 +31,10 @@ exporters:
     sampling_initial: 5
     sampling_thereafter: 1000
 
+# The health_check extension exposes readiness on :13133 for anyone running
+# this collector outside the benchmark. It is intentionally NOT wired to a
+# Docker healthcheck: the contrib image is built FROM scratch and has no shell
+# or HTTP client to probe the endpoint with (see docker-compose.yml).
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133

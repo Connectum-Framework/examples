@@ -43,12 +43,16 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    healthcheck:
-      test: ["CMD", "/otelcol-contrib", "components"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+    # No healthcheck: the contrib image is built FROM scratch — it has no shell,
+    # curl, or wget — so the OTLP listeners (:4317/:4318) and the health_check
+    # extension (:13133) cannot be probed from inside the container, and the only
+    # in-image binary (`otelcol-contrib components`) exits 0 without ever opening
+    # a socket, which would be a false "healthy" signal. We do NOT claim to prove
+    # collector readiness here. Instead, k6-otel-export gates on `service_started`
+    # only, and correctness does not depend on the collector being up at t=0:
+    # the BatchSpanProcessor buffers and retries exports, and over the ~5-minute
+    # steady-state run any sub-second collector startup gap is negligible relative
+    # to total spans exported.
 
   k6-interceptor-overhead:
     image: grafana/k6:latest
@@ -75,9 +79,16 @@ services:
   # =========================================================================
   # OTel OTLP export overhead scenario (profile: otel-export)
   # =========================================================================
-  # Measures p50/p95/p99 latency delta and throughput delta between the
-  # baseline (port 8081) and full-chain-with-real-OTLP-exporter (port 8085).
+  # Measures the p50/p95/p99 latency delta between the baseline (port 8081)
+  # and full-chain-with-real-OTLP-exporter (port 8085).
   # Requires OTEL_EXPORT_ENABLED=1 on the server and a running otel-collector.
+  #
+  # Readiness note: the server healthcheck below probes port 8080 only. All
+  # ports (incl. 8085) are bound in a single Promise.all in src/index.ts, so
+  # 8080 being healthy means 8085 is almost certainly up too — and the k6
+  # script closes the remaining gap deterministically: its setup() health-checks
+  # 8081 AND 8085 and aborts the run if 8085 is not yet serving. So a brief
+  # bind-order race cannot produce silent, partially-measured results.
   k6-otel-export:
     image: grafana/k6:latest
     volumes:
@@ -92,6 +103,10 @@ services:
       K6_OUT: "json=/results/otel-export-overhead.json"
     depends_on:
       server: { condition: service_healthy }
-      otel-collector: { condition: service_healthy }
+      # service_started, not service_healthy: the scratch-based collector image
+      # cannot be health-probed (see the otel-collector comment above). The
+      # BatchSpanProcessor tolerates a not-yet-ready collector via buffering and
+      # retries, so a started container is a sufficient precondition here.
+      otel-collector: { condition: service_started }
     command: run /scripts/otel-export-overhead.js
     profiles: ["otel-export"]

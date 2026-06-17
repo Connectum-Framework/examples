@@ -97,12 +97,18 @@ docker compose --profile load up k6-basic-load --build --abort-on-container-exit
 
 ### OTel OTLP Export Overhead
 
-Measures the p50/p95/p99 latency delta and throughput delta between the baseline (port 8081) and the full-chain-with-real-OTLP-exporter configuration (port 8085). Runs for ~5 minutes at 100 VUs:
+Measures the p50/p95/p99 latency delta between the baseline (port 8081) and the full-chain-with-real-OTLP-exporter configuration (port 8085). Runs for ~5 minutes at 100 VUs:
 
 ```bash
 OTEL_EXPORT_ENABLED=1 docker compose --profile otel-export up \
-  --build --abort-on-container-exit
+  server otel-collector k6-otel-export --build --abort-on-container-exit
 ```
+
+Naming the three services explicitly is deliberate: `k6-interceptor-overhead`
+has no profile, so a bare `docker compose --profile otel-export up` would start
+it too and run the interceptor benchmark concurrently, stealing CPU from and
+contaminating the OTLP-export measurement. Listing only the services this
+scenario needs keeps the run isolated.
 
 What this measures that the `k6-interceptor-overhead` scenario does *not*:
 

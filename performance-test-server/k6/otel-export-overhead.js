@@ -22,7 +22,6 @@
  *
  * Output:
  *   p50/p95/p99 latency per config
- *   Throughput (requests/sec) per config
  *   Export-overhead delta printed in teardown
  *   JSON summary written to /results/otel-export-overhead.json when run via
  *   docker compose (K6_OUT env var).
@@ -174,7 +173,7 @@ export function setup() {
     console.log("\n  Configurations to test:");
     console.log(`   1. Baseline (no interceptors, no OTel) - :${BASELINE_PORT}`);
     console.log(`   2. OTel export (full chain + real OTLP/gRPC)  - :${OTEL_EXPORT_PORT}`);
-    console.log("\n  Goal: measure p50/p95/p99 latency delta and throughput delta");
+    console.log("\n  Goal: measure the p50/p95/p99 latency delta");
     console.log("        caused by the stock @connectum/otel export path.");
 
     const ports = [
