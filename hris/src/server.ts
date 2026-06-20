@@ -12,6 +12,10 @@
  *  - `remoteResolver` — maps a remote service `typeName` to its endpoint env var.
  *  - the EventBus role — only the payroll process subscribes to LeaveApproved.
  *
+ * Persistence (Phase 1): DirectoryService is backed by Drizzle + Postgres. The
+ * db is injected so tests can pass a PGlite (in-process Postgres) db; production
+ * defaults to a postgres.js client over `DATABASE_URL`.
+ *
  * @module server
  */
 
@@ -23,8 +27,10 @@ import { Healthcheck } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
 import { serviceCatalog } from "#gen/catalog.gen.ts";
+import { createDb } from "#db/client.ts";
+import type { Db } from "#db/client.ts";
 import { buildEventBus } from "#eventBus.ts";
-import { directoryService } from "#services/directoryService.ts";
+import { createDirectoryService } from "#services/directoryService.ts";
 import { payrollService } from "#services/payrollService.ts";
 import { makeTimeOffService } from "#services/timeOffService.ts";
 import { resolveTopology } from "#topology.ts";
@@ -42,6 +48,14 @@ export interface BuildServerOptions {
      * Defaults to a bus built from the resolved topology.
      */
     readonly eventBus?: EventBus & EventBusLike;
+    /**
+     * Directory database override. Tests inject a PGlite-backed Drizzle db so the
+     * e2e runs without Docker; defaults to a postgres.js client over
+     * `DATABASE_URL` (see `#db/client.ts`). Injected for EVERY topology that
+     * mounts the directory (including the monolith, where the TimeOff handler's
+     * `ctx.call` to GetEmployee runs in-process).
+     */
+    readonly db?: Db;
 }
 
 /**
@@ -54,6 +68,12 @@ export function buildServer(options: BuildServerOptions = {}): Server {
     const topology = options.topology ?? resolveTopology();
     const port = options.port ?? Number(process.env.PORT ?? 5000);
     const eventBus = options.eventBus ?? buildEventBus({ localTypeNames: topology.localTypeNames });
+
+    // Directory persistence. postgres.js connects lazily, so constructing the
+    // default db is harmless even when the directory isn't mounted locally; the
+    // connection is opened only when DirectoryService actually queries.
+    const db = options.db ?? createDb();
+    const directoryService = createDirectoryService(db);
 
     return createServer({
         // All three definitions are always passed; `enabledServices` decides
