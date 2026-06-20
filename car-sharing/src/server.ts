@@ -5,9 +5,10 @@
  * What stays constant across topologies:
  *  - the same three service definitions are passed to `createServer`;
  *  - the same generated `serviceCatalog` types and routes every `ctx.call`;
- *  - the same gateway interceptor chain (default → OTel → JWT auth → proto
- *    authz). The chain is uniform; per-method behaviour comes from proto
- *    annotations (fleet/billing are `public`, TripService requires auth).
+ *  - the same gateway interceptor chain in ADR-024 order (errorHandler → JWT
+ *    auth → proto authz → OTel → validation). The chain is uniform; per-method
+ *    behaviour comes from proto annotations (fleet/billing are `public`,
+ *    TripService requires auth).
  *
  * What env changes:
  *  - `enabledServices` — which of the three are mounted locally (undefined =
@@ -22,7 +23,7 @@ import { createServer } from "@connectum/core";
 import type { Server } from "@connectum/core";
 import type { Interceptor } from "@connectrpc/connect";
 import { Healthcheck } from "@connectum/healthcheck";
-import { createDefaultInterceptors } from "@connectum/interceptors";
+import { createDefaultInterceptors, createErrorHandlerInterceptor } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
 import { serviceCatalog } from "#gen/catalog.gen.ts";
 import { buildAuthInterceptors } from "#auth.ts";
@@ -60,9 +61,14 @@ export function buildServer(options: BuildServerOptions = {}): Server {
 
     const otelInterceptor = buildOtelInterceptor();
     const interceptors: Interceptor[] = [
-        ...createDefaultInterceptors(),
-        ...(otelInterceptor ? [otelInterceptor] : []),
+        // ADR-024 chain order: errorHandler first, then auth/authz immediately
+        // after it (so unauthenticated requests are rejected before validation),
+        // then OTel — placed after authz so getAuthContext() is populated for
+        // enduser span attributes — then the default validation chain.
+        createErrorHandlerInterceptor(),
         ...buildAuthInterceptors({ secret: jwtSecret }),
+        ...(otelInterceptor ? [otelInterceptor] : []),
+        ...createDefaultInterceptors({ errorHandler: false }),
     ];
 
     return createServer({

@@ -181,6 +181,8 @@ Business metrics from `getMeter()` — order rates by product, stock availabilit
 | `clickhouse-users.xml`      | ClickHouse user permissions for Docker network           |
 | `scripts/generate-traffic.sh`| Traffic generation script with progress reporting        |
 | `service/`                   | Shared microservice source (order + inventory)           |
+| `ARCHITECTURE.md`            | Coroot architecture & Docker deployment notes            |
+| `DASHBOARD.md`               | PromQL queries for a custom business-metrics dashboard   |
 
 ## Node Agent (Linux Only)
 

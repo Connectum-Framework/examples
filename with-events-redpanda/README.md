@@ -322,11 +322,13 @@ services:
     ports: ["8080:8080"]
 
   order-service:               # Order microservice
+    build: .                   # built from the local Dockerfile
     ports: ["5001:5001"]
     environment:
       - REDPANDA_BROKERS=redpanda:29092
 
   inventory-service:           # Inventory microservice
+    build: .                   # built from the local Dockerfile
     ports: ["5002:5002"]
     environment:
       - REDPANDA_BROKERS=redpanda:29092

@@ -18,7 +18,7 @@ This allows k6 benchmarks to accurately measure the overhead introduced by each 
 
 ## Requirements
 
-- **Node.js**: >=25.2.0
+- **Node.js**: >=25.2.0 — required because this example runs its TypeScript sources directly via native type stripping (`node src/index.ts`). Consuming the framework as compiled packages needs only Node.js >=22.13.0.
 - **pnpm**: >=10
 
 ## Installation
@@ -43,6 +43,9 @@ node examples/performance-test-server/src/index.ts
 # Or with auto-reload during development
 node --watch examples/performance-test-server/src/index.ts
 ```
+
+> From within `examples/performance-test-server`, the equivalent package.json
+> scripts are available: `pnpm start` and `pnpm dev` (auto-reload).
 
 Expected output:
 
@@ -306,4 +309,4 @@ pnpm install
 
 ## License
 
-Apache 2.0
+Apache-2.0

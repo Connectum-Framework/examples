@@ -2,7 +2,7 @@
  * Rate Limit Interceptor
  *
  * Limits request rate for the RateLimitedEcho RPC method using
- * a sliding window counter per client IP address.
+ * a fixed-window counter per client IP address.
  *
  * @module rateLimitInterceptor
  */
