@@ -120,7 +120,9 @@ declare module "@connectum/core" {
     "payroll.v1.PayrollEventHandlers/OnLeaveApproved": { request: LeaveApproved; response: Empty };
     "timeoff.v1.TimeOffService/RequestLeave": { request: RequestLeaveRequest; response: RequestLeaveResponse };
   }
-  interface ConnectumStreamMap {}
+  interface ConnectumStreamMap {
+    "directory.v1.DirectoryService/ListEmployees": { request: ListEmployeesRequest; response: Employee; kind: "server-stream" };
+  }
 }
 ```
 
@@ -229,7 +231,7 @@ docker compose --profile mono up    # mono process + NATS
 Or directly, against a running NATS broker:
 
 ```bash
-NATS_URL=nats://localhost:4222 pnpm start   # SERVICES unset → all services local
+DATABASE_URL=postgresql://hris:hris@localhost:5432/hris NATS_URL=nats://localhost:4222 pnpm start
 ```
 
 ### Microservices (split, requires NATS)
@@ -244,9 +246,9 @@ docker compose --profile split up   # directory + timeoff + payroll + NATS
 Or run roles directly (a NATS broker on `NATS_URL` is required for the event flow):
 
 ```bash
-PORT=5001 SERVICES=directory.v1.DirectoryService node src/index.ts
-PORT=5002 SERVICES=timeoff.v1.TimeOffService DIRECTORY_ADDR=http://localhost:5001 node src/index.ts
-PORT=5003 SERVICES=payroll.v1.PayrollService node src/index.ts
+DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5001 SERVICES=directory.v1.DirectoryService node src/index.ts
+DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5002 SERVICES=timeoff.v1.TimeOffService DIRECTORY_ADDR=http://localhost:5001 node src/index.ts
+DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5003 SERVICES=payroll.v1.PayrollService node src/index.ts
 ```
 
 ## Testing note
