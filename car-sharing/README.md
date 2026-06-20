@@ -5,7 +5,7 @@ Connectum image runs as three microservices on Kubernetes behind an Istio mesh,
 showing three things that are normally hard, wired straight from the framework:
 
 - **Gateway auth at the edge** — JWT authentication + proto-driven authorization
-  (`@connectum/auth`) on the public `trips` service.
+  (`@connectum/auth`) on the public-facing `trips` service.
 - **Cross-service `ctx.call` across split pods** — the trip handler calls fleet
   and billing through the typed service catalog; the framework picks in-process
   or network transport from env, no handler changes.
@@ -133,6 +133,9 @@ pnpm run docker:build    # docker build -t car-sharing:local .
 
 The Dockerfile is multi-stage and role-agnostic: `node src/index.ts` is the
 entrypoint for every role (engines.node `>=25.2.0` runs TypeScript natively).
+No lockfile is committed for this example; the `deps` stage runs `pnpm install`,
+which resolves `@connectum/*` to the published 1.0.0 versions pinned in
+`package.json` and generates the lockfile inside the image.
 
 ## Deploy to Kubernetes + Istio
 

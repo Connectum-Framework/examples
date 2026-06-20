@@ -44,7 +44,7 @@ The service is plain TypeScript — it runs unchanged on Node.js, Bun and tsx:
 ```bash
 pnpm start          # Node.js (native type stripping)
 pnpm start:bun      # Bun
-pnpm start:tsx      # tsx (any Node.js 22+)
+pnpm start:tsx      # tsx
 ```
 
 ## Next

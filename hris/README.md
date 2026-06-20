@@ -80,6 +80,7 @@ src/
   services/timeOffService.ts         # ctx.call validation + publishes LeaveApproved
   services/payrollService.ts         # GetBalance + LeaveApproved subscriber route
   topology.ts                        # env → enabledServices + remoteResolver
+  events.ts                          # LEAVE_APPROVED_TOPIC constant (publisher/subscriber match)
   eventBus.ts                        # one bus per process; payroll subscribes only when local
   server.ts                          # buildServer() — same code, both topologies
   index.ts                           # env-driven entry point

@@ -26,3 +26,4 @@ const transport = createConnectTransport({
 ## Dependencies
 
 - `@connectrpc/connect` — ConnectRPC interceptor type
+- `@connectrpc/connect-node` — Node.js transport (`createConnectTransport`) used in the Usage example

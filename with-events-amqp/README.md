@@ -119,7 +119,7 @@ docker compose down
 
 ### Step 1. RabbitMQ Management UI — Overview
 
-After running `docker compose up -d`, open http://localhost:15672 and log in with guest/guest. The Overview tab shows node status, message rates, and connection counts.
+After running `docker compose up -d rabbitmq` (per the Quick Start above), open http://localhost:15672 and log in with guest/guest. The Overview tab shows node status, message rates, and connection counts.
 
 ![RabbitMQ Overview](screenshots/screenshot-overview.png)
 

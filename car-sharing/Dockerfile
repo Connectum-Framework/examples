@@ -7,9 +7,10 @@
 FROM node:25-slim AS deps
 RUN npm install -g pnpm
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# The committed lockfile already resolves @connectum/* to published versions.
-RUN pnpm install --frozen-lockfile --prod
+COPY package.json pnpm-workspace.yaml ./
+# No lockfile is committed for this example; pnpm resolves @connectum/* to the
+# published 1.0.0 versions pinned in package.json and writes a lockfile here.
+RUN pnpm install --prod
 
 # ── runtime: copy deps + source + generated proto code ──────────────────────
 FROM node:25-slim AS runtime
