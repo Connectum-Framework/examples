@@ -20,8 +20,12 @@ wiring.
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
 | `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)` | JWT required (proto `default_policy: allow`) |
-| `fleet.v1.FleetService`   | internal leaf   | `GetVehicle(id)`             | `public` (proto `service_auth.public`) |
+| `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `public` (proto `service_auth.public`) |
 | `billing.v1.BillingService` | internal leaf | `OpenTab(tripId)`            | `public`                              |
+
+`FleetService` is backed by a real database (Drizzle ORM + Postgres) — see
+[Persistence](#persistence-fleetservice--drizzle--postgres). The trip/billing
+services remain in-memory for now (later phases).
 
 `StartTrip` orchestrates two cross-service calls:
 
@@ -108,11 +112,77 @@ pnpm test             # in-process e2e: gateway auth, ctx.call, error paths
 pnpm start            # monolith on :5000 (SERVICES unset)
 ```
 
-The e2e suite (`tests/e2e/e2e.test.ts`) runs the whole app in one process and
-asserts: the happy `StartTrip` path (both `ctx.call`s), `FAILED_PRECONDITION` for
-an unavailable vehicle, `NOT_FOUND` propagated from fleet, and the gateway
-rejecting unauthenticated / invalid-token requests while the public fleet service
-is reachable without a token.
+The e2e suite runs the whole app in one process and asserts: the happy
+`StartTrip` path (both `ctx.call`s), `FAILED_PRECONDITION` for an unavailable
+vehicle, `NOT_FOUND` propagated from fleet, the gateway rejecting unauthenticated
+/ invalid-token requests while the public fleet service is reachable without a
+token (`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
+`GetVehicle`, streaming `ListVehicles` with filter + cursor pagination,
+`ReserveVehicle`/`ReleaseVehicle` — over a real gRPC client
+(`tests/e2e/fleet.test.ts`).
+
+## Persistence: FleetService + Drizzle + Postgres
+
+FleetService is the vehicle **system of record**, backed by [Drizzle ORM](https://orm.drizzle.team)
+over Postgres (the [`postgres`](https://github.com/porsager/postgres) / postgres.js
+driver). The `vehicles` table (`src/db/schema.ts`) carries `id`, `model`,
+`available`, a lifecycle `status` (`available` | `reserved` | `maintenance`),
+`lat`/`lng`, and `updated_at`. The invariant the service keeps is
+`available <=> status === "available"`.
+
+The RPC surface demonstrates a realistic data-access layer:
+
+- **`GetVehicle`** — point read; `NOT_FOUND` on an unknown id. Still returns
+  `Vehicle.available`, which the trip handler's `ctx.call` depends on.
+- **`ListVehicles`** — **server-streaming** complex query: a SQL
+  `where`/`order by id`/`limit` with **cursor pagination** (the client re-sends
+  the last streamed `Vehicle.id` as `page_token`), optionally filtered to
+  available vehicles via `available_only`.
+- **`ReserveVehicle`** — atomic `UPDATE … WHERE id=? AND available=true`;
+  `FAILED_PRECONDITION` if already reserved / in maintenance, `NOT_FOUND` if
+  unknown.
+- **`ReleaseVehicle`** — returns a vehicle to the available pool;
+  `FAILED_PRECONDITION` for a maintenance vehicle, `NOT_FOUND` if unknown.
+
+### Dependency injection — why the tests need no Docker
+
+`buildServer({ db })` injects the database into `createFleetService(db)`. In
+production that `db` is a postgres.js client over `DATABASE_URL`; the **e2e tests
+inject a [PGlite](https://pglite.dev) in-process Postgres** through the same
+parameter — Postgres compiled to WASM, no container required. `src/db/schema.ts`
+is the schema source of truth; `pnpm db:generate` derives versioned SQL into
+`drizzle/`. Both the docker-compose flow (`pnpm db:migrate`) and the PGlite test
+migrator apply those **same** generated migrations, then seed the shared fleet
+(`src/db/seed.ts`) — so the persistence e2e is fully real but self-contained.
+
+### Run with Postgres (docker-compose)
+
+The repo ships a `docker-compose.yml` with a Postgres service (healthcheck) and
+the app wired via `DATABASE_URL`:
+
+```bash
+docker compose up -d postgres            # start Postgres only
+
+# Apply migrations and seed the fleet (DATABASE_URL points at the compose Postgres):
+export DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing
+pnpm db:migrate                          # apply drizzle/ migrations → vehicles table
+pnpm db:seed                             # seed the demo fleet
+
+docker compose up app                    # monolith on :5000 against Postgres
+```
+
+Schema/migration scripts:
+
+| Command           | Purpose                                                              |
+| ----------------- | ------------------------------------------------------------------- |
+| `pnpm db:generate`| Generate versioned SQL migrations from `src/db/schema.ts` → `drizzle/` |
+| `pnpm db:migrate` | Apply the `drizzle/` migrations to the Postgres at `DATABASE_URL` (same files the test migrator applies) |
+| `pnpm db:push`    | Dev convenience: diff-sync `schema.ts` to the DB without migrations  |
+| `pnpm db:seed`    | Seed the demo fleet (drops + inserts `src/db/seed.ts`)              |
+
+> `pnpm start` / `pnpm dev` now require `DATABASE_URL` (FleetService opens its
+> connection lazily on the first query). The e2e tests do **not** — they inject
+> PGlite.
 
 ### `ctx.call` error propagation
 
@@ -209,17 +279,23 @@ Point `OTEL_EXPORTER_OTLP_ENDPOINT` at your Collector (the manifests assume
 car-sharing/
 ├── proto/                      fleet, trips, billing protos (+ auth options import)
 ├── src/
-│   ├── services/               fleetService, billingService, tripService (ctx.call)
+│   ├── db/                     Drizzle: schema.ts, client.ts (Db DI), seed.ts
+│   ├── services/               fleetService (Drizzle), billingService, tripService
 │   ├── topology.ts             env → mono/split (SERVICES + perServiceEnvResolver)
 │   ├── auth.ts                 JWT + proto authz interceptors (uniform chain)
 │   ├── observability.ts        env-gated OpenTelemetry wiring
-│   ├── server.ts               buildServer() — services + catalog + interceptors
+│   ├── server.ts               buildServer() — services + catalog + interceptors + db
 │   └── index.ts                entry point (role by SERVICES)
-├── tests/e2e/e2e.test.ts       monolith, in-process gateway e2e
+├── drizzle/                    generated SQL migrations (single source of truth)
+├── drizzle.config.ts           drizzle-kit config (schema → migrations / push)
+├── tests/
+│   ├── helpers/db.ts           PGlite test db (migrate + seed), injected via DI
+│   └── e2e/                     e2e.test.ts (gateway/ctx.call) + fleet.test.ts (persistence)
 ├── k8s/                        namespace, rbac, secret, configmap, deployments,
 │                               services, hpa
 ├── istio/                      peer-auth, authz, destination-rule, virtual-service,
 │                               gateway, canary
+├── docker-compose.yml          local monolith + Postgres (healthcheck)
 ├── Dockerfile                  one multi-stage image, role by env
 ├── buf.yaml / buf.gen.yaml     dual-module (own protos + auth options) + catalog plugin
 ├── package.json / tsconfig.json / pnpm-workspace.yaml

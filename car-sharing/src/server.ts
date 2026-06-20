@@ -27,9 +27,11 @@ import { createDefaultInterceptors, createErrorHandlerInterceptor } from "@conne
 import { Reflection } from "@connectum/reflection";
 import { serviceCatalog } from "#gen/catalog.gen.ts";
 import { buildAuthInterceptors } from "#auth.ts";
+import { createDb } from "#db/client.ts";
+import type { Db } from "#db/client.ts";
 import { buildOtelInterceptor } from "#observability.ts";
 import { billingService } from "#services/billingService.ts";
-import { fleetService } from "#services/fleetService.ts";
+import { createFleetService } from "#services/fleetService.ts";
 import { tripService } from "#services/tripService.ts";
 import { resolveTopology } from "#topology.ts";
 import type { Topology } from "#topology.ts";
@@ -45,6 +47,14 @@ export interface BuildServerOptions {
     readonly topology?: Topology;
     /** JWT secret override (tests inject the shared test secret). Defaults to `JWT_SECRET` env. */
     readonly jwtSecret?: string;
+    /**
+     * Fleet database override. Tests inject a PGlite-backed Drizzle db so the
+     * e2e runs without Docker; defaults to a postgres.js client over
+     * `DATABASE_URL` (see `#db/client.ts`). Injected for EVERY topology that
+     * mounts the fleet (including the monolith, where the trip handler's
+     * `ctx.call` to FleetService runs in-process).
+     */
+    readonly db?: Db;
 }
 
 /**
@@ -58,6 +68,12 @@ export function buildServer(options: BuildServerOptions = {}): Server {
     const topology = options.topology ?? resolveTopology();
     const port = options.port ?? Number(process.env.PORT ?? 5000);
     const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? DEV_JWT_SECRET;
+
+    // Fleet persistence. postgres.js connects lazily, so constructing the
+    // default db is harmless even when the fleet isn't mounted locally; the
+    // connection is opened only when FleetService actually queries.
+    const db = options.db ?? createDb();
+    const fleetService = createFleetService(db);
 
     const otelInterceptor = buildOtelInterceptor();
     const interceptors: Interceptor[] = [

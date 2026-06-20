@@ -38,6 +38,7 @@ import { JWT_ISSUER } from "#auth.ts";
 import { buildServer } from "#server.ts";
 import { resetTabs, tabCount } from "#services/billingService.ts";
 import { resolveTopology } from "#topology.ts";
+import { makeTestDb } from "../helpers/db.ts";
 
 describe("E2E: car-sharing monolith (in-process gateway, no cluster)", () => {
     let server: Server;
@@ -47,9 +48,12 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster)", () => {
     before(async () => {
         // Force monolith topology so fleet, trips and billing are all mounted
         // locally and ctx.call routes in-process. Inject the shared test secret
-        // so the JWT interceptor verifies tokens minted below.
+        // so the JWT interceptor verifies tokens minted below, and a
+        // PGlite-backed Drizzle db so FleetService persists without Docker (the
+        // trip handler's in-process ctx.call to GetVehicle reads from it).
         const topology = resolveTopology("*");
-        server = buildServer({ port: 0, topology, jwtSecret: TEST_JWT_SECRET });
+        const db = await makeTestDb();
+        server = buildServer({ port: 0, topology, jwtSecret: TEST_JWT_SECRET, db });
         await server.start();
         const port = server.address?.port ?? 0;
 

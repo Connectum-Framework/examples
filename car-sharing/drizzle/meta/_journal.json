@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781980551863,
+      "tag": "0000_big_christian_walker",
+      "breakpoints": true
+    }
+  ]
+}

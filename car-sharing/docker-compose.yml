@@ -1,0 +1,51 @@
+# Local monolith stack — the car-sharing app + its Postgres (Phase 1 persistence).
+#
+# FleetService is backed by Drizzle ORM over Postgres. This compose file brings
+# up Postgres with a healthcheck and runs the app as the monolith (every service
+# in-process, SERVICES unset), wired to the database via DATABASE_URL.
+#
+# First run — apply migrations and seed the fleet:
+#
+#   docker compose up -d postgres            # start Postgres only
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing \
+#     pnpm db:migrate                        # apply drizzle/ migrations → vehicles table
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing \
+#     pnpm db:seed                           # seed the demo fleet
+#   docker compose up app                    # start the app (monolith on :5000)
+#
+# The e2e tests do NOT need this — they use an in-process PGlite Postgres.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: car_sharing
+      POSTGRES_PASSWORD: car_sharing
+      POSTGRES_DB: car_sharing
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U car_sharing -d car_sharing"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  app:
+    build: .
+    image: car-sharing:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # Monolith: SERVICES unset → every service mounted in-process.
+      DATABASE_URL: postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    ports:
+      - "5000:5000"
+
+volumes:
+  pgdata:
