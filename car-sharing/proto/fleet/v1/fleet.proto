@@ -15,11 +15,35 @@ import "connectum/auth/v1/options.proto";
 // rejected as unauthenticated by the same interceptor chain that protects the
 // edge. In production the network boundary is enforced by Istio mTLS + an
 // AuthorizationPolicy that only admits the trips ServiceAccount (see istio/).
+//
+// Persistence (Phase 1): the fleet is the only service backed by a real
+// database — Drizzle ORM over Postgres (postgres.js). Tests inject a PGlite
+// in-process Postgres via the same DI the server uses, so no Docker is needed.
 service FleetService {
   option (connectum.auth.v1.service_auth) = { public: true };
 
   // GetVehicle returns a vehicle by id, or NOT_FOUND if unknown.
   rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse) {}
+
+  // ListVehicles streams vehicles matching a filter, page by page.
+  //
+  // Server-streaming: the handler is a SQL query (`where`/`order by id`/`limit`)
+  // with cursor pagination — the caller re-sends the id of the last streamed
+  // vehicle as `page_token` to fetch the next page. With `available_only` the
+  // query is narrowed to currently available vehicles.
+  rpc ListVehicles(ListVehiclesRequest) returns (stream Vehicle) {}
+
+  // ReserveVehicle marks a vehicle reserved (available=false,
+  // status="reserved") and returns it. NOT_FOUND if the id is unknown;
+  // FAILED_PRECONDITION if the vehicle is already reserved or in maintenance
+  // (not currently available).
+  rpc ReserveVehicle(ReserveVehicleRequest) returns (Vehicle) {}
+
+  // ReleaseVehicle returns a vehicle to the available pool (available=true,
+  // status="available") and returns it. NOT_FOUND if the id is unknown.
+  // FAILED_PRECONDITION if the vehicle is in maintenance (cannot be released
+  // back into service from the fleet API).
+  rpc ReleaseVehicle(ReleaseVehicleRequest) returns (Vehicle) {}
 }
 
 message GetVehicleRequest {
@@ -30,8 +54,42 @@ message GetVehicleResponse {
   Vehicle vehicle = 1;
 }
 
+message ListVehiclesRequest {
+  // When true, only vehicles that are currently available are streamed.
+  bool available_only = 1;
+  // Max vehicles per page. Server clamps to a sane default/max when 0 or large.
+  int32 page_size = 2;
+  // Cursor: the id of the last vehicle from the previous page. Empty = first
+  // page. The stream itself carries no token, so the client derives the cursor
+  // from the last streamed Vehicle.id.
+  string page_token = 3;
+}
+
+message ReserveVehicleRequest {
+  string id = 1;
+}
+
+message ReleaseVehicleRequest {
+  string id = 1;
+}
+
+// Location is a vehicle's last-known position.
+message Location {
+  double lat = 1;
+  double lng = 2;
+}
+
 message Vehicle {
   string id = 1;
   string model = 2;
+  // available <=> status == "available". Kept for the trip handler, which only
+  // checks availability.
   bool available = 3;
+  // Lifecycle state: "available" | "reserved" | "maintenance". Modeled as a
+  // string (not a proto enum) so the generated TypeScript stays erasable —
+  // this example's tsconfig sets `erasableSyntaxOnly`, which rejects the native
+  // `enum` that protoc-gen-es emits. The string domain is pinned in code via a
+  // `const` object (see src/db/schema.ts VehicleStatus).
+  string status = 4;
+  Location location = 5;
 }
