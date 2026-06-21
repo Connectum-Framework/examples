@@ -50,6 +50,8 @@
     "@connectrpc/connect-node": "^2.1.1",
     "@connectum/auth": "^1.0.0",
     "@connectum/core": "^1.0.0",
+    "@connectum/events": "^1.0.0",
+    "@connectum/events-nats": "^1.0.0",
     "@connectum/healthcheck": "^1.0.0",
     "@connectum/interceptors": "^1.0.0",
     "@connectum/otel": "^1.0.0",

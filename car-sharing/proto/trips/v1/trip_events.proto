@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package trips.v1;
+
+import "connectum/events/v1/options.proto";
+import "google/protobuf/empty.proto";
+
+// TripCompleted is the integration event broadcast EXACTLY ONCE when a trip's
+// billing tab is SETTLED (the saga's terminal happy-path state). It is consumed
+// INDEPENDENTLY by three reactors — pricing/analytics, audit-log, and
+// notifications — each on its own EventBus with its own consumer group, so the
+// single domain fact fans out 1→N rather than being orchestrated.
+//
+// EventBus is used here for BROADCAST only; durability/ordering stays Temporal's
+// job. A lost broadcast must NEVER roll back a settled, paid trip.
+message TripCompleted {
+  // The trip's id (also the reactor idempotency key).
+  string trip_id = 1;
+  // The renter who took the trip — the notification target.
+  string user_id = 2;
+  // The vehicle that was driven.
+  string vehicle_id = 3;
+  // The settled charge in minor units (cents), for analytics / the receipt.
+  int64 amount_cents = 4;
+  // The drive duration in milliseconds, for analytics.
+  int64 duration_ms = 5;
+}
+
+// TripEventHandlers is an event-handler service: each RPC is a subscription.
+// The (connectum.events.v1.event).topic option pins the topic so the PUBLISHER
+// (which lists this service in `publishes`) and EACH subscriber (which registers
+// this service via `routes` on its OWN bus) agree on the topic from the proto
+// option alone — no raw topic string is ever hand-passed to publish().
+//
+// One shared service is reused by the publisher and all three reactors;
+// independence between reactors comes from SEPARATE buses + DISTINCT consumer
+// groups, not from separate proto services (registering the same service on
+// three separate buses is fine — the duplicate-topic guard is per-bus).
+service TripEventHandlers {
+  // OnTripCompleted reacts to a settled trip. Each reactor binds its OWN handler
+  // function to this RPC on its OWN bus.
+  rpc OnTripCompleted(TripCompleted) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "trips.completed";
+  }
+}

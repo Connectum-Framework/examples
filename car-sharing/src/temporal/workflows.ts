@@ -68,6 +68,20 @@ const acts = proxyActivities<typeof activities>({
     },
 });
 
+/**
+ * SEPARATE proxy for the terminal broadcast, so its retry level is independent
+ * of the saga steps. `maximumAttempts` here is a delivery-vs-double-fire DIAL,
+ * NOT a safety lever: more attempts = better delivery but at-least-once
+ * duplication (absorbed by idempotent reactors); fewer = lost-on-blip. The
+ * compensation guard is the SUCCESS-ONLY tail below (outside the saga
+ * try/catch), NOT this attempt count — a failed broadcast can never roll back a
+ * settled trip regardless of the value here.
+ */
+const broadcast = proxyActivities<typeof activities>({
+    startToCloseTimeout: "30 seconds",
+    retry: { initialInterval: "1 second", maximumAttempts: 3 },
+});
+
 /** Simulated drive duration (time-skipped instantly in tests). */
 const DRIVE_DURATION_MS = 60_000;
 
@@ -126,8 +140,6 @@ export async function TripWorkflow(input: TripWorkflowInput): Promise<TripStatus
         // Step 7 — settle the tab. Terminal; no compensation.
         await acts.settle({ tripId });
         status = TripStatus.SETTLED;
-
-        return status;
     } catch (err) {
         // Unwind in LIFO order; each compensation is isolated so the unwind
         // never throws. Temporal already retried each forward+comp activity.
@@ -144,4 +156,20 @@ export async function TripWorkflow(input: TripWorkflowInput): Promise<TripStatus
         if (err instanceof ApplicationFailure) throw err;
         throw ApplicationFailure.create({ message: String(err), type: "TripWorkflowFailed" });
     }
+
+    // SUCCESS-ONLY TAIL (Phase 3 broadcast) — reached ONLY when the trip is
+    // SETTLED (both catch branches above rethrow, so a compensated run never
+    // gets here). The publish is the LAST awaited step before `return`, in its
+    // OWN try/catch that is NOT the saga's catch and does NOT rethrow. This
+    // STRUCTURAL placement (not the attempt count) is the compensation guard: a
+    // failed/timed-out broadcast can never trigger compensation on a settled,
+    // paid trip. NO compensation is pushed for the publish — it is fire-and-
+    // forget; the reactors' work is non-durable and reconstructable.
+    try {
+        await broadcast.publishTripCompleted({ tripId, userId, vehicleId, durationMs: DRIVE_DURATION_MS });
+    } catch (err) {
+        log.warn("TripCompleted broadcast failed; trip stays SETTLED", { tripId, error: String(err) });
+    }
+
+    return status;
 }

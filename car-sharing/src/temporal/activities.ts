@@ -28,7 +28,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { ApplicationFailure } from "@temporalio/activity";
 import { AddChargeRequestSchema, OpenTabRequestSchema, RefundChargeRequestSchema, SettleRequestSchema, VoidTabRequestSchema } from "#gen/billing/v1/billing_pb.ts";
 import { ReleaseVehicleRequestSchema, ReserveVehicleRequestSchema } from "#gen/fleet/v1/fleet_pb.ts";
+import { TripCompletedSchema } from "#gen/trips/v1/trip_events_pb.ts";
 import { EndTripRequestSchema, RecordTripRequestSchema } from "#gen/trips/v1/trips_pb.ts";
+import type { ManagedBus } from "#events/eventBus.ts";
+import { buildPublisherBus } from "#events/eventBus.ts";
 import type { ServiceClients } from "#temporal/clients.ts";
 import { createServiceClients } from "#temporal/clients.ts";
 import { TripStatus } from "#temporal/tripStatus.ts";
@@ -57,6 +60,39 @@ function clients(): ServiceClients {
         sharedClients = createServiceClients();
     }
     return sharedClients;
+}
+
+/**
+ * The publish-only EventBus used by `publishTripCompleted` to broadcast
+ * `TripCompleted`. Injected once (the worker builds + STARTS it before
+ * `worker.run()`; tests inject a `MemoryAdapter`-backed bus), and lazily built
+ * from `NATS_URL` if never injected — the same seam as {@link clients}.
+ */
+let publisherBus: ManagedBus | undefined;
+
+/**
+ * Inject the publisher bus (the worker passes its STARTED NATS bus; tests pass a
+ * started `MemoryAdapter`-backed bus). The caller owns the bus lifecycle
+ * (`start()`/`stop()`); this activity only `publish()`es on it.
+ *
+ * @param bus - A started publish-only bus, or `undefined` to reset (tests).
+ */
+export function setPublisherBus(bus: ManagedBus | undefined): void {
+    publisherBus = bus;
+}
+
+/**
+ * Get the publisher bus, building + STARTING a NATS-backed one lazily if none
+ * was injected. The lazily-built bus is cached for the worker's lifetime; it is
+ * NOT stopped here (the worker stops the injected one in its `finally`).
+ */
+async function getPublisherBus(): Promise<ManagedBus> {
+    if (publisherBus === undefined) {
+        const bus = buildPublisherBus();
+        await bus.start();
+        publisherBus = bus;
+    }
+    return publisherBus;
 }
 
 /** Compute a demo charge (in cents) from a trip's duration in milliseconds. */
@@ -142,4 +178,45 @@ export async function refundCharge(input: { tripId: string; chargeId: string }):
 /** Step 7 — settle (finalize) the tab. The terminal happy-path step. */
 export async function settle(input: { tripId: string }): Promise<void> {
     await clients().billing.settle(create(SettleRequestSchema, { tripId: input.tripId }));
+}
+
+// ── Terminal broadcast (Phase 3) ────────────────────────────────────────────
+
+/**
+ * Broadcast `TripCompleted` ONCE, after the trip is SETTLED.
+ *
+ * This is the saga's TERMINAL side effect: a fire-and-forget 1→N broadcast on
+ * the publish-only EventBus, fanned out to three independent reactors. It is the
+ * THIRD interaction mechanism (alongside sync `ctx.call` and the durable saga).
+ *
+ * Topic resolution: the bus lists `TripEventHandlers` in `publishes`, so
+ * `publish(TripCompletedSchema, …)` resolves `trips.completed` from the proto
+ * `(connectum.events.v1.event).topic` option — NO raw `{topic}` is passed.
+ *
+ * `amountCents` is RECOMPUTED here via the same `chargeCents(durationMs)` the
+ * billing charge used, because the workflow only carries `durationMs` (the
+ * saga's `addCharge` returns just the charge id). Recompute == the settled
+ * charge, so the event still carries all five documented fields.
+ *
+ * Failure semantics: this activity is invoked from a SUCCESS-ONLY workflow tail
+ * OUTSIDE the saga's try/catch (see `workflows.ts`); a failed broadcast can
+ * never reach compensation. The reactors' work (analytics / audit / receipt) is
+ * non-durable and reconstructable — losing one is acceptable; reversing a
+ * settled, paid trip is not. Anything that needs durable delivery belongs in
+ * Temporal (its own activity with retry), NOT on the EventBus.
+ *
+ * @param input - `{ tripId, userId, vehicleId, durationMs }`.
+ */
+export async function publishTripCompleted(input: { tripId: string; userId: string; vehicleId: string; durationMs: number }): Promise<void> {
+    const bus = await getPublisherBus();
+    await bus.publish(
+        TripCompletedSchema,
+        create(TripCompletedSchema, {
+            tripId: input.tripId,
+            userId: input.userId,
+            vehicleId: input.vehicleId,
+            amountCents: chargeCents(input.durationMs),
+            durationMs: BigInt(input.durationMs),
+        }),
+    );
 }
