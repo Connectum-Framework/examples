@@ -19,20 +19,20 @@ wiring.
 
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
-| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)` | JWT required (proto `default_policy: allow`) |
+| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | JWT required (proto `default_policy: allow`); `RecordTrip`/`EndTrip` method-level `public` (internal, worker-only) |
 | `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `public` (proto `service_auth.public`) |
-| `billing.v1.BillingService` | internal leaf | `OpenTab(tripId)`            | `public`                              |
+| `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `public`                              |
 
 `FleetService` is backed by a real database (Drizzle ORM + Postgres) — see
 [Persistence](#persistence-fleetservice--drizzle--postgres). The trip/billing
-services remain in-memory for now (later phases).
+services remain in-memory (durable state lives in Temporal workflow history).
 
-`StartTrip` orchestrates two cross-service calls:
-
-1. `ctx.call("fleet.v1.FleetService/GetVehicle", …)` — unavailable vehicle →
-   `FAILED_PRECONDITION`; unknown id → `NOT_FOUND` (propagated from fleet).
-2. `ctx.call("billing.v1.BillingService/OpenTab", …)` — opens the tab once the
-   trip starts.
+`StartTrip` does a **synchronous availability pre-check** (`ctx.call` to
+`FleetService/GetVehicle`) — unavailable vehicle → `FAILED_PRECONDITION`;
+unknown id → `NOT_FOUND` (propagated from fleet) — then **starts a durable
+`TripWorkflow`** and returns immediately with `{ trip, workflow_id }`. Live
+status is read via `GetTrip`. See [Phase 2](#phase-2--durable-saga-with-temporal)
+for the full saga.
 
 ## Architecture
 
@@ -58,8 +58,10 @@ flowchart TB
 
     client -->|"/trips.v1.TripService/StartTrip"| ingress
     ingress -->|"AuthorizationPolicy:<br/>ingress SA only"| tripsApp
-    tripsApp -->|"ctx.call GetVehicle<br/>(FLEET_ADDR)"| fleetApp
-    tripsApp -->|"ctx.call OpenTab<br/>(BILLING_ADDR)"| billingApp
+    tripsApp -->|"ctx.call GetVehicle<br/>(pre-check, FLEET_ADDR)"| fleetApp
+    tripsApp -.->|"starts TripWorkflow<br/>(Temporal client)"| temporal[(Temporal<br/>cluster)]
+    temporal -->|"worker activities<br/>(ReserveVehicle, RecordTrip…)"| fleetApp
+    temporal -->|"worker activities<br/>(OpenTab, AddCharge, Settle…)"| billingApp
 
     fleetApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
     billingApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
@@ -113,13 +115,15 @@ pnpm start            # monolith on :5000 (SERVICES unset)
 ```
 
 The e2e suite runs the whole app in one process and asserts: the happy
-`StartTrip` path (both `ctx.call`s), `FAILED_PRECONDITION` for an unavailable
-vehicle, `NOT_FOUND` propagated from fleet, the gateway rejecting unauthenticated
-/ invalid-token requests while the public fleet service is reachable without a
-token (`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
+`StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
+workflow_id }`), `FAILED_PRECONDITION` for an unavailable vehicle, `NOT_FOUND`
+propagated from fleet, the gateway rejecting unauthenticated / invalid-token
+requests while the public fleet service is reachable without a token
+(`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
 `GetVehicle`, streaming `ListVehicles` with filter + cursor pagination,
 `ReserveVehicle`/`ReleaseVehicle` — over a real gRPC client
-(`tests/e2e/fleet.test.ts`).
+(`tests/e2e/fleet.test.ts`). The saga itself (orchestration order +
+compensations) is covered by `tests/workflow/` and `tests/activity/`.
 
 ## Persistence: FleetService + Drizzle + Postgres
 
@@ -384,21 +388,25 @@ car-sharing/
 ├── src/
 │   ├── db/                     Drizzle: schema.ts, client.ts (Db DI), seed.ts
 │   ├── services/               fleetService (Drizzle), billingService, tripService
+│   ├── temporal/               TripWorkflow, activities, workflowClient, clients, config, tripStatus
 │   ├── topology.ts             env → mono/split (SERVICES + perServiceEnvResolver)
 │   ├── auth.ts                 JWT + proto authz interceptors (uniform chain)
 │   ├── observability.ts        env-gated OpenTelemetry wiring
 │   ├── server.ts               buildServer() — services + catalog + interceptors + db
+│   ├── worker.ts               Temporal worker process (bundles workflow via swc; `pnpm worker`)
 │   └── index.ts                entry point (role by SERVICES)
 ├── drizzle/                    generated SQL migrations (single source of truth)
 ├── drizzle.config.ts           drizzle-kit config (schema → migrations / push)
 ├── tests/
 │   ├── helpers/db.ts           PGlite test db (migrate + seed), injected via DI
-│   └── e2e/                     e2e.test.ts (gateway/ctx.call) + fleet.test.ts (persistence)
+│   ├── workflow/               TripWorkflow: forward order + reverse compensation (mocked activities)
+│   ├── activity/               Activity bodies: RPC wiring + compensation idempotency (in-process monolith)
+│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth, stub workflow client) + fleet.test.ts (persistence)
 ├── k8s/                        namespace, rbac, secret, configmap, deployments,
 │                               services, hpa
 ├── istio/                      peer-auth, authz, destination-rule, virtual-service,
 │                               gateway, canary
-├── docker-compose.yml          local monolith + Postgres (healthcheck)
+├── docker-compose.yml          profiles: `mono` (monolith + Postgres), `saga` (roles + worker + Temporal + Postgres)
 ├── Dockerfile                  one multi-stage image, role by env
 ├── buf.yaml / buf.gen.yaml     dual-module (own protos + auth options) + catalog plugin
 ├── package.json / tsconfig.json / pnpm-workspace.yaml
