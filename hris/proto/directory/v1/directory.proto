@@ -3,9 +3,22 @@ syntax = "proto3";
 package directory.v1;
 
 // DirectoryService is the employee system of record (leaf service).
+//
+// Persistence (Phase 1): the directory is backed by a real database — Drizzle
+// ORM over Postgres (postgres.js). Tests inject a PGlite in-process Postgres via
+// the same DI the server uses, so no Docker is needed for the e2e.
 service DirectoryService {
   // GetEmployee returns an employee by id, or NOT_FOUND if unknown.
   rpc GetEmployee(GetEmployeeRequest) returns (GetEmployeeResponse) {}
+
+  // ListEmployees streams employees matching a filter, page by page.
+  //
+  // Server-streaming: the handler is a SQL query (`where`/`order by id`/`limit`)
+  // with cursor pagination — the caller re-sends the id of the last streamed
+  // employee as `page_token` to fetch the next page. The optional `department`
+  // and `manager_id` filters narrow the stream; `manager_id` is the org-chart
+  // "direct reports of this manager" query.
+  rpc ListEmployees(ListEmployeesRequest) returns (stream Employee) {}
 }
 
 message GetEmployeeRequest {
@@ -16,8 +29,36 @@ message GetEmployeeResponse {
   Employee employee = 1;
 }
 
+message ListEmployeesRequest {
+  // Optional department filter. Empty = no department filter (all departments).
+  string department = 1;
+  // Optional manager filter — the org-chart "direct reports of this manager"
+  // query. Empty = no manager filter. Set it to an employee id to stream that
+  // person's direct reports.
+  string manager_id = 2;
+  // Max employees per page. Server clamps to a sane default/max when 0 or large.
+  int32 page_size = 3;
+  // Cursor: the id of the last employee from the previous page. Empty = first
+  // page. The stream itself carries no token, so the client derives the cursor
+  // from the last streamed Employee.id.
+  string page_token = 4;
+}
+
 message Employee {
   string id = 1;
   string name = 2;
   string department = 3;
+  // Work email address.
+  string email = 4;
+  // Job title (e.g. "Staff Engineer").
+  string title = 5;
+  // The id of this employee's manager, or empty for the top of the org chart
+  // (e.g. the CEO). Self-referencing within the directory.
+  string manager_id = 6;
+  // Employment lifecycle state: "active" | "onboarding" | "offboarded". Modeled
+  // as a string (not a proto enum) so the generated TypeScript stays erasable —
+  // this example's tsconfig sets `erasableSyntaxOnly`, which rejects the native
+  // `enum` that protoc-gen-es emits. The string domain is pinned in code via a
+  // `const` object (see src/db/schema.ts EmployeeStatus).
+  string status = 7;
 }

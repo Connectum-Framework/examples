@@ -30,6 +30,7 @@ import { buildServer } from "#server.ts";
 import { resetBalances } from "#services/payrollService.ts";
 import { resolveTopology } from "#topology.ts";
 import { MemoryAdapter } from "@connectum/events";
+import { makeTestDb } from "../helpers/db.ts";
 
 describe("E2E: HRIS monolith (in-process, no broker)", () => {
     let server: Server;
@@ -39,10 +40,13 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
         // Force monolith topology and an in-memory bus so publish → subscribe →
         // balance-decrement runs entirely in this process. The SAME bus instance
         // is injected into the server so the TimeOff publisher and the Payroll
-        // subscriber share it.
+        // subscriber share it. A PGlite-backed Drizzle db is injected too, so
+        // DirectoryService persists without Docker — the TimeOff handler's
+        // in-process ctx.call to GetEmployee reads from it.
         const topology = resolveTopology("*");
         const eventBus = buildEventBus({ localTypeNames: topology.localTypeNames, adapter: MemoryAdapter() });
-        server = buildServer({ port: 0, topology, eventBus });
+        const db = await makeTestDb();
+        server = buildServer({ port: 0, topology, eventBus, db });
         await server.start();
         const port = server.address?.port ?? 0;
         grpcTimeOff = createClient(TimeOffService, createGrpcTransport({ baseUrl: `http://localhost:${port}` }));
