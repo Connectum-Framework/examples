@@ -25,7 +25,7 @@ import { createServer } from "@connectum/core";
 import { Healthcheck } from "@connectum/healthcheck";
 import { createDefaultInterceptors, createErrorHandlerInterceptor } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
-import { buildAuthInterceptors } from "#auth.ts";
+import { buildAuthInterceptors, JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
 import type { Db } from "#db/client.ts";
 import { createDb } from "#db/client.ts";
 import { serviceCatalog } from "#gen/catalog.gen.ts";
@@ -39,8 +39,12 @@ import { createWorkflowClient } from "#temporal/workflowClient.ts";
 import type { Topology } from "#topology.ts";
 import { resolveTopology, TYPE_NAMES } from "#topology.ts";
 
-/** Default dev/test JWT secret. Production overrides with `JWT_SECRET`. */
-const DEV_JWT_SECRET = "connectum-test-secret-do-not-use-in-production";
+/**
+ * Default JWKS endpoint when none is configured: Ory Oathkeeper's PUBLIC
+ * signing-key API (compose service name + API port). Production / k8s override
+ * with `OATHKEEPER_JWKS_URI`; the e2e injects an in-process JWKS server URL.
+ */
+const DEFAULT_OATHKEEPER_JWKS_URI = "http://oathkeeper:4456/.well-known/jwks.json";
 
 /** Options for {@link buildServer}. */
 export interface BuildServerOptions {
@@ -48,8 +52,32 @@ export interface BuildServerOptions {
     readonly port?: number;
     /** Topology override (tests pass an explicit one); defaults to env resolution. */
     readonly topology?: Topology;
-    /** JWT secret override (tests inject the shared test secret). Defaults to `JWT_SECRET` env. */
-    readonly jwtSecret?: string;
+    /**
+     * JWKS endpoint serving Oathkeeper's RS256 public keys, used by the JWT
+     * interceptor's `createRemoteJWKSet` branch. Defaults to
+     * `OATHKEEPER_JWKS_URI` env, then the compose Oathkeeper API URL. Tests inject
+     * an in-process JWKS server so the production validation branch is exercised.
+     */
+    readonly jwksUri?: string;
+    /** JWT issuer (`iss`) to require. Defaults to `JWT_ISSUER` env, then {@link JWT_ISSUER}. */
+    readonly issuer?: string;
+    /** JWT audience (`aud`) to require. Defaults to `JWT_AUDIENCE` env, then {@link JWT_AUDIENCE}. */
+    readonly audience?: string;
+    /**
+     * Serve the EDGE over the Connect protocol on HTTP/1.1 (`true`) vs gRPC over
+     * plaintext h2c (`false`, default). On a plaintext listener these are MUTUALLY
+     * EXCLUSIVE in `@connectum/core`: `allowHTTP1: true` → `http.createServer`
+     * (HTTP/1.1 only, no h2c), `allowHTTP1: false` → `http2.createServer` (h2c).
+     *
+     * Default `false` keeps every gRPC consumer working unchanged — the e2e/fleet
+     * gRPC clients, internal `ctx.call` hops, and k8s/istio (which terminate gRPC
+     * at Envoy). ONLY the compose `ory` profile sets `ALLOW_HTTP1=true` on the
+     * trips role, because the Ory Oathkeeper standalone reverse proxy proxies
+     * plain HTTP, not trailer-aware gRPC, for a Node upstream. The edge service
+     * (TripService) is all-unary, so HTTP/1.1 is sufficient there; the monolith
+     * (which also mounts streaming `ListVehicles`) keeps the h2c default.
+     */
+    readonly allowHTTP1?: boolean;
     /**
      * Fleet database override. Tests inject a PGlite-backed Drizzle db so the
      * e2e runs without Docker; defaults to a postgres.js client over
@@ -82,7 +110,18 @@ export interface BuildServerOptions {
 export function buildServer(options: BuildServerOptions = {}): Server {
     const topology = options.topology ?? resolveTopology();
     const port = options.port ?? Number(process.env.PORT ?? 5000);
-    const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? DEV_JWT_SECRET;
+
+    // Phase 4 IdP-consumer identity inputs. The trips gateway never holds a
+    // signing secret; it validates RS256 tokens against Oathkeeper's published
+    // JWKS, and trusts only the configured `iss`/`aud`. `JWT_ISSUER` is the
+    // single source of truth shared with the mutator and the test mint.
+    const jwksUri = options.jwksUri ?? process.env.OATHKEEPER_JWKS_URI ?? DEFAULT_OATHKEEPER_JWKS_URI;
+    const issuer = options.issuer ?? process.env.JWT_ISSUER ?? JWT_ISSUER;
+    const audience = options.audience ?? process.env.JWT_AUDIENCE ?? JWT_AUDIENCE;
+
+    // Edge transport posture. Default h2c (gRPC); the compose `ory` profile sets
+    // ALLOW_HTTP1=true on trips so Oathkeeper's HTTP reverse proxy can front it.
+    const allowHTTP1 = options.allowHTTP1 ?? (process.env.ALLOW_HTTP1 === "true" || process.env.ALLOW_HTTP1 === "1");
 
     // Fleet persistence. postgres.js connects lazily, so constructing the
     // default db is harmless even when the fleet isn't mounted locally; the
@@ -115,7 +154,7 @@ export function buildServer(options: BuildServerOptions = {}): Server {
         // then OTel — placed after authz so getAuthContext() is populated for
         // enduser span attributes — then the default validation chain.
         createErrorHandlerInterceptor(),
-        ...buildAuthInterceptors({ secret: jwtSecret }),
+        ...buildAuthInterceptors({ jwksUri, issuer, audience }),
         ...(otelInterceptor ? [otelInterceptor] : []),
         ...createDefaultInterceptors({ errorHandler: false }),
     ];
@@ -127,7 +166,16 @@ export function buildServer(options: BuildServerOptions = {}): Server {
         remoteResolver: topology.remoteResolver,
         port,
         host: "0.0.0.0",
-        allowHTTP1: false,
+        // Phase 4 edge posture, env-gated (default h2c/gRPC). On a plaintext
+        // listener `@connectum/core` serves EITHER h2c (allowHTTP1:false) OR
+        // HTTP/1.1 (allowHTTP1:true) — not both. The compose `ory` profile sets
+        // ALLOW_HTTP1=true on the trips role so Ory Oathkeeper's HTTP reverse
+        // proxy (which does not carry trailer-aware gRPC for a Node upstream) can
+        // front the all-unary TripService over Connect/HTTP1. Everything else —
+        // the e2e/fleet gRPC clients, internal `ctx.call` hops, and k8s/istio
+        // (Envoy terminates gRPC; Oathkeeper is an ext_authz decision service) —
+        // keeps the gRPC default unchanged.
+        allowHTTP1,
         protocols: [Healthcheck({ httpEnabled: true }), Reflection()],
         interceptors,
         shutdown: { autoShutdown: true, timeout: 10_000 },

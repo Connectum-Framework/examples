@@ -1,0 +1,36 @@
+{
+  "$id": "https://car-sharing.example/identity.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CarSharingRider",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "title": "E-Mail",
+          "minLength": 3,
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": true
+              }
+            }
+          }
+        },
+        "roles": {
+          "type": "array",
+          "title": "Roles",
+          "description": "Authorization roles carried into the minted JWT (e.g. [\"rider\"], [\"rider\",\"fleet_admin\"]). The car-sharing trips gateway reads them via claimsMapping.roles for per-method authz; in the minimal phase TripService is default_policy:allow so they are wired but not yet gating.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["email"],
+      "additionalProperties": false
+    }
+  }
+}

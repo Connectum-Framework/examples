@@ -23,6 +23,15 @@ data:
   SERVICES: "trips.v1.TripService"
   FLEET_ADDR: "http://fleet.car-sharing.svc.cluster.local:5000"
   BILLING_ADDR: "http://billing.car-sharing.svc.cluster.local:5000"
+  # Phase 4 identity — the gateway validates RS256 JWTs minted by Ory Oathkeeper
+  # against its published JWKS (no shared secret). Oathkeeper runs as an Istio
+  # ext_authz decision service in the mesh (see ory/oathkeeper/README.md); Envoy
+  # still terminates gRPC, so trips keeps its allowHTTP1:false (h2c) default here.
+  # Point OATHKEEPER_JWKS_URI at your Oathkeeper API service; JWT_ISSUER must
+  # equal Oathkeeper's id_token issuer_url; JWT_AUDIENCE is this gateway's audience.
+  OATHKEEPER_JWKS_URI: "http://oathkeeper-api.car-sharing.svc.cluster.local:4456/.well-known/jwks.json"
+  JWT_ISSUER: "http://oathkeeper.car-sharing.svc.cluster.local:4455/"
+  JWT_AUDIENCE: "car-sharing-trips"
   # OpenTelemetry
   OTEL_SERVICE_NAME: "trips"
   OTEL_TRACES_EXPORTER: "otlp"

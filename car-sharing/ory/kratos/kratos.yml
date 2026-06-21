@@ -1,0 +1,84 @@
+# Ory Kratos — the IDENTITY PROVIDER for the car-sharing Phase 4 edge.
+#
+# Kratos owns users + sessions. The car-sharing app NEVER talks to Kratos; only
+# Ory Oathkeeper does (it validates the `ory_kratos_session` cookie at the edge
+# and mints the RS256 JWT that the trips gateway then JWKS-validates). This keeps
+# all identity logic out of @connectum/*.
+#
+# DEV / DEMO config — minimal self-hosted shape. Secrets below are placeholders;
+# replace them and harden cookies/CORS/SMTP before any real use. Pinned to the
+# image tag in docker-compose.yml (oryd/kratos:v26.2.0).
+
+dsn: postgres://kratos:kratos@kratos-postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+
+serve:
+  public:
+    base_url: http://localhost:4433/
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:4455
+        - http://localhost:4458
+      allowed_methods: ["POST", "GET", "PUT", "PATCH", "DELETE"]
+      allowed_headers: ["Authorization", "Cookie", "Content-Type"]
+      exposed_headers: ["Content-Type", "Set-Cookie"]
+      allow_credentials: true
+  admin:
+    base_url: http://kratos:4434/
+
+selfservice:
+  default_browser_return_url: http://localhost:4455/
+  allowed_return_urls:
+    - http://localhost:4455
+    - http://localhost:4458
+
+  methods:
+    password:
+      enabled: true
+
+  flows:
+    error:
+      ui_url: http://localhost:4458/error
+
+    settings:
+      ui_url: http://localhost:4458/settings
+      privileged_session_max_age: 15m
+
+    login:
+      ui_url: http://localhost:4458/login
+      lifespan: 10m
+
+    registration:
+      lifespan: 10m
+      ui_url: http://localhost:4458/registration
+      after:
+        password:
+          hooks:
+            - hook: session
+
+log:
+  level: info
+  format: text
+  leak_sensitive_values: false
+
+secrets:
+  # DEV ONLY — replace with strong random values managed by a secret store.
+  cookie:
+    - PLEASE-CHANGE-ME-cookie-secret-32chars
+  cipher:
+    - 0123456789ABCDEF0123456789ABCDEF
+
+cookies:
+  same_site: Lax
+
+session:
+  lifespan: 24h
+  cookie:
+    persistent: true
+    same_site: Lax
+
+identity:
+  default_schema_id: rider
+  schemas:
+    - id: rider
+      url: file:///etc/config/kratos/identity.schema.json
