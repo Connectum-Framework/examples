@@ -3,11 +3,11 @@
  * microservice role, decided by env (see `#topology.ts`).
  *
  * What stays constant across topologies:
- *  - the same three service definitions are passed to `createServer`;
+ *  - the same five service definitions are passed to `createServer`;
  *  - the same generated `serviceCatalog` types and routes every `ctx.call`.
  *
  * What env changes:
- *  - `enabledServices` — which of the three are mounted locally (undefined =
+ *  - `enabledServices` — which of the five are mounted locally (undefined =
  *    monolith, all local). Unmounted services are reached via `remoteResolver`.
  *  - `remoteResolver` — maps a remote service `typeName` to its endpoint env var.
  *  - the EventBus role — only the payroll process subscribes to LeaveApproved.

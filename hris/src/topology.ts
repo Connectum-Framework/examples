@@ -44,7 +44,7 @@ const ENDPOINT_ENV: Readonly<Record<string, string>> = {
 export interface Topology {
     /**
      * Proto `typeName`s mounted locally, as a concrete list (always populated;
-     * `*`/unset expands to all three). Drives the EventBus role decisions.
+     * `*`/unset expands to all five). Drives the EventBus role decisions.
      */
     readonly localTypeNames: readonly string[];
     /**

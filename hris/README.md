@@ -54,8 +54,9 @@ reads env and tells the framework what is local vs remote:
   Set it to one service (`SERVICES=directory.v1.DirectoryService`) and the process
   becomes that single microservice role.
 - **`remoteResolver: perServiceEnvResolver(…)`** maps each non-local service to an
-  endpoint env var (`DIRECTORY_ADDR`, `TIMEOFF_ADDR`, `PAYROLL_ADDR`), so
-  `ctx.call` auto-routes to the right process when it is remote.
+  endpoint env var (`DIRECTORY_ADDR`, `TIMEOFF_ADDR`, `PAYROLL_ADDR`,
+  `ACCESS_ADDR`, `ONBOARDING_ADDR`), so `ctx.call` auto-routes to the right
+  process when it is remote.
 
 Nothing in the service handlers changes between topologies.
 
@@ -200,7 +201,9 @@ Dockerfile                           # one image, role chosen by SERVICES env (w
 
 ```ts
 export const serviceCatalog = {
+  "access.v1.AccessService": AccessService,
   "directory.v1.DirectoryService": DirectoryService,
+  "onboarding.v1.OnboardingService": OnboardingService,
   "payroll.v1.PayrollService": PayrollService,
   "payroll.v1.PayrollEventHandlers": PayrollEventHandlers,
   "timeoff.v1.TimeOffService": TimeOffService,
@@ -208,10 +211,21 @@ export const serviceCatalog = {
 
 declare module "@connectum/core" {
   interface ConnectumCallMap {
+    "access.v1.AccessService/ProvisionAccess": { request: ProvisionAccessRequest; response: ProvisionAccessResponse };
+    "access.v1.AccessService/RevokeAccess": { request: RevokeAccessRequest; response: Empty };
     "directory.v1.DirectoryService/GetEmployee": { request: GetEmployeeRequest; response: GetEmployeeResponse };
+    "directory.v1.DirectoryService/CreateEmployee": { request: CreateEmployeeRequest; response: CreateEmployeeResponse };
+    "directory.v1.DirectoryService/ActivateEmployee": { request: ActivateEmployeeRequest; response: ActivateEmployeeResponse };
+    "directory.v1.DirectoryService/OffboardEmployee": { request: OffboardEmployeeRequest; response: OffboardEmployeeResponse };
+    "onboarding.v1.OnboardingService/OnboardEmployee": { request: OnboardEmployeeRequest; response: OnboardEmployeeResponse };
+    "onboarding.v1.OnboardingService/GetOnboarding": { request: GetOnboardingRequest; response: GetOnboardingResponse };
     "payroll.v1.PayrollService/GetBalance": { request: GetBalanceRequest; response: GetBalanceResponse };
+    "payroll.v1.PayrollService/SetupPayroll": { request: SetupPayrollRequest; response: SetupPayrollResponse };
+    "payroll.v1.PayrollService/TeardownPayroll": { request: TeardownPayrollRequest; response: Empty };
     "payroll.v1.PayrollEventHandlers/OnLeaveApproved": { request: LeaveApproved; response: Empty };
     "timeoff.v1.TimeOffService/RequestLeave": { request: RequestLeaveRequest; response: RequestLeaveResponse };
+    "timeoff.v1.TimeOffService/GrantTimeOff": { request: GrantTimeOffRequest; response: GrantTimeOffResponse };
+    "timeoff.v1.TimeOffService/RevokeTimeOff": { request: RevokeTimeOffRequest; response: Empty };
   }
   interface ConnectumStreamMap {
     "directory.v1.DirectoryService/ListEmployees": { request: ListEmployeesRequest; response: Employee; kind: "server-stream" };
@@ -301,10 +315,10 @@ Requires Node.js >= 25.2.0 (native TypeScript) and pnpm >= 10.
 ```bash
 pnpm install
 
-pnpm build:proto   # buf generate → gen/ (incl. catalog.gen.ts with all 3 services)
+pnpm build:proto   # buf generate → gen/ (incl. catalog.gen.ts with all services)
 pnpm db:generate   # drizzle-kit → drizzle/ SQL migration (the PGlite test migrator applies it)
 pnpm typecheck     # ctx.call is typed by the generated catalog
-pnpm test          # e2e: ctx.call validation + event-driven balance decrement + directory persistence
+pnpm test          # e2e + workflow + activity tests (no Docker or Temporal server required)
 ```
 
 The `drizzle/` migrations are committed and are the single source of truth: the
@@ -333,7 +347,7 @@ The same image runs each role; cross-service calls auto-route and `LeaveApproved
 flows over NATS. With Docker:
 
 ```bash
-docker compose --profile split up   # directory + timeoff + payroll + NATS
+docker compose --profile split up   # directory + timeoff + payroll + access + NATS
 ```
 
 Or run roles directly (a NATS broker on `NATS_URL` is required for the event flow):
@@ -342,6 +356,7 @@ Or run roles directly (a NATS broker on `NATS_URL` is required for the event flo
 DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5001 SERVICES=directory.v1.DirectoryService node src/index.ts
 DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5002 SERVICES=timeoff.v1.TimeOffService DIRECTORY_ADDR=http://localhost:5001 node src/index.ts
 DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5003 SERVICES=payroll.v1.PayrollService node src/index.ts
+DATABASE_URL=postgresql://hris:hris@localhost:5432/hris PORT=5004 SERVICES=access.v1.AccessService node src/index.ts
 ```
 
 ## Testing note
