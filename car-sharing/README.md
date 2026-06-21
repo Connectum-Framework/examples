@@ -604,7 +604,7 @@ event. Stop one reactor and replay — the others still receive (broadcast, not
 steal).
 
 > **Version note.** This phase uses the `publishes` option on `createEventBus`,
-> added after `@connectum/events@1.0.0`. Until events `>= 1.0.1` is published,
+> added after `@connectum/events@1.0.0`. Until events `>= 1.1.0` is published,
 > the example typechecks and runs against the **local** packages (the repo's
 > local-package test flow), not the published `1.0.0` — against `1.0.0` the topic
 > would fall back to the message `typeName`. Run with the local packages while
