@@ -57,13 +57,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: trips-config
-          env:
-            # JWT signing secret — only the gateway role needs it.
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: trips-jwt
-                  key: JWT_SECRET
+          # Phase 4: the gateway is a thin IdP CONSUMER — it holds NO signing
+          # secret. Identity is an RS256 JWT minted by Ory Oathkeeper (acting as
+          # an Istio ext_authz decision service in the mesh) and validated here
+          # against Oathkeeper's published JWKS. The OATHKEEPER_JWKS_URI /
+          # JWT_ISSUER / JWT_AUDIENCE inputs live in trips-config (no Secret).
+          # See ory/oathkeeper/README.md for the ext_authz production path.
           resources:
             requests:
               cpu: 100m

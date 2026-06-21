@@ -4,8 +4,10 @@
  * The fleet is the only persistent service: a PGlite in-process Postgres is
  * migrated + seeded in the test and injected into `buildServer({ db })`, the
  * same parameter production uses for its postgres.js client. Every assertion
- * goes through a REAL gRPC client over HTTP/2 (the server runs
- * `allowHTTP1: false`), exercising the actual wire path — not the db directly.
+ * goes through a REAL gRPC client over HTTP/2 — the server keeps the default
+ * h2c posture (`allowHTTP1` unset → `false`), exercising the actual wire path,
+ * not the db directly. (Phase 4 made `allowHTTP1` an opt-in for the Oathkeeper
+ * Connect/HTTP1 edge; the gRPC/streaming path here is unaffected by that default.)
  *
  * FleetService is `public` (see fleet.proto), so these calls carry no token,
  * mirroring how the trip handler reaches it via internal `ctx.call`.

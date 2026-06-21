@@ -14,7 +14,14 @@
  *    records the `start` call instead of contacting a real server, proving the
  *    pre-check ran first and StartTrip returns `{ trip:{ id, status:STARTED },
  *    workflow_id }` with `workflow_id === trip.id`.
- *  - The gateway auth: a StartTrip with NO / an INVALID token is rejected as
+ *  - The gateway auth (Phase 4 — Ory as the IdP): trips is a thin IdP CONSUMER.
+ *    It validates an RS256 JWT (minted at the edge by Ory Oathkeeper from a Kratos
+ *    session) against Oathkeeper's published JWKS. The dockerless suite does NOT
+ *    run Ory; instead it simulates the mutator with a test RSA keypair + an
+ *    in-process JWKS server (`tests/helpers/jwks.ts`) and exercises the SAME
+ *    production validation branch (`createJwtAuthInterceptor({ jwksUri })` →
+ *    `jose.createRemoteJWKSet`). A StartTrip/GetTrip with NO / an INVALID /
+ *    wrong-issuer / wrong-audience / EXPIRED token is rejected as
  *    `Code.Unauthenticated` by the JWT interceptor (before any pre-check).
  *  - FleetService is `public`: a direct in-process call needs no token.
  *
@@ -23,6 +30,12 @@
  * workflow test (orchestration order) and the activity test (real
  * tabCount/charge + idempotency) — NOT here, since they no longer run
  * synchronously inside StartTrip.
+ *
+ * Edge-protocol note: the dockerless suite talks DIRECT gRPC to trips (no
+ * Oathkeeper hop, no Connect/HTTP1). The one runtime change, `allowHTTP1: true`,
+ * is additive (trips still serves HTTP/2 gRPC) and so has no dedicated assertion
+ * here; the Connect-over-HTTP/1.1 edge is validated only by the compose `ory`
+ * flow (README), the project's config-only convention (like `k8s/`/`istio/`).
  */
 
 import assert from "node:assert/strict";
@@ -31,9 +44,8 @@ import { create } from "@bufbuild/protobuf";
 import type { Client } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { createTestJwt, TEST_JWT_SECRET } from "@connectum/auth/testing";
 import type { Server } from "@connectum/core";
-import { JWT_ISSUER } from "#auth.ts";
+import { JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
 import { BillingService } from "#gen/billing/v1/billing_pb.ts";
 import { FleetService } from "#gen/fleet/v1/fleet_pb.ts";
 import { GetTripRequestSchema, StartTripRequestSchema, TripService } from "#gen/trips/v1/trips_pb.ts";
@@ -41,6 +53,7 @@ import { buildServer } from "#server.ts";
 import type { TripWorkflowClient, TripWorkflowHandle } from "#services/tripService.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb } from "../helpers/db.ts";
+import { generateRsaTestKeypair, type JwksServer, mintOathkeeperJwt, startJwksServer } from "../helpers/jwks.ts";
 
 /** A recorded `start` call (workflow type + the workflow id used). */
 interface StartCall {
@@ -88,31 +101,47 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
 
 describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Temporal)", () => {
     let server: Server;
+    let jwks: JwksServer;
     let trips: Client<typeof TripService>;
     let userToken: string;
+    // The RSA signing key behind the published JWKS — used to mint every token
+    // (valid and negative) so they share the JWKS `kid` and no refetch is needed.
+    let mint: (options: { sub: string; name?: string; roles?: readonly string[]; issuer?: string; audience?: string; ttl?: string | number }) => Promise<string>;
     const starts: StartCall[] = [];
     // Mutated per GetTrip test to drive the stub handle's query/describe answers.
     let handleBehaviour: StubHandleBehaviour = { queryStatus: "STARTED" };
 
     before(async () => {
         // Force monolith topology so fleet, trips and billing are all mounted
-        // locally and ctx.call routes in-process. Inject the shared test secret
-        // so the JWT interceptor verifies tokens minted below, a PGlite-backed
-        // Drizzle db so FleetService persists without Docker, and a STUB Temporal
-        // client so StartTrip's success path AND GetTrip run without a live
-        // Temporal.
+        // locally and ctx.call routes in-process. Phase 4: generate a throwaway
+        // RS256 keypair, publish its public JWK over an in-process JWKS server,
+        // and point the gateway's JWT interceptor at it via `jwksUri` — the SAME
+        // production validation branch (`createRemoteJWKSet`) Oathkeeper feeds in
+        // compose. Inject a PGlite-backed Drizzle db so FleetService persists
+        // without Docker, and a STUB Temporal client so StartTrip's success path
+        // AND GetTrip run without a live Temporal.
         const topology = resolveTopology("*");
         const db = await makeTestDb();
-        server = buildServer({ port: 0, topology, jwtSecret: TEST_JWT_SECRET, db, workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour) });
+        const keypair = await generateRsaTestKeypair();
+        // Bind the JWKS server BEFORE buildServer so the first key fetch succeeds.
+        jwks = await startJwksServer(keypair.publicJwk);
+        // Helper bound to this keypair; defaults issuer/audience to the gateway's
+        // expected values (JWT_ISSUER is the single source of truth, shared with
+        // the Oathkeeper mutator and the compose env).
+        mint = ({ sub, name, roles, issuer = JWT_ISSUER, audience = JWT_AUDIENCE, ttl }) =>
+            mintOathkeeperJwt(keypair.privateKey, { sub, name, roles, issuer, audience, ttl });
+
+        server = buildServer({ port: 0, topology, jwksUri: jwks.url, db, workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour) });
         await server.start();
         const port = server.address?.port ?? 0;
 
-        userToken = await createTestJwt({ sub: "user-42", name: "Dana" }, { issuer: JWT_ISSUER });
+        userToken = await mint({ sub: "user-42", name: "Dana", roles: ["rider"] });
         trips = createClient(TripService, createGrpcTransport({ baseUrl: `http://localhost:${port}` }));
     });
 
     after(async () => {
         if (server.state === "running") await server.stop();
+        await jwks.close();
     });
 
     it("mounts all three services from the generated catalog (monolith)", () => {
@@ -216,6 +245,48 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         await assert.rejects(
             trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
                 headers: { Authorization: "Bearer not.a.jwt" },
+            }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+        assert.equal(starts.length, before);
+    });
+
+    // Phase 4 trust-boundary negatives (contract conformance): a SIGNATURE-VALID
+    // token (same RSA key + kid, so it passes JWKS key selection) is still
+    // rejected when its `iss`/`aud`/`exp` don't match what the gateway requires.
+    // These prove the issuer/audience/expiry CLAIM checks, not just the signature
+    // — the "INVALID token" case above only exercises parse/signature failure.
+    it("gateway auth: StartTrip with a WRONG ISSUER token is rejected as Unauthenticated", async () => {
+        const before = starts.length;
+        const wrongIssuer = await mint({ sub: "user-42", name: "Dana", issuer: "http://evil-idp.example/" });
+        await assert.rejects(
+            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+                headers: { Authorization: `Bearer ${wrongIssuer}` },
+            }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+        assert.equal(starts.length, before);
+    });
+
+    it("gateway auth: StartTrip with a WRONG AUDIENCE token is rejected as Unauthenticated", async () => {
+        const before = starts.length;
+        const wrongAudience = await mint({ sub: "user-42", name: "Dana", audience: "some-other-api" });
+        await assert.rejects(
+            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+                headers: { Authorization: `Bearer ${wrongAudience}` },
+            }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+        assert.equal(starts.length, before);
+    });
+
+    it("gateway auth: StartTrip with an EXPIRED token is rejected as Unauthenticated", async () => {
+        const before = starts.length;
+        // ttl in the past → `exp` already elapsed at verification time.
+        const expired = await mint({ sub: "user-42", name: "Dana", ttl: "-1m" });
+        await assert.rejects(
+            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+                headers: { Authorization: `Bearer ${expired}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
         );

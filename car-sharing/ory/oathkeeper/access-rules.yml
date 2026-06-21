@@ -1,0 +1,32 @@
+# Oathkeeper access rules — the trips EDGE.
+#
+# matching_strategy is `regexp` (set in config.yml). One rule fronts the two
+# externally-reachable TripService RPCs (StartTrip, GetTrip). RPC calls are HTTP
+# POST for both the gRPC and the Connect protocol, so `methods: [POST]`.
+#
+# The internal RPCs RecordTrip/EndTrip (method_auth { public: true }) are NOT
+# exposed at the edge — the Temporal worker reaches trips on the internal network
+# directly, never through Oathkeeper — so they are intentionally absent here.
+
+- id: "trips:edge"
+  description: "Authenticated car-sharing edge: validate the Kratos session and mint an RS256 JWT for the trips gateway."
+  match:
+    # Only StartTrip / GetTrip are reachable from the public edge.
+    # `matching_strategy: regexp` matches the reconstructed full URL, so the host
+    # is written explicitly. The browser/curl demo enters at `localhost:4455`
+    # (mapped from the host); the `<...>` wraps the regexp segments (host +
+    # RPC name) per Oathkeeper's URL syntax. Matching `localhost` covers the
+    # documented demo flow; add another rule (or host) if calling in-network.
+    url: "http://<(localhost|127.0.0.1)>:4455/trips.v1.TripService/<(StartTrip|GetTrip)>"
+    methods:
+      - POST
+  authenticators:
+    - handler: cookie_session
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+  upstream:
+    # The trips role in the compose `ory` profile is the `trips-ory` service.
+    url: "http://trips-ory:5000"
+    preserve_host: false
