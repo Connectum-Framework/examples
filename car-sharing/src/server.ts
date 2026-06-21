@@ -19,22 +19,25 @@
  * @module server
  */
 
-import { createServer } from "@connectum/core";
-import type { Server } from "@connectum/core";
 import type { Interceptor } from "@connectrpc/connect";
+import type { Server } from "@connectum/core";
+import { createServer } from "@connectum/core";
 import { Healthcheck } from "@connectum/healthcheck";
 import { createDefaultInterceptors, createErrorHandlerInterceptor } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
-import { serviceCatalog } from "#gen/catalog.gen.ts";
 import { buildAuthInterceptors } from "#auth.ts";
-import { createDb } from "#db/client.ts";
 import type { Db } from "#db/client.ts";
+import { createDb } from "#db/client.ts";
+import { serviceCatalog } from "#gen/catalog.gen.ts";
 import { buildOtelInterceptor } from "#observability.ts";
 import { billingService } from "#services/billingService.ts";
 import { createFleetService } from "#services/fleetService.ts";
-import { tripService } from "#services/tripService.ts";
-import { resolveTopology } from "#topology.ts";
+import type { TripWorkflowClient } from "#services/tripService.ts";
+import { createTripService } from "#services/tripService.ts";
+import { TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
+import { createWorkflowClient } from "#temporal/workflowClient.ts";
 import type { Topology } from "#topology.ts";
+import { resolveTopology, TYPE_NAMES } from "#topology.ts";
 
 /** Default dev/test JWT secret. Production overrides with `JWT_SECRET`. */
 const DEV_JWT_SECRET = "connectum-test-secret-do-not-use-in-production";
@@ -55,6 +58,18 @@ export interface BuildServerOptions {
      * `ctx.call` to FleetService runs in-process).
      */
     readonly db?: Db;
+    /**
+     * Temporal client override for TripService.
+     *
+     *  - `undefined` (default): when the role hosts TripService, a real LAZY
+     *    `@temporalio/client` `WorkflowClient` is built (no socket until the
+     *    first start/query — so the server starts and the pre-check e2e runs
+     *    without a live Temporal). When the role does NOT host TripService, no
+     *    client is built.
+     *  - a value: injected verbatim (tests pass a stub; pass `null` to force the
+     *    "Temporal not configured" path even when TripService is mounted).
+     */
+    readonly workflowClient?: TripWorkflowClient | null;
 }
 
 /**
@@ -74,6 +89,24 @@ export function buildServer(options: BuildServerOptions = {}): Server {
     // connection is opened only when FleetService actually queries.
     const db = options.db ?? createDb();
     const fleetService = createFleetService(db);
+
+    // Temporal client for the trip saga. Built only when this role hosts
+    // TripService and no override was given. The default client is LAZY (no
+    // socket until the first start/query), so the server starts and the
+    // pre-check e2e runs without a live Temporal server. An explicit `null`
+    // forces the "Temporal not configured" path; an explicit value (a test
+    // stub) is used verbatim.
+    const hostsTrips = topology.localTypeNames.includes(TYPE_NAMES.trips);
+    let workflowClient: TripWorkflowClient | undefined;
+    if (options.workflowClient !== undefined) {
+        workflowClient = options.workflowClient ?? undefined;
+    } else if (hostsTrips) {
+        // The concrete WorkflowClient structurally satisfies the narrow
+        // TripWorkflowClient port (it has start/getHandle/query/describe); the
+        // cast adapts its richer generic overloads to the port the handler uses.
+        workflowClient = createWorkflowClient() as unknown as TripWorkflowClient;
+    }
+    const tripService = createTripService({ workflowClient, taskQueue: TEMPORAL_TASK_QUEUE });
 
     const otelInterceptor = buildOtelInterceptor();
     const interceptors: Interceptor[] = [

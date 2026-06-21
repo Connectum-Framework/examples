@@ -19,20 +19,20 @@ wiring.
 
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
-| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)` | JWT required (proto `default_policy: allow`) |
+| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | JWT required (proto `default_policy: allow`); `RecordTrip`/`EndTrip` method-level `public` (internal, worker-only) |
 | `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `public` (proto `service_auth.public`) |
-| `billing.v1.BillingService` | internal leaf | `OpenTab(tripId)`            | `public`                              |
+| `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `public`                              |
 
 `FleetService` is backed by a real database (Drizzle ORM + Postgres) — see
 [Persistence](#persistence-fleetservice--drizzle--postgres). The trip/billing
-services remain in-memory for now (later phases).
+services remain in-memory (durable state lives in Temporal workflow history).
 
-`StartTrip` orchestrates two cross-service calls:
-
-1. `ctx.call("fleet.v1.FleetService/GetVehicle", …)` — unavailable vehicle →
-   `FAILED_PRECONDITION`; unknown id → `NOT_FOUND` (propagated from fleet).
-2. `ctx.call("billing.v1.BillingService/OpenTab", …)` — opens the tab once the
-   trip starts.
+`StartTrip` does a **synchronous availability pre-check** (`ctx.call` to
+`FleetService/GetVehicle`) — unavailable vehicle → `FAILED_PRECONDITION`;
+unknown id → `NOT_FOUND` (propagated from fleet) — then **starts a durable
+`TripWorkflow`** and returns immediately with `{ trip, workflow_id }`. Live
+status is read via `GetTrip`. See [Phase 2](#phase-2--durable-saga-with-temporal)
+for the full saga.
 
 ## Architecture
 
@@ -58,8 +58,10 @@ flowchart TB
 
     client -->|"/trips.v1.TripService/StartTrip"| ingress
     ingress -->|"AuthorizationPolicy:<br/>ingress SA only"| tripsApp
-    tripsApp -->|"ctx.call GetVehicle<br/>(FLEET_ADDR)"| fleetApp
-    tripsApp -->|"ctx.call OpenTab<br/>(BILLING_ADDR)"| billingApp
+    tripsApp -->|"ctx.call GetVehicle<br/>(pre-check, FLEET_ADDR)"| fleetApp
+    tripsApp -.->|"starts TripWorkflow<br/>(Temporal client)"| temporal[(Temporal<br/>cluster)]
+    temporal -->|"worker activities<br/>(ReserveVehicle, RecordTrip…)"| fleetApp
+    temporal -->|"worker activities<br/>(OpenTab, AddCharge, Settle…)"| billingApp
 
     fleetApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
     billingApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
@@ -113,13 +115,15 @@ pnpm start            # monolith on :5000 (SERVICES unset)
 ```
 
 The e2e suite runs the whole app in one process and asserts: the happy
-`StartTrip` path (both `ctx.call`s), `FAILED_PRECONDITION` for an unavailable
-vehicle, `NOT_FOUND` propagated from fleet, the gateway rejecting unauthenticated
-/ invalid-token requests while the public fleet service is reachable without a
-token (`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
+`StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
+workflow_id }`), `FAILED_PRECONDITION` for an unavailable vehicle, `NOT_FOUND`
+propagated from fleet, the gateway rejecting unauthenticated / invalid-token
+requests while the public fleet service is reachable without a token
+(`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
 `GetVehicle`, streaming `ListVehicles` with filter + cursor pagination,
 `ReserveVehicle`/`ReleaseVehicle` — over a real gRPC client
-(`tests/e2e/fleet.test.ts`).
+(`tests/e2e/fleet.test.ts`). The saga itself (orchestration order +
+compensations) is covered by `tests/workflow/` and `tests/activity/`.
 
 ## Persistence: FleetService + Drizzle + Postgres
 
@@ -193,6 +197,109 @@ loopback. The framework strips the in-process transport's framing headers
 (`content-length` / `content-type`) from the propagated error, so they never
 leak into the outer call's gRPC trailers (which would otherwise be illegal
 HTTP/2). No edge-level error translation is needed.
+
+## Phase 2 — durable saga with Temporal
+
+Phase 1's `StartTrip` did the whole flow inline with `ctx.call`: check the
+vehicle, open the tab, return. That is fine until a step **midway** fails — there
+is no durable record of what already happened and nothing to undo it. Phase 2
+replaces the inline chain with a **durable [Temporal](https://temporal.io)
+workflow** that owns the trip lifecycle and **compensates automatically** when a
+step fails. Connectum stays a thin RPC/contract layer; Temporal is the durable
+brain.
+
+### What moved
+
+`StartTrip` keeps a **synchronous availability pre-check** (a `ctx.call` to
+`FleetService/GetVehicle`) so the **edge error contract is unchanged**: an
+unavailable vehicle is still `FAILED_PRECONDITION`, an unknown one still
+`NOT_FOUND` — both raised **before** any workflow starts. Only after the
+pre-check passes does the handler **start** the durable `TripWorkflow` and return
+immediately with the trip id, an initial `STARTED` status, and the `workflow_id`:
+
+```jsonc
+// StartTrip response (the saga then runs durably in the background)
+{ "trip": { "id": "trip-…", "status": "STARTED" }, "workflowId": "trip-…" }
+```
+
+Live status is read with a new **`GetTrip`** RPC, which issues a Temporal
+**Workflow Query** (`handle.query(getTripStatus)`) against the running workflow,
+falling back to a terminal status (`SETTLED` / `CANCELLED`) once it closes.
+
+### The saga and its compensations
+
+`TripWorkflow` runs the forward steps in order, pushing a compensation onto a
+stack after each side-effecting step; on **any** failure it unwinds the stack in
+reverse (LIFO) and rethrows — the canonical Temporal saga pattern. Each step is
+an **activity** that makes one ConnectRPC call to a role service.
+
+| #   | Forward step (activity → RPC)            | Compensation (activity → RPC)             |
+| --- | ---------------------------------------- | ----------------------------------------- |
+| 1   | `reserveVehicle` → `FleetService/ReserveVehicle` | `releaseVehicle` → `FleetService/ReleaseVehicle` |
+| 2   | `recordTrip` → `TripService/RecordTrip`  | `markTripCancelled` → `TripService/EndTrip` (CANCELLED) |
+| 3   | _the drive_ (a workflow timer)           | —                                         |
+| 4   | `endTrip` → `TripService/EndTrip` (ENDED) | _(none — rollback reuses step 2)_         |
+| 5   | `openTab` → `BillingService/OpenTab`     | `voidTab` → `BillingService/VoidTab`      |
+| 6   | `addCharge` → `BillingService/AddCharge` | `refundCharge` → `BillingService/RefundCharge` |
+| 7   | `settle` → `BillingService/Settle`       | _(terminal — none)_                       |
+
+So if **settle** fails, the unwind runs `refundCharge → voidTab →
+markTripCancelled → releaseVehicle`; if **endTrip** fails (before any billing),
+it runs only `markTripCancelled → releaseVehicle`. Every compensation is
+**idempotent** (release on a free vehicle, void on a void tab, refund on a
+refunded charge are all no-op successes), because Temporal may run a compensation
+after a forward step partially applied. Step 1's availability failure is a
+**non-retryable** `ApplicationFailure`, so the workflow fails fast with nothing
+to undo.
+
+### Processes
+
+The native Temporal worker (the Rust core-bridge addon + the on-the-fly workflow
+bundler) is **confined to one new process**, so the existing RPC roles keep their
+no-build, native-TS run model:
+
+| Process                | Entry              | Temporal package        |
+| ---------------------- | ------------------ | ----------------------- |
+| RPC roles (trips/fleet/billing/monolith) | `node src/index.ts` | `@temporalio/client` (pure JS) — gateway only |
+| **Worker** (hosts the workflow + activities) | `node src/worker.ts` (`pnpm worker`) | `@temporalio/worker` (native) |
+
+The gateway's Temporal client is **lazy** (`Connection.lazy` — no socket until
+the first start/query), so the server starts and the **pre-check error paths run
+without a live Temporal server**. Internal `RecordTrip` / `EndTrip` are
+method-level `public` in proto so the worker's tokenless ConnectRPC clients pass
+the gateway auth chain (fleet/billing are already service-level `public`).
+
+### Run it and watch the saga
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:migrate
+DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:seed
+docker compose --profile saga up --build   # roles + worker + Temporal + Web UI
+open http://localhost:8088                  # Temporal Web UI
+```
+
+Start a trip against the `trips` role (gRPC `:5002`) and watch `TripWorkflow`
+walk reserve → record → end → openTab → addCharge → settle in the Web UI. Stop
+the `billing` role mid-run to watch the compensations unwind in reverse.
+
+### Tests — dockerless
+
+The saga is covered without Docker or a Temporal cluster:
+
+- `tests/workflow/tripWorkflow.test.ts` — the **real workflow** with **mocked
+  activities** on Temporal's time-skipping test environment (an embedded test
+  server; the binary is downloaded and cached on first run only). It asserts the
+  forward order on success and the **reverse compensation order** on a `settle`
+  failure and an `endTrip` failure.
+- `tests/activity/activities.test.ts` — the **real activity bodies** (via
+  `MockActivityEnvironment`) against an **in-process Connectum monolith**
+  (`buildServer({ port: 0 })`, PGlite fleet), asserting the activity↔RPC wiring,
+  the moved billing side effects, and compensation **idempotency**.
+- `tests/e2e/e2e.test.ts` — the gateway with a **stub** Temporal client: the
+  pre-check `FAILED_PRECONDITION` / `NOT_FOUND` paths, the auth paths, and that a
+  valid `StartTrip` returns `{ trip, workflow_id }` and starts exactly one
+  workflow keyed by the trip id.
 
 ## Build the image
 
@@ -281,21 +388,25 @@ car-sharing/
 ├── src/
 │   ├── db/                     Drizzle: schema.ts, client.ts (Db DI), seed.ts
 │   ├── services/               fleetService (Drizzle), billingService, tripService
+│   ├── temporal/               TripWorkflow, activities, workflowClient, clients, config, tripStatus
 │   ├── topology.ts             env → mono/split (SERVICES + perServiceEnvResolver)
 │   ├── auth.ts                 JWT + proto authz interceptors (uniform chain)
 │   ├── observability.ts        env-gated OpenTelemetry wiring
 │   ├── server.ts               buildServer() — services + catalog + interceptors + db
+│   ├── worker.ts               Temporal worker process (bundles workflow via swc; `pnpm worker`)
 │   └── index.ts                entry point (role by SERVICES)
 ├── drizzle/                    generated SQL migrations (single source of truth)
 ├── drizzle.config.ts           drizzle-kit config (schema → migrations / push)
 ├── tests/
 │   ├── helpers/db.ts           PGlite test db (migrate + seed), injected via DI
-│   └── e2e/                     e2e.test.ts (gateway/ctx.call) + fleet.test.ts (persistence)
+│   ├── workflow/               TripWorkflow: forward order + reverse compensation (mocked activities)
+│   ├── activity/               Activity bodies: RPC wiring + compensation idempotency (in-process monolith)
+│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth, stub workflow client) + fleet.test.ts (persistence)
 ├── k8s/                        namespace, rbac, secret, configmap, deployments,
 │                               services, hpa
 ├── istio/                      peer-auth, authz, destination-rule, virtual-service,
 │                               gateway, canary
-├── docker-compose.yml          local monolith + Postgres (healthcheck)
+├── docker-compose.yml          profiles: `mono` (monolith + Postgres), `saga` (roles + worker + Temporal + Postgres)
 ├── Dockerfile                  one multi-stage image, role by env
 ├── buf.yaml / buf.gen.yaml     dual-module (own protos + auth options) + catalog plugin
 ├── package.json / tsconfig.json / pnpm-workspace.yaml

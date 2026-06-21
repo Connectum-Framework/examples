@@ -1,21 +1,39 @@
-# Local monolith stack — the car-sharing app + its Postgres (Phase 1 persistence).
+# Two stacks from one image, selected by compose profile. Config only — NOT part
+# of the automated test run (the e2e suite uses an in-process PGlite Postgres and
+# the time-skipping Temporal test server; see tests/).
 #
-# FleetService is backed by Drizzle ORM over Postgres. This compose file brings
-# up Postgres with a healthcheck and runs the app as the monolith (every service
-# in-process, SERVICES unset), wired to the database via DATABASE_URL.
+#   docker compose --profile mono up --build    # Phase 1: monolith + Postgres
+#   docker compose --profile saga up --build     # Phase 2: durable saga on Temporal
 #
-# First run — apply migrations and seed the fleet:
+# ── Phase 1 (mono) ──────────────────────────────────────────────────────────
+# FleetService over Drizzle + Postgres; every service in-process (SERVICES
+# unset). StartTrip needs Temporal, so the `mono` profile is for the fleet /
+# persistence demo; the trip saga lives in the `saga` profile.
 #
-#   docker compose up -d postgres            # start Postgres only
-#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing \
-#     pnpm db:migrate                        # apply drizzle/ migrations → vehicles table
-#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing \
-#     pnpm db:seed                           # seed the demo fleet
-#   docker compose up app                    # start the app (monolith on :5000)
+# First run — migrate + seed the fleet:
+#   docker compose up -d postgres
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:migrate
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:seed
+#   docker compose --profile mono up app
 #
-# The e2e tests do NOT need this — they use an in-process PGlite Postgres.
+# ── Phase 2 (saga) ──────────────────────────────────────────────────────────
+# The three RPC roles split (one process each, role by SERVICES), the Temporal
+# WORKER as its own process (`node src/worker.ts`), the Temporal server + Web UI,
+# Temporal's OWN Postgres, and the app Postgres (above) for the fleet. Temporal
+# owns + migrates its schema (auto-setup), so its store is kept SEPARATE from the
+# app db. Run it and watch the saga (and its compensations) in the Web UI:
+#
+#   docker compose up -d postgres
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:migrate
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:seed
+#   docker compose --profile saga up --build
+#   open http://localhost:8088   # Temporal Web UI
+#   # Start a trip against the trips role (gRPC :5002, e.g. via grpcurl) and watch
+#   # TripWorkflow reserve → record → end → openTab → addCharge → settle. Stop the
+#   # billing role mid-run to watch the compensations unwind in reverse.
 
 services:
+  # ── App Postgres for the fleet (shared by both profiles) ───────────────────
   postgres:
     image: postgres:17-alpine
     environment:
@@ -32,7 +50,11 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["mono", "saga"]
 
+  # ── Phase 1: monolith — every service in-process (SERVICES unset) ──────────
   app:
     build: .
     image: car-sharing:local
@@ -46,6 +68,182 @@ services:
       DATABASE_URL: postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
     ports:
       - "5000:5000"
+    networks:
+      - car-sharing
+    profiles: ["mono"]
+
+  # ── Temporal's own metadata store (SEPARATE from the app Postgres) ─────────
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── Temporal server (auto-setup creates the `default` namespace) ───────────
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+    ports:
+      - "7233:7233"
+    healthcheck:
+      # Wait until the frontend is serving and the default namespace exists.
+      test: ["CMD", "tctl", "--address", "temporal:7233", "namespace", "describe", "default"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── Temporal Web UI — inspect workflows + their compensations ──────────────
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8088
+    ports:
+      - "8088:8080"
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── FLEET role — the persistent leaf (Drizzle + app Postgres) ──────────────
+  fleet:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - SERVICES=fleet.v1.FleetService
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── TRIPS role — the edge/gateway; starts TripWorkflow on Temporal ─────────
+  trips:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - SERVICES=trips.v1.TripService
+      # buildServer() builds the fleet db client for every role (postgres.js
+      # connects lazily, so this role never opens it — fleet is reached over the
+      # network); DATABASE_URL must still be present.
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      # The pre-check ctx.call to GetVehicle routes here:
+      - FLEET_ADDR=http://fleet:5001
+      # StartTrip starts the durable workflow here:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=car-sharing-trips
+    depends_on:
+      fleet:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── BILLING role — the in-memory billing leaf ─────────────────────────────
+  billing:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+      - SERVICES=billing.v1.BillingService
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5003/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── WORKER — hosts TripWorkflow + the activities (node src/worker.ts) ──────
+  #
+  # A separate process type (NOT a SERVICES-selected RPC role): no inbound RPC;
+  # it polls Temporal for workflow/activity tasks and drives the role services
+  # over ConnectRPC. The ONLY process that loads the @temporalio/worker native
+  # addon.
+  worker:
+    build: .
+    command: ["node", "src/worker.ts"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=car-sharing-trips
+      - FLEET_ADDR=http://fleet:5001
+      - TRIPS_ADDR=http://trips:5002
+      - BILLING_ADDR=http://billing:5003
+    depends_on:
+      temporal:
+        condition: service_healthy
+      fleet:
+        condition: service_healthy
+      trips:
+        condition: service_healthy
+      billing:
+        condition: service_healthy
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+networks:
+  car-sharing:
+    driver: bridge
 
 volumes:
   pgdata:
+  temporal-pgdata:
