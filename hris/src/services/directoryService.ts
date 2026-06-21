@@ -30,9 +30,9 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { defineService } from "@connectum/core";
 import type { ServiceDefinition } from "@connectum/core";
 import { and, asc, eq, gt } from "drizzle-orm";
-import { DirectoryService, EmployeeSchema, GetEmployeeResponseSchema } from "#gen/directory/v1/directory_pb.ts";
+import { ActivateEmployeeResponseSchema, CreateEmployeeResponseSchema, DirectoryService, EmployeeSchema, GetEmployeeResponseSchema, OffboardEmployeeResponseSchema } from "#gen/directory/v1/directory_pb.ts";
 import type { Employee } from "#gen/directory/v1/directory_pb.ts";
-import { employees } from "#db/schema.ts";
+import { employees, EmployeeStatus } from "#db/schema.ts";
 import type { Db } from "#db/client.ts";
 import type { EmployeeRow } from "#db/schema.ts";
 
@@ -100,6 +100,57 @@ export function createDirectoryService(db: Db): ServiceDefinition {
             for (const row of rows) {
                 yield toEmployee(row);
             }
+        },
+
+        // ── Onboarding saga RPCs (driven by the Temporal worker's activities) ──
+
+        // Step 1 — insert a new employee in "onboarding" status. Uses an ATOMIC
+        // `insert ... on conflict do nothing returning`: an empty result means
+        // the id was already taken, surfaced as Code.AlreadyExists (race-free,
+        // and never leaking a raw DB unique-violation). The workflow treats this
+        // business failure as non-retryable.
+        async createEmployee(req) {
+            const inserted = await db
+                .insert(employees)
+                .values({
+                    id: req.id,
+                    name: req.name,
+                    email: req.email,
+                    title: req.title,
+                    department: req.department,
+                    managerId: req.managerId !== "" ? req.managerId : null,
+                    status: EmployeeStatus.ONBOARDING,
+                })
+                .onConflictDoNothing()
+                .returning();
+
+            const row = inserted[0];
+            if (row === undefined) {
+                throw new ConnectError(`Employee with id "${req.id}" already exists.`, Code.AlreadyExists);
+            }
+            return create(CreateEmployeeResponseSchema, { employee: toEmployee(row) });
+        },
+
+        // Terminal step — flip "onboarding" → "active". Idempotent: re-activating
+        // an already-active employee returns the same row. NOT_FOUND for an
+        // unknown id (in-saga this never happens — activation follows creation).
+        async activateEmployee(req) {
+            const updated = await db.update(employees).set({ status: EmployeeStatus.ACTIVE, updatedAt: new Date() }).where(eq(employees.id, req.id)).returning();
+            const row = updated[0];
+            if (row === undefined) {
+                throw new ConnectError(`No employee with id "${req.id}".`, Code.NotFound);
+            }
+            return create(ActivateEmployeeResponseSchema, { employee: toEmployee(row) });
+        },
+
+        // Compensation for step 1 — mark "offboarded". Idempotent: a no-op
+        // success for an unknown id (the saga only offboards a row it created,
+        // so this defends against a double unwind).
+        async offboardEmployee(req) {
+            const updated = await db.update(employees).set({ status: EmployeeStatus.OFFBOARDED, updatedAt: new Date() }).where(eq(employees.id, req.id)).returning();
+            const row = updated[0];
+            const employee = row !== undefined ? toEmployee(row) : create(EmployeeSchema, { id: req.id, status: EmployeeStatus.OFFBOARDED });
+            return create(OffboardEmployeeResponseSchema, { employee });
         },
     });
 }

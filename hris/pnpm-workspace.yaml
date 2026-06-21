@@ -1,3 +1,10 @@
 allowBuilds:
   '@bufbuild/buf': true
   esbuild: true
+  # @swc/core compiles the Temporal workflow bundle (@temporalio/worker bundles
+  # src/temporal/workflows.ts with swc at worker startup — no separate build).
+  '@swc/core': true
+  # protobufjs is pulled transitively by @temporalio's gRPC client
+  # (@grpc/grpc-js → @grpc/proto-loader → protobufjs). Allow its build so pnpm
+  # does not report ERR_PNPM_IGNORED_BUILDS on install.
+  protobufjs: true

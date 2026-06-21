@@ -19,10 +19,55 @@ service DirectoryService {
   // and `manager_id` filters narrow the stream; `manager_id` is the org-chart
   // "direct reports of this manager" query.
   rpc ListEmployees(ListEmployeesRequest) returns (stream Employee) {}
+
+  // CreateEmployee inserts a new employee in "onboarding" status. Returns
+  // ALREADY_EXISTS if the id is already taken. This is the onboarding saga's
+  // first forward step — its business failure (duplicate id) is what the
+  // workflow treats as non-retryable.
+  rpc CreateEmployee(CreateEmployeeRequest) returns (CreateEmployeeResponse) {}
+
+  // ActivateEmployee flips an employee from "onboarding" to "active" — the
+  // onboarding saga's terminal step. Idempotent: activating an already-active
+  // employee is a no-op success.
+  rpc ActivateEmployee(ActivateEmployeeRequest) returns (ActivateEmployeeResponse) {}
+
+  // OffboardEmployee marks an employee "offboarded" — the CreateEmployee
+  // compensation. Idempotent; a no-op for an unknown id.
+  rpc OffboardEmployee(OffboardEmployeeRequest) returns (OffboardEmployeeResponse) {}
 }
 
 message GetEmployeeRequest {
   string id = 1;
+}
+
+message CreateEmployeeRequest {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  string title = 4;
+  string department = 5;
+  // The id of this hire's manager, or empty for the top of the org chart.
+  string manager_id = 6;
+}
+
+message CreateEmployeeResponse {
+  Employee employee = 1;
+}
+
+message ActivateEmployeeRequest {
+  string id = 1;
+}
+
+message ActivateEmployeeResponse {
+  Employee employee = 1;
+}
+
+message OffboardEmployeeRequest {
+  string id = 1;
+}
+
+message OffboardEmployeeResponse {
+  Employee employee = 1;
 }
 
 message GetEmployeeResponse {

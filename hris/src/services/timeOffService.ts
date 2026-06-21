@@ -24,8 +24,27 @@ import { defineService, type ServiceDefinition } from "@connectum/core";
 import type { EventBus } from "@connectum/events";
 import { GetEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
 import { LeaveApprovedSchema } from "#gen/payroll/v1/payroll_pb.ts";
-import { LeaveRequestSchema, RequestLeaveResponseSchema, TimeOffService } from "#gen/timeoff/v1/timeoff_pb.ts";
+import { GrantTimeOffResponseSchema, LeaveRequestSchema, RequestLeaveResponseSchema, TimeOffGrantSchema, TimeOffService } from "#gen/timeoff/v1/timeoff_pb.ts";
 import { LEAVE_APPROVED_TOPIC } from "#events.ts";
+import { empty } from "#empty.ts";
+
+/**
+ * PTO policy-grant ledger (employee id → annual allotment in days). Distinct
+ * from PayrollService's decrementable leave BALANCE — this is the entitlement
+ * assigned at onboarding. Module-level so the onboarding saga's GrantTimeOff /
+ * RevokeTimeOff share it regardless of which `makeTimeOffService` instance runs.
+ */
+const grants = new Map<string, number>();
+
+/** Reset the PTO grant ledger — used between tests. */
+export function resetGrants(): void {
+    grants.clear();
+}
+
+/** Read an employee's PTO policy grant in days (test/inspection helper). */
+export function timeOffGrant(employeeId: string): number | undefined {
+    return grants.get(employeeId);
+}
 
 /**
  * Build the TimeOffService definition bound to a specific EventBus instance.
@@ -52,6 +71,24 @@ export function makeTimeOffService(eventBus: EventBus): ServiceDefinition {
             return create(RequestLeaveResponseSchema, {
                 leaveRequest: create(LeaveRequestSchema, { id: leaveRequestId, status: "APPROVED" }),
             });
+        },
+
+        // Onboarding saga step 3 — assign the new hire their annual PTO policy
+        // allotment. Idempotent: re-granting keeps the existing grant.
+        grantTimeOff(req) {
+            if (!grants.has(req.employeeId)) {
+                grants.set(req.employeeId, req.policyDays);
+            }
+            return create(GrantTimeOffResponseSchema, {
+                grant: create(TimeOffGrantSchema, { employeeId: req.employeeId, policyDays: grants.get(req.employeeId) ?? 0 }),
+            });
+        },
+
+        // Compensation for step 3 — revoke the PTO grant. Idempotent: a no-op
+        // success for an unknown employee.
+        revokeTimeOff(req) {
+            grants.delete(req.employeeId);
+            return empty();
         },
     });
 }
