@@ -18,11 +18,19 @@
 
 import { fileURLToPath } from "node:url";
 import { NativeConnection, Worker } from "@temporalio/worker";
+import { buildPublisherBus } from "#events/broadcastBus.ts";
 import * as activities from "#temporal/activities.ts";
 import { TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
 
 async function main(): Promise<void> {
     const connection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS });
+    // Build + start the publish-only EventBus (Phase 5b broadcast) and inject it
+    // into the activities module BEFORE the worker polls, so the terminal
+    // `announceOnboarded` activity publishes on a ready bus. The worker owns its
+    // lifecycle: stopped in the `finally` below.
+    const publisherBus = buildPublisherBus();
+    await publisherBus.start();
+    activities.setPublisherBus(publisherBus);
     try {
         const worker = await Worker.create({
             connection,
@@ -36,6 +44,7 @@ async function main(): Promise<void> {
         console.log(`hris temporal worker ready — taskQueue=${TEMPORAL_TASK_QUEUE} namespace=${TEMPORAL_NAMESPACE} temporal=${TEMPORAL_ADDRESS}`);
         await worker.run();
     } finally {
+        await publisherBus.stop();
         await connection.close();
     }
 }

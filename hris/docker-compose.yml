@@ -304,7 +304,12 @@ services:
       - PAYROLL_ADDR=http://payroll:5003
       - TIMEOFF_ADDR=http://timeoff:5002
       - ACCESS_ADDR=http://access:5004
+      # The terminal announceOnboarded activity publishes EmployeeOnboarded on
+      # the publish-only EventBus (Phase 5b broadcast).
+      - NATS_URL=nats://nats:4222
     depends_on:
+      nats:
+        condition: service_healthy
       temporal:
         condition: service_healthy
       directory:
@@ -314,6 +319,51 @@ services:
       timeoff:
         condition: service_healthy
       access:
+        condition: service_healthy
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  # ── REACTORS — three independent EmployeeOnboarded broadcast subscribers ───
+  #
+  # Each runs the SAME image with `node src/reactor.ts`, selecting its route +
+  # consumer group by REACTOR. Distinct groups → distinct NATS durable consumers
+  # → every reactor receives every event = fan-out (a shared group would
+  # load-balance / steal). No inbound RPC; a reactor only subscribes.
+  reactor-welcome:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=welcome
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  reactor-audit:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=audit
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  reactor-headcount:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=headcount
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
         condition: service_healthy
     networks:
       - hris

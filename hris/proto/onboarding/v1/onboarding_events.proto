@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package onboarding.v1;
+
+import "connectum/events/v1/options.proto";
+import "google/protobuf/empty.proto";
+
+// EmployeeOnboarded is the integration event broadcast EXACTLY ONCE when the
+// onboarding saga COMPLETES (the new hire is active). It is consumed
+// INDEPENDENTLY by three reactors — welcome, audit-log, and headcount — each on
+// its own EventBus with its own consumer group, so the single domain fact fans
+// out 1→N rather than being orchestrated.
+//
+// EventBus is used here for BROADCAST only; durability/ordering stays the saga's
+// (Temporal's) job. A lost broadcast must NEVER roll back a completed onboarding.
+message EmployeeOnboarded {
+  // The onboarded employee's id (also the reactor idempotency key).
+  string employee_id = 1;
+  string name = 2;
+  // Work email — the welcome reactor's notification target.
+  string email = 3;
+  // Department — the headcount reactor tallies per department.
+  string department = 4;
+  // The new hire's manager id (empty for the top of the org chart).
+  string manager_id = 5;
+}
+
+// OnboardingEventHandlers is an event-handler service: each RPC is a
+// subscription. The (connectum.events.v1.event).topic option pins the topic so
+// the PUBLISHER (which lists this service in `publishes`) and EACH subscriber
+// (which registers this service via `routes` on its OWN bus) agree on the topic
+// from the proto option alone — no raw topic string is ever hand-passed to
+// publish().
+//
+// One shared service is reused by the publisher and all three reactors;
+// independence between reactors comes from SEPARATE buses + DISTINCT consumer
+// groups, not from separate proto services (registering the same service on
+// three separate buses is fine — the duplicate-topic guard is per-bus).
+service OnboardingEventHandlers {
+  // OnEmployeeOnboarded reacts to a completed onboarding. Each reactor binds its
+  // OWN handler function to this RPC on its OWN bus.
+  rpc OnEmployeeOnboarded(EmployeeOnboarded) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "onboarding.employee-onboarded";
+  }
+}

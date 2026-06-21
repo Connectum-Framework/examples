@@ -68,6 +68,7 @@ function makeMockActivities(calls: string[], failing?: { step: string }): Record
         provisionAccess: async () => record("provisionAccess"),
         revokeAccess: async () => record("revokeAccess"),
         activateEmployee: async () => record("activateEmployee"),
+        announceOnboarded: async () => record("announceOnboarded"),
     };
 }
 
@@ -93,12 +94,23 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
         return worker.runUntil(testEnv.client.workflow.execute(OnboardingWorkflow, { args: [INPUT], taskQueue: TASK_QUEUE, workflowId }));
     }
 
-    it("success: runs the forward steps in order and COMPLETES", async () => {
+    it("success: runs the forward steps in order, COMPLETES, and broadcasts EmployeeOnboarded last", async () => {
         const calls: string[] = [];
         const result = await runWorkflow(makeMockActivities(calls), "wf-success");
 
         assert.equal(result, "COMPLETED");
-        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee"]);
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
+    });
+
+    it("a failed broadcast does NOT roll back or fail a completed onboarding (fire-and-forget)", async () => {
+        const calls: string[] = [];
+        // announceOnboarded throws, but it runs OUTSIDE the saga's compensation
+        // scope and the workflow swallows it — the run still resolves COMPLETED,
+        // no compensation fires, and the employee stays active.
+        const result = await runWorkflow(makeMockActivities(calls, { step: "announceOnboarded" }), "wf-broadcast-fail");
+
+        assert.equal(result, "COMPLETED");
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
     });
 
     it("activateEmployee fails: compensations run in REVERSE order (revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {

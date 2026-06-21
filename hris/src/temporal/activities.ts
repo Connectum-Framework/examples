@@ -29,8 +29,11 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { ApplicationFailure } from "@temporalio/activity";
 import { ProvisionAccessRequestSchema, RevokeAccessRequestSchema } from "#gen/access/v1/access_pb.ts";
 import { ActivateEmployeeRequestSchema, CreateEmployeeRequestSchema, OffboardEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
+import { EmployeeOnboardedSchema } from "#gen/onboarding/v1/onboarding_events_pb.ts";
 import { SetupPayrollRequestSchema, TeardownPayrollRequestSchema } from "#gen/payroll/v1/payroll_pb.ts";
 import { GrantTimeOffRequestSchema, RevokeTimeOffRequestSchema } from "#gen/timeoff/v1/timeoff_pb.ts";
+import type { ManagedBus } from "#events/broadcastBus.ts";
+import { buildPublisherBus } from "#events/broadcastBus.ts";
 import type { ServiceClients } from "#temporal/clients.ts";
 import { createServiceClients } from "#temporal/clients.ts";
 
@@ -60,6 +63,38 @@ function clients(): ServiceClients {
         sharedClients = createServiceClients();
     }
     return sharedClients;
+}
+
+/**
+ * The publish-only EventBus used by {@link announceOnboarded} to broadcast
+ * `EmployeeOnboarded` (Phase 5b). The worker INJECTS a started bus via
+ * {@link setPublisherBus} and owns its lifecycle (`start()`/`stop()`); this
+ * activity only `publish()`es on it. Tests inject a `MemoryAdapter`-backed bus
+ * through the same seam.
+ */
+let publisherBus: ManagedBus | undefined;
+
+/**
+ * Inject the publish-only bus the broadcast activity publishes on (the worker's
+ * seam, also used by the dockerless broadcast test). Pass `undefined` to reset.
+ *
+ * @param bus - A started publish-only bus, or `undefined` to reset (tests).
+ */
+export function setPublisherBus(bus: ManagedBus | undefined): void {
+    publisherBus = bus;
+}
+
+/**
+ * Get the injected publisher bus, or lazily build + start a default NATS one.
+ * The worker injects a bus before polling, so the lazy path is only a fallback.
+ */
+async function getPublisherBus(): Promise<ManagedBus> {
+    if (publisherBus === undefined) {
+        const bus = buildPublisherBus();
+        await bus.start();
+        publisherBus = bus;
+    }
+    return publisherBus;
 }
 
 /** Details of the new hire threaded through the forward steps. */
@@ -147,4 +182,28 @@ export async function revokeAccess(input: { employeeId: string }): Promise<void>
  */
 export async function activateEmployee(input: { employeeId: string }): Promise<void> {
     await clients().directory.activateEmployee(create(ActivateEmployeeRequestSchema, { id: input.employeeId }));
+}
+
+/**
+ * Step 6 (Phase 5b) — broadcast `EmployeeOnboarded` ONCE on completion. This is
+ * a fire-and-forget 1→N broadcast (the welcome / audit / headcount reactors),
+ * NOT an orchestrated step: it pushes no compensation and a failure here must
+ * NEVER roll back a completed onboarding (the employee is already active). The
+ * topic `onboarding.employee-onboarded` is resolved from the proto option via
+ * the bus's `publishes` list — no raw topic is passed.
+ *
+ * @param hire - The {@link NewHire} details, carried into the event.
+ */
+export async function announceOnboarded(hire: NewHire): Promise<void> {
+    const bus = await getPublisherBus();
+    await bus.publish(
+        EmployeeOnboardedSchema,
+        create(EmployeeOnboardedSchema, {
+            employeeId: hire.employeeId,
+            name: hire.name,
+            email: hire.email,
+            department: hire.department,
+            managerId: hire.managerId,
+        }),
+    );
 }

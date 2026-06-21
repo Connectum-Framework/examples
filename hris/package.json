@@ -12,6 +12,7 @@
     "start": "node src/index.ts",
     "dev": "node --watch src/index.ts",
     "worker": "node src/worker.ts",
+    "reactor": "node src/reactor.ts",
     "typecheck": "tsc --noEmit",
     "buf:generate": "buf generate",
     "buf:lint": "buf lint",

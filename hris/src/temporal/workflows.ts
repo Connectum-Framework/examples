@@ -112,8 +112,6 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
         // compensation.
         await acts.activateEmployee({ employeeId });
         status = OnboardingStatus.COMPLETED;
-
-        return status;
     } catch (err) {
         // Unwind in LIFO order; each compensation is isolated so the unwind
         // never throws. Temporal already retried each forward+comp activity.
@@ -130,4 +128,17 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
         if (err instanceof ApplicationFailure) throw err;
         throw ApplicationFailure.create({ message: String(err), type: "OnboardingWorkflowFailed" });
     }
+
+    // Phase 5b — broadcast `EmployeeOnboarded` ONCE on completion. This runs
+    // OUTSIDE the compensation scope (the catch above always rethrows, so we are
+    // here only on success): a fire-and-forget 1→N broadcast whose failure must
+    // NEVER roll back a now-active employee. It is logged and swallowed, never
+    // rethrown, so the workflow stays COMPLETED even if the broadcast is lost.
+    try {
+        await acts.announceOnboarded({ employeeId, name, email, title, department, managerId });
+    } catch (err) {
+        log.warn("EmployeeOnboarded broadcast failed (onboarding already complete; not rolling back)", { employeeId, error: String(err) });
+    }
+
+    return status;
 }

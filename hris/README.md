@@ -11,7 +11,7 @@ the right tool for a different job:
 | Mechanism | Used for | In this example |
 |---|---|---|
 | **`ctx.call`** (synchronous) | a reply you need now | `RequestLeave` validates the employee against the directory |
-| **EventBus** (fire-and-forget) | broadcast a fact | `LeaveApproved` → payroll decrements the balance |
+| **EventBus** (fire-and-forget) | announce a fact to 1 or N consumers | `LeaveApproved` → payroll (single subscriber); `EmployeeOnboarded` → welcome + audit + headcount ([fan-out](#broadcast--fan-out-phase-5b)) |
 | **Temporal saga** (durable) | a long multi-step transaction with rollback | onboarding a new hire across four services |
 
 Five services, one integration event, and a durable saga:
@@ -148,6 +148,48 @@ grpcurl -plaintext -d '{"employee_id":"e-100","name":"New Hire","email":"newhire
 open http://localhost:8088
 ```
 
+## Broadcast / fan-out (Phase 5b)
+
+The example uses the EventBus for **both** of its shapes. `LeaveApproved` is a
+**single** subscriber (payroll). `EmployeeOnboarded` is the **1→N broadcast**:
+when the onboarding saga COMPLETES, the worker's terminal `announceOnboarded`
+activity publishes the fact ONCE, and **three independent reactors** consume it —
+**welcome** ("sends" a welcome email), **audit** (appends an onboarding record),
+and **headcount** (tallies per-department headcount). EventBus is used here for
+broadcast only; durability stays the saga's job — *a lost broadcast must never
+roll back a completed onboarding*, so the publish runs outside the compensation
+scope and a failure is logged, not retried into a rollback.
+
+The fan-out is **four buses, not one bus with three handlers**:
+
+- the **publisher** bus is publish-only (`routes: []`, `publishes:
+  [OnboardingEventHandlers]`). Listing the event service in `publishes` resolves
+  the topic `onboarding.employee-onboarded` from the proto
+  `(connectum.events.v1.event).topic` option, so the publisher passes **no raw
+  topic** — without it, a route-less publisher would fall back to the message
+  `typeName`.
+- each **reactor** bus has one route under its **own distinct consumer group**.
+  Two routes on the same topic cannot share a bus (the duplicate-topic guard
+  throws at `start()`), so the three reactors are forced onto three buses. On a
+  broker, distinct groups give distinct durable consumers → each gets every event
+  (fan-out); a shared group would load-balance (one reactor steals each event).
+
+Each reactor runs as its own process (`node src/reactor.ts`, role by `REACTOR`),
+the same one-image-many-roles pattern as the RPC roles and the worker. The
+reactors are **idempotent** (dedupe by `employeeId`) because a broker broadcast
+is at-least-once.
+
+```bash
+# The reactors come up with the `saga` profile (welcome / audit / headcount):
+docker compose --profile split --profile saga up
+```
+
+::: warning Requires @connectum/events ≥ 1.1.0
+The publish-only `publishes` option and the broadcast wiring ship in **1.1.0**.
+The `^1.0.0` range in `package.json` resolves 1.1.0 once it is published; until
+then, this Phase 5b broadcast is verified against pre-release snapshots.
+:::
+
 ## Layout
 
 ```
@@ -157,6 +199,7 @@ proto/
   payroll/v1/payroll.proto           # GetBalance + LeaveApproved + SetupPayroll/TeardownPayroll (saga)
   access/v1/access.proto             # AccessService.ProvisionAccess/RevokeAccess (saga leaf)
   onboarding/v1/onboarding.proto     # OnboardingService.OnboardEmployee/GetOnboarding (saga gateway)
+  onboarding/v1/onboarding_events.proto # EmployeeOnboarded + OnboardingEventHandlers (broadcast)
   connectum/events/v1/options.proto  # (connectum.events.v1.event).topic option
 buf.gen.yaml                         # protoc-gen-es + protoc-gen-connectum-catalog (strategy: all)
 src/
@@ -174,7 +217,10 @@ src/
   temporal/clients.ts                # ConnectRPC clients the activities drive (*_ADDR)
   temporal/activities.ts             # saga side effects (each one RPC) + compensations
   temporal/workflows.ts              # OnboardingWorkflow — the durable saga (deterministic sandbox)
-  worker.ts                          # @temporalio/worker host (the ONLY native-addon process)
+  worker.ts                          # @temporalio/worker host (publishes EmployeeOnboarded); native-addon process
+  reactor.ts                         # EmployeeOnboarded broadcast subscriber (role by REACTOR)
+  events/broadcastBus.ts             # publish-only bus (publishes) + per-reactor buses (distinct groups)
+  events/reactors.ts                 # welcome / audit / headcount reactors (idempotent)
   topology.ts                        # env → enabledServices + remoteResolver
   events.ts                          # LEAVE_APPROVED_TOPIC constant (publisher/subscriber match)
   eventBus.ts                        # one bus per process; payroll subscribes only when local
@@ -190,7 +236,8 @@ tests/
   e2e/onboarding.test.ts             # onboarding edge — pre-check + start (stub Temporal)
   activity/activities.test.ts        # real activities ↔ RPC wiring + compensation idempotency
   workflow/onboardingWorkflow.test.ts# saga orchestration + LIFO compensation (time-skipping)
-docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal)
+  e2e/broadcast.test.ts              # EmployeeOnboarded 1→N fan-out to three reactors (MemoryAdapter)
+docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal + reactors)
 Dockerfile                           # one image, role chosen by SERVICES env (worker = node src/worker.ts)
 ```
 
