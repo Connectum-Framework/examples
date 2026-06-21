@@ -6,24 +6,54 @@ import "connectum/auth/v1/options.proto";
 
 // TripService is the EDGE service — the only one external clients call.
 //
-// Its handler orchestrates two internal services via ctx.call:
-//   1. fleet.v1.FleetService/GetVehicle — checks availability; an unavailable
-//      vehicle yields FAILED_PRECONDITION.
-//   2. billing.v1.BillingService/OpenTab — opens the billing tab once the trip
-//      starts.
+// Phase 2: StartTrip no longer orchestrates with ctx.call. It now does a
+// SYNCHRONOUS availability pre-check (a ctx.call to FleetService/GetVehicle,
+// preserving today's FAILED_PRECONDITION/NOT_FOUND error contract) and then
+// STARTS a durable Temporal workflow (TripWorkflow) that owns the saga:
+// reserve → record → end → openTab → addCharge → settle, with automatic
+// compensation on failure. StartTrip returns immediately with the trip id, an
+// initial status, and the workflow id. Live status is read via GetTrip, which
+// issues a Temporal Workflow Query.
+//
+// RecordTrip and EndTrip are INTERNAL RPCs the workflow's activities call from
+// the (JWT-less) Temporal worker. They own the in-memory trip ledger.
 //
 // Authorization is declared in proto and enforced by the gateway interceptors:
 //   - service_auth.default_policy = "allow": any AUTHENTICATED caller may invoke
-//     methods that carry no method-level rule. StartTrip therefore requires a
-//     valid JWT (no token -> UNAUTHENTICATED) but no particular role — exactly
-//     the "logged-in user starts a trip" edge contract.
+//     methods that carry no method-level rule (StartTrip, GetTrip) — a valid JWT
+//     is required (no token -> UNAUTHENTICATED) but no particular role.
+//   - method_auth { public: true } on RecordTrip/EndTrip: those two skip both
+//     authn and authz, so the worker's tokenless ConnectRPC client may call
+//     them (mirroring how fleet/billing are service-level public). The real
+//     network trust boundary is the mesh (Istio mTLS + AuthorizationPolicy).
 service TripService {
   option (connectum.auth.v1.service_auth) = { default_policy: "allow" };
 
   // StartTrip starts a trip for (user_id, vehicle_id). Requires a valid JWT.
-  // Returns FAILED_PRECONDITION if the vehicle is unavailable, NOT_FOUND if the
-  // vehicle is unknown (propagated from FleetService).
+  // It pre-checks availability SYNCHRONOUSLY (FAILED_PRECONDITION if the vehicle
+  // is unavailable, NOT_FOUND if unknown — propagated from FleetService) BEFORE
+  // starting the durable workflow, then returns the trip id, initial status, and
+  // the workflow id.
   rpc StartTrip(StartTripRequest) returns (StartTripResponse) {}
+
+  // GetTrip returns a trip's current status. Requires a valid JWT. It reads live
+  // status from the running workflow via a Temporal Workflow Query, falling back
+  // to a terminal status when the workflow has closed.
+  rpc GetTrip(GetTripRequest) returns (GetTripResponse) {}
+
+  // RecordTrip creates the trip ledger row (status STARTED). INTERNAL: called by
+  // the worker's reserve→record activity. Public so the tokenless worker passes
+  // the gateway auth chain.
+  rpc RecordTrip(RecordTripRequest) returns (RecordTripResponse) {
+    option (connectum.auth.v1.method_auth) = { public: true };
+  }
+
+  // EndTrip transitions a trip to a terminal status (ENDED on the happy path,
+  // CANCELLED as the record-trip compensation). INTERNAL: called by the worker's
+  // activities. Public so the tokenless worker passes the gateway auth chain.
+  rpc EndTrip(EndTripRequest) returns (EndTripResponse) {
+    option (connectum.auth.v1.method_auth) = { public: true };
+  }
 }
 
 message StartTripRequest {
@@ -33,10 +63,45 @@ message StartTripRequest {
 
 message StartTripResponse {
   Trip trip = 1;
+  // The durable Temporal workflow id (== the trip id) that orchestrates the
+  // saga. Clients poll status via GetTrip(trip.id). (Additive in Phase 2.)
+  string workflow_id = 2;
+}
+
+message GetTripRequest {
+  string trip_id = 1;
+}
+
+message GetTripResponse {
+  Trip trip = 1;
+}
+
+message RecordTripRequest {
+  string user_id = 1;
+  string vehicle_id = 2;
+  string trip_id = 3;
+}
+
+message RecordTripResponse {
+  Trip trip = 1;
+}
+
+message EndTripRequest {
+  string trip_id = 1;
+  // Target terminal status: "ENDED" (normal finish) or "CANCELLED"
+  // (compensation). See the TripStatus domain in src/temporal/tripStatus.ts.
+  string status = 2;
+}
+
+message EndTripResponse {
+  Trip trip = 1;
 }
 
 message Trip {
   string id = 1;
-  // Trip status: "STARTED" once the vehicle is reserved and the tab is open.
+  // Trip lifecycle status: "STARTED" | "ENDED" | "SETTLED" | "CANCELLED".
+  // Modeled as a string (not a proto enum) so the generated TypeScript stays
+  // erasable (this example's tsconfig sets `erasableSyntaxOnly`). The domain is
+  // pinned in code by the TripStatus `const` object (src/temporal/tripStatus.ts).
   string status = 2;
 }

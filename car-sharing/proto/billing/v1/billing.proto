@@ -4,17 +4,45 @@ package billing.v1;
 
 import "connectum/auth/v1/options.proto";
 
-// BillingService opens a billing tab for a trip (a leaf service).
+// BillingService keeps a trip's billing tab and charges (a leaf service).
 //
-// Like FleetService, it is INTERNAL: only the trip handler calls it via
-// ctx.call, so it is marked `public: true` (skip authn + authz). The trust
-// boundary is the mesh: Istio mTLS + AuthorizationPolicy restrict who may reach
-// it in production (see istio/).
+// Like FleetService, it is INTERNAL: it is reached only by the trip handler's
+// ctx.call (OpenTab pre-Phase-2) and, in Phase 2, by the Temporal worker's
+// activities (OpenTab / AddCharge / Settle and their compensations VoidTab /
+// RefundCharge). It is marked `service_auth { public: true }`, so the
+// gateway-facing JWT auth and proto authz interceptors skip every RPC: the
+// worker's ConnectRPC clients carry no Authorization header, exactly like the
+// in-process ctx.call did. The trust boundary is the mesh (Istio mTLS +
+// AuthorizationPolicy; see istio/).
+//
+// Persistence stays in-memory in Phase 2 — the DURABLE billing state lives in
+// the Temporal workflow history. The in-memory ledger only needs to record
+// enough (tab state, charges keyed by id) for the compensations to be
+// idempotent: VoidTab on an already-void tab and RefundCharge on an
+// already-refunded charge are no-op successes.
 service BillingService {
   option (connectum.auth.v1.service_auth) = { public: true };
 
-  // OpenTab opens a billing tab for the given trip and returns it.
+  // OpenTab opens a billing tab for the given trip and returns it. Idempotent
+  // by trip_id: re-opening an existing tab returns the same tab.
   rpc OpenTab(OpenTabRequest) returns (OpenTabResponse) {}
+
+  // AddCharge adds a charge line (in minor units, e.g. cents) to a trip's tab
+  // and returns the minted charge id. The saga derives the amount from the trip
+  // duration.
+  rpc AddCharge(AddChargeRequest) returns (AddChargeResponse) {}
+
+  // Settle finalizes (closes) a trip's tab — the terminal happy-path billing
+  // step. FAILED_PRECONDITION if there is no tab for the trip.
+  rpc Settle(SettleRequest) returns (SettleResponse) {}
+
+  // VoidTab voids a trip's tab (saga compensation for OpenTab). Idempotent: a
+  // missing or already-void tab is a no-op success.
+  rpc VoidTab(VoidTabRequest) returns (VoidTabResponse) {}
+
+  // RefundCharge refunds a charge by id (saga compensation for AddCharge).
+  // Idempotent: a missing or already-refunded charge is a no-op success.
+  rpc RefundCharge(RefundChargeRequest) returns (RefundChargeResponse) {}
 }
 
 message OpenTabRequest {
@@ -25,7 +53,48 @@ message OpenTabResponse {
   Tab tab = 1;
 }
 
+message AddChargeRequest {
+  string trip_id = 1;
+  // Charge amount in minor units (e.g. cents). The saga derives it from the
+  // trip duration.
+  int64 amount_cents = 2;
+}
+
+message AddChargeResponse {
+  string charge_id = 1;
+}
+
+message SettleRequest {
+  string trip_id = 1;
+}
+
+message SettleResponse {
+  Tab tab = 1;
+}
+
+message VoidTabRequest {
+  string trip_id = 1;
+}
+
+message VoidTabResponse {
+  // True if a tab existed and is now void (or was already void); false if there
+  // was never a tab for the trip. Either way the call succeeds (idempotent).
+  bool voided = 1;
+}
+
+message RefundChargeRequest {
+  string trip_id = 1;
+  string charge_id = 2;
+}
+
+message RefundChargeResponse {
+  // True if the charge existed and is now refunded (or was already refunded);
+  // false if the charge id is unknown. Either way the call succeeds.
+  bool refunded = 1;
+}
+
 message Tab {
   string id = 1;
+  // True while the tab is open; false once it is settled or voided.
   bool open = 2;
 }

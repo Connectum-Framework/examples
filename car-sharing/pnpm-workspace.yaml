@@ -1,5 +1,9 @@
 allowBuilds:
   '@bufbuild/buf': true
+  # @swc/core compiles the Temporal workflow bundle (@temporalio/worker bundles
+  # workflowsPath via swc at worker startup). Allow its build so the prebuilt
+  # native binding is wired up; without this pnpm reports ERR_PNPM_IGNORED_BUILDS.
+  '@swc/core': true
   esbuild: true
   # protobufjs is pulled transitively by @connectum/otel's OTLP/gRPC exporters
   # (@grpc/grpc-js → @grpc/proto-loader → protobufjs). Allow its build so the
