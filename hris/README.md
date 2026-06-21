@@ -3,30 +3,49 @@
 A shallow **HR Information System** that showcases the hard cases Connectum
 solves out of the box: **the same handler code runs as a monolith (in-process)
 or as microservices (split processes) purely by env**, plus an event-driven
-payroll flow.
+payroll flow and a **durable Temporal saga** for onboarding.
 
-Three services and one integration event:
+It demonstrates **three orthogonal cross-service mechanisms** side by side, each
+the right tool for a different job:
+
+| Mechanism | Used for | In this example |
+|---|---|---|
+| **`ctx.call`** (synchronous) | a reply you need now | `RequestLeave` validates the employee against the directory |
+| **EventBus** (fire-and-forget) | broadcast a fact | `LeaveApproved` → payroll decrements the balance |
+| **Temporal saga** (durable) | a long multi-step transaction with rollback | onboarding a new hire across four services |
+
+Five services, one integration event, and a durable saga:
 
 - **`directory.v1.DirectoryService`** — `GetEmployee(id)` → `Employee` and
   `ListEmployees(filter)` → stream of `Employee` (the employee **system of
   record**, backed by Drizzle ORM + Postgres; `Code.NotFound` for an unknown id).
-  A leaf service — see [Persistence](#persistence-directoryservice--drizzle--postgres).
+  Also hosts the saga's `CreateEmployee` / `ActivateEmployee` / `OffboardEmployee`.
+  See [Persistence](#persistence-directoryservice--drizzle--postgres).
 - **`timeoff.v1.TimeOffService`** — `RequestLeave(employeeId, days)`. Its handler
   validates the employee with
   `ctx.call("directory.v1.DirectoryService/GetEmployee", …)`, then approves and
-  **publishes** a `LeaveApproved` event.
+  **publishes** a `LeaveApproved` event. Also hosts the saga's `GrantTimeOff` /
+  `RevokeTimeOff`.
 - **`payroll.v1.PayrollService`** — `GetBalance(employeeId)` → `Balance`.
-  **Subscribes** to `LeaveApproved` and decrements the balance.
+  **Subscribes** to `LeaveApproved` and decrements the balance. Also hosts the
+  saga's `SetupPayroll` / `TeardownPayroll`.
+- **`access.v1.AccessService`** — `ProvisionAccess` / `RevokeAccess` (the saga's
+  IT-provisioning leaf; an in-memory account ledger).
+- **`onboarding.v1.OnboardingService`** — `OnboardEmployee` / `GetOnboarding`
+  (the saga **gateway**: a synchronous pre-check, then it starts the durable
+  `OnboardingWorkflow`). See [The onboarding saga](#the-onboarding-saga-temporal).
 
 The product is deliberately thin — the point is the framework wiring.
 
 > **Note:** this example uses the service-catalog API (`defineService`,
 > `ctx.call`, `catalog`) and the EventBus, shipped in **1.0.0** (published on
-> npm).
+> npm). The onboarding saga uses [Temporal](https://temporal.io) (an external
+> dependency) — no Connectum API beyond 1.0.0, so it runs on the published
+> packages.
 
 ## The headline: one codebase, two topologies
 
-`src/server.ts` exposes a single `buildServer()`. It always passes the same three
+`src/server.ts` exposes a single `buildServer()`. It always passes the same five
 service definitions and the same generated `serviceCatalog`. Only `src/topology.ts`
 reads env and tells the framework what is local vs remote:
 
@@ -68,26 +87,97 @@ NATS broker when started via `pnpm start` / Docker. Only the e2e test swaps in a
 in-memory adapter so the full flow runs broker-free (see
 [Testing note](#testing-note)).
 
+## The onboarding saga (Temporal)
+
+Onboarding a new hire is a **long, multi-step transaction**: create the directory
+record, enrol them in payroll, grant their PTO policy, and provision system
+access. If any step fails, the ones that already succeeded must be **undone** —
+the classic *saga* with compensations. `ctx.call` and the EventBus are the wrong
+tools (no durability, no rollback); this is where a durable workflow engine earns
+its place. Connectum stays thin: the framework serves the RPCs; [Temporal](https://temporal.io)
+owns the durability.
+
+`OnboardingService.OnboardEmployee` is the **gateway**. It runs a **synchronous
+pre-check** — `ctx.call` to the directory, where an *existing* id is rejected
+with `Code.AlreadyExists` (the check is inverted from a "must exist" lookup: the
+new id must be **free**). Only after the pre-check passes does it **start** the
+durable `OnboardingWorkflow` and return immediately with `STARTED`. Because the
+pre-check runs first, the error path needs **no live Temporal**.
+
+The workflow runs the forward steps and pushes each step's compensation onto a
+stack; on any failure it unwinds the stack in **LIFO** order, then fails:
+
+```
+createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provisionAccess ──▶ activateEmployee  ✓ COMPLETED
+   │ offboard        │ teardown        │ revokeTimeOff   │ revokeAccess        (terminal — no undo)
+   └────────────── on failure, compensations run in reverse ◀──────────────┘  ✗ FAILED
+```
+
+- **`createEmployee`** is the saga's first step; a duplicate id is a **business**
+  failure surfaced as `Code.AlreadyExists` (via an atomic
+  `insert … on conflict do nothing returning`, never a raw DB error). The activity
+  rethrows it as a **non-retryable** `ApplicationFailure` so the workflow fails
+  fast with nothing to compensate.
+- Every other step keeps Temporal's **default retry policy** — the durability the
+  saga demonstrates. The compensations are **idempotent**, so an unwind after a
+  partially-applied step is safe.
+- **`activateEmployee`** (onboarding → active) is terminal: a success is final, so
+  it pushes no compensation.
+
+### The worker — a separate process
+
+The durable code runs in a dedicated **worker** (`src/worker.ts`), the **only**
+process that imports `@temporalio/worker` (the native core-bridge + the swc
+workflow bundler). The RPC roles import only the pure-JS `@temporalio/client`, so
+they keep their **no-build, native-TS** run model — `node src/index.ts`, no
+compile step. The worker's activities drive the role services over ConnectRPC
+(`*_ADDR`), exactly like any other cross-pod call.
+
+### Run the saga
+
+The `saga` compose profile adds Temporal, the onboarding gateway, and the worker;
+it pairs with `split` (the worker targets the per-role services):
+
+```bash
+docker compose --profile split --profile saga up
+# Onboard a new hire (the gateway is on :5005):
+grpcurl -plaintext -d '{"employee_id":"e-100","name":"New Hire","email":"newhire@example.com","title":"Engineer","department":"Engineering","manager_id":"e-002"}' \
+  localhost:5005 onboarding.v1.OnboardingService/OnboardEmployee
+# Watch the workflow + its compensations in the Temporal Web UI:
+open http://localhost:8088
+```
+
 ## Layout
 
 ```
 proto/
-  directory/v1/directory.proto       # DirectoryService.GetEmployee + ListEmployees (stream)
-  timeoff/v1/timeoff.proto           # TimeOffService.RequestLeave
-  payroll/v1/payroll.proto           # PayrollService.GetBalance + LeaveApproved + PayrollEventHandlers
+  directory/v1/directory.proto       # GetEmployee + ListEmployees + Create/Activate/Offboard (saga)
+  timeoff/v1/timeoff.proto           # RequestLeave + GrantTimeOff/RevokeTimeOff (saga)
+  payroll/v1/payroll.proto           # GetBalance + LeaveApproved + SetupPayroll/TeardownPayroll (saga)
+  access/v1/access.proto             # AccessService.ProvisionAccess/RevokeAccess (saga leaf)
+  onboarding/v1/onboarding.proto     # OnboardingService.OnboardEmployee/GetOnboarding (saga gateway)
   connectum/events/v1/options.proto  # (connectum.events.v1.event).topic option
 buf.gen.yaml                         # protoc-gen-es + protoc-gen-connectum-catalog (strategy: all)
 src/
   db/schema.ts                       # Drizzle: employees table + EmployeeStatus const
   db/client.ts                       # Db type + createDb() (DATABASE_URL, postgres.js)
   db/seed.ts                         # SEED_EMPLOYEES (org chart) + seedEmployees()
-  services/directoryService.ts       # createDirectoryService(db) — Drizzle-backed leaf service
-  services/timeOffService.ts         # ctx.call validation + publishes LeaveApproved
-  services/payrollService.ts         # GetBalance + LeaveApproved subscriber route
+  services/directoryService.ts       # createDirectoryService(db) — leaf + saga create/activate/offboard
+  services/timeOffService.ts         # ctx.call validation + publishes LeaveApproved + saga grant/revoke
+  services/payrollService.ts         # GetBalance + LeaveApproved subscriber + saga setup/teardown
+  services/accessService.ts          # AccessService — saga IT-provisioning leaf (in-memory)
+  services/onboardingService.ts      # createOnboardingService(workflowClient) — saga gateway
+  temporal/onboardingStatus.ts       # OnboardingStatus const (side-effect-free, sandbox-safe)
+  temporal/config.ts                 # TEMPORAL_ADDRESS / NAMESPACE / TASK_QUEUE (env)
+  temporal/workflowClient.ts         # lazy @temporalio/client WorkflowClient (gateway side)
+  temporal/clients.ts                # ConnectRPC clients the activities drive (*_ADDR)
+  temporal/activities.ts             # saga side effects (each one RPC) + compensations
+  temporal/workflows.ts              # OnboardingWorkflow — the durable saga (deterministic sandbox)
+  worker.ts                          # @temporalio/worker host (the ONLY native-addon process)
   topology.ts                        # env → enabledServices + remoteResolver
   events.ts                          # LEAVE_APPROVED_TOPIC constant (publisher/subscriber match)
   eventBus.ts                        # one bus per process; payroll subscribes only when local
-  server.ts                          # buildServer() — same code, both topologies + db DI
+  server.ts                          # buildServer() — same code, both topologies + db + Temporal DI
   index.ts                           # env-driven entry point
 drizzle/                             # generated SQL migrations (single source of truth)
 drizzle.config.ts                    # drizzle-kit config (schema → migrations / push)
@@ -96,8 +186,11 @@ tests/
   helpers/db.ts                      # PGlite test db (migrate + seed), injected via DI
   e2e/e2e.test.ts                    # monolith e2e — in-process, no broker (PGlite db)
   e2e/directory.test.ts              # DirectoryService persistence e2e (real gRPC client)
-docker-compose.yml                   # mono + split profiles + NATS + Postgres (config only)
-Dockerfile                           # one image, role chosen by SERVICES env
+  e2e/onboarding.test.ts             # onboarding edge — pre-check + start (stub Temporal)
+  activity/activities.test.ts        # real activities ↔ RPC wiring + compensation idempotency
+  workflow/onboardingWorkflow.test.ts# saga orchestration + LIFO compensation (time-skipping)
+docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal)
+Dockerfile                           # one image, role chosen by SERVICES env (worker = node src/worker.ts)
 ```
 
 ## The generated catalog
@@ -261,7 +354,7 @@ balance by the time `RequestLeave` resolves, so the assertion needs no polling.
 The cross-service validation path (`ctx.call` → `Code.NotFound` for an unknown
 employee) needs no broker at all.
 
-Two test files share the same PGlite setup (`tests/helpers/db.ts`, which migrates
+The e2e files share the same PGlite setup (`tests/helpers/db.ts`, which migrates
 + seeds the directory):
 
 - `tests/e2e/e2e.test.ts` — the monolith flow (gateway `ctx.call` validation +
@@ -270,9 +363,23 @@ Two test files share the same PGlite setup (`tests/helpers/db.ts`, which migrate
   over a **real gRPC client**: `GetEmployee` (incl. `NOT_FOUND`), streaming
   `ListEmployees` with the `department` and org-chart `manager_id` filters, and
   cursor pagination.
+- `tests/e2e/onboarding.test.ts` — the onboarding gateway: a free id passes the
+  inverted pre-check and starts the saga (stub Temporal client); an already-taken
+  id is rejected with `AlreadyExists` **before** Temporal; with no client the
+  pre-check still runs and a free id then raises `Unavailable`.
 
-The split topology shares this exact handler code and is exercised via
-`docker-compose.yml`.
+The **saga itself** is verified without Docker or a Temporal cluster:
+
+- `tests/workflow/onboardingWorkflow.test.ts` — the real `OnboardingWorkflow`
+  with **mocked activities** under Temporal's **time-skipping** test environment:
+  the forward order, and the **LIFO compensation** unwind on each failing step
+  (incl. the non-retryable first step that compensates nothing).
+- `tests/activity/activities.test.ts` — the **real activity bodies** against an
+  in-process Connectum monolith (PGlite): each step mutates real service state,
+  the duplicate-id failure is non-retryable, and every compensation is idempotent.
+
+The split topology and the saga share this exact handler code and are exercised
+via `docker-compose.yml` (the `split` and `saga` profiles).
 
 ## Key points
 
@@ -290,6 +397,12 @@ The split topology shares this exact handler code and is exercised via
   `DATABASE_URL`; tests inject PGlite so the persistence e2e runs without Docker.
   The committed `drizzle/` migrations are the single source of truth both paths
   apply.
+- **Durable saga via Temporal** — onboarding is a multi-step transaction with
+  automatic LIFO compensation, run in a dedicated **worker** process; the RPC
+  roles stay no-build (only the worker loads the native `@temporalio/worker`).
+  The framework serves the RPCs; Temporal owns the durability. Three mechanisms —
+  `ctx.call`, EventBus, Temporal saga — coexist in one codebase, each fit to its
+  job.
 - **`enabledServices: undefined` vs `[]`** — monolith must pass `undefined`
   (mount everything); an empty array would mount nothing. `topology.ts` handles
   the unset/`*` → `undefined` mapping.
