@@ -16,7 +16,7 @@
 import { boolean, doublePrecision, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
- * Vehicle lifecycle states. A `const` object (ADR-001: no `enum`) — the string
+ * Vehicle lifecycle states. A `const` object (no `enum` under erasable TypeScript) — the string
  * domain stored in {@link vehicles}.`status`.
  */
 export const VehicleStatus = {
