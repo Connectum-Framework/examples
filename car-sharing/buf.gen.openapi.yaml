@@ -1,0 +1,17 @@
+version: v2
+clean: true
+# Separate template for the OpenAPI BASE spec, kept apart from buf.gen.yaml so the
+# network-dependent remote plugin never runs during the offline `buf:generate`
+# (TS codegen). `inputs: proto` limits generation to this example's own services
+# (the connectum/auth options module is still resolved as a workspace import, but
+# not itself emitted). Run via `pnpm openapi`, which then applies the Connectum
+# authz overlay (scripts/openapi-authz.ts) on top of this base.
+inputs:
+  - directory: proto
+plugins:
+  # OpenAPI v3.1 from the Connect proto (sudorandom/protoc-gen-connect-openapi).
+  - remote: buf.build/community/sudorandom-connect-openapi:v0.25.7
+    out: openapi
+    opt:
+      - format=yaml
+      - features=connectrpc

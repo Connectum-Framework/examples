@@ -405,6 +405,40 @@ needs **no signing secret** (the old `k8s/secret-jwt.yaml` was removed); only
 `OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE` in `k8s/configmap.yaml`. See
 `ory/oathkeeper/README.md` for the full edge + ext_authz details.
 
+## OpenAPI — the published contract reflects the authz
+
+The proto is the single source of truth: the same `connectum.auth.v1` options that
+the gateway **enforces** at runtime also drive the **published** OpenAPI contract,
+so the two cannot drift. Generate it with:
+
+```bash
+pnpm openapi   # buf generate (base) → scripts/openapi-authz.ts (authz overlay)
+```
+
+Two steps, decoupled from the offline `pnpm buf:generate`:
+
+1. **Base spec** — `buf.gen.openapi.yaml` runs
+   [`protoc-gen-connect-openapi`](https://github.com/sudorandom/protoc-gen-connect-openapi)
+   (buf remote plugin) → OpenAPI v3.1 for the Connect API under `openapi/`.
+2. **Authz overlay** — `scripts/openapi-authz.ts` reads the `connectum.auth.v1`
+   options via **`resolveMethodAuth`** (the *same* reader the runtime
+   `createProtoAuthzInterceptor` uses) and injects, per operation:
+   - a `bearerAuth` (JWT) `securityScheme`;
+   - `security: [{ bearerAuth: [] }]` on methods that require auth (e.g.
+     `StartTrip`, `GetTrip`);
+   - `security: []` + `x-connectum-public: true` on `public` methods (e.g. the
+     tokenless worker RPCs `EndTrip` / `RecordTrip`, and all of fleet/billing);
+   - `x-connectum-required-roles` / `-scopes` where the proto declares them.
+
+The committed `openapi/*.yaml` is the showcase output — regenerate with
+`pnpm openapi` after changing the proto or its auth options.
+
+> **Notes.** Streaming RPCs (`ListVehicles`) are omitted from the base spec
+> unless the plugin's `with-streaming` opt is set. The overlay works on the
+> published `@connectum/auth` 1.0.0; once 1.1.0 is out, methods marked
+> `internal` in the proto also get `x-internal: true` (the resolver then
+> exposes that marker).
+
 ## Build the image
 
 ```bash

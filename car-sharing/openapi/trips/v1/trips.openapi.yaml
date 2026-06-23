@@ -1,0 +1,395 @@
+openapi: 3.1.0
+info:
+  title: trips.v1
+paths:
+  /trips.v1.TripService/EndTrip:
+    post:
+      tags:
+        - trips.v1.TripService
+      summary: EndTrip
+      description: >-
+        EndTrip transitions a trip to a terminal status (ENDED on the happy
+        path,
+         CANCELLED as the record-trip compensation). INTERNAL: called by the worker's
+         activities. Public so the tokenless worker passes the gateway auth chain.
+      operationId: trips.v1.TripService.EndTrip
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/trips.v1.EndTripRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/trips.v1.EndTripResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /trips.v1.TripService/GetTrip:
+    post:
+      tags:
+        - trips.v1.TripService
+      summary: GetTrip
+      description: >-
+        GetTrip returns a trip's current status. Requires a valid JWT. It reads
+        live
+         status from the running workflow via a Temporal Workflow Query, falling back
+         to a terminal status when the workflow has closed.
+      operationId: trips.v1.TripService.GetTrip
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/trips.v1.GetTripRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/trips.v1.GetTripResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security:
+        - bearerAuth: []
+  /trips.v1.TripService/RecordTrip:
+    post:
+      tags:
+        - trips.v1.TripService
+      summary: RecordTrip
+      description: >-
+        RecordTrip creates the trip ledger row (status STARTED). INTERNAL:
+        called by
+         the worker's reserve→record activity. Public so the tokenless worker passes
+         the gateway auth chain.
+      operationId: trips.v1.TripService.RecordTrip
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/trips.v1.RecordTripRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/trips.v1.RecordTripResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /trips.v1.TripService/StartTrip:
+    post:
+      tags:
+        - trips.v1.TripService
+      summary: StartTrip
+      description: >-
+        StartTrip starts a trip for (user_id, vehicle_id). Requires a valid JWT.
+         It pre-checks availability SYNCHRONOUSLY (FAILED_PRECONDITION if the vehicle
+         is unavailable, NOT_FOUND if unknown — propagated from FleetService) BEFORE
+         starting the durable workflow, then returns the trip id, initial status, and
+         the workflow id.
+      operationId: trips.v1.TripService.StartTrip
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/trips.v1.StartTripRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/trips.v1.StartTripResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security:
+        - bearerAuth: []
+components:
+  schemas:
+    connect-protocol-version:
+      type: number
+      title: Connect-Protocol-Version
+      enum:
+        - 1
+      description: Define the version of the Connect protocol
+      const: 1
+    connect-timeout-header:
+      type: number
+      title: Connect-Timeout-Ms
+      description: Define the timeout, in ms
+    connect.error:
+      type: object
+      properties:
+        code:
+          type: string
+          examples:
+            - not_found
+          enum:
+            - canceled
+            - unknown
+            - invalid_argument
+            - deadline_exceeded
+            - not_found
+            - already_exists
+            - permission_denied
+            - resource_exhausted
+            - failed_precondition
+            - aborted
+            - out_of_range
+            - unimplemented
+            - internal
+            - unavailable
+            - data_loss
+            - unauthenticated
+          description: The status code, which should be an enum value of
+            [google.rpc.Code][google.rpc.Code].
+        message:
+          type: string
+          description: A developer-facing error message, which should be in English. Any
+            user-facing error message should be localized and sent in the
+            [google.rpc.Status.details][google.rpc.Status.details] field, or
+            localized by the client.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/connect.error_details.Any"
+          description: A list of messages that carry the error details. There is no limit
+            on the number of messages.
+      title: Connect Error
+      additionalProperties: true
+      description: "Error type returned by Connect:
+        https://connectrpc.com/docs/go/errors/#http-representation"
+    connect.error_details.Any:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "A URL that acts as a globally unique identifier for the type of
+            the serialized message. For example:
+            `type.googleapis.com/google.rpc.ErrorInfo`. This is used to
+            determine the schema of the data in the `value` field and is the
+            discriminator for the `debug` field."
+        value:
+          type: string
+          format: binary
+          description: The Protobuf message, serialized as bytes and base64-encoded. The
+            specific message type is identified by the `type` field.
+        debug:
+          oneOf:
+            - type: object
+              title: Any
+              additionalProperties: true
+              description: Detailed error information.
+          discriminator:
+            propertyName: type
+          title: Debug
+          description: Deserialized error detail payload. The 'type' field indicates the
+            schema. This field is for easier debugging and should not be relied
+            upon for application logic.
+      additionalProperties: true
+      description: Contains an arbitrary serialized message along with a @type that
+        describes the type of the serialized message, with an additional debug
+        field for ConnectRPC error details.
+    trips.v1.EndTripRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+        status:
+          type: string
+          title: status
+          description: >-
+            Target terminal status: "ENDED" (normal finish) or "CANCELLED"
+             (compensation). See the TripStatus domain in src/temporal/tripStatus.ts.
+      title: EndTripRequest
+      additionalProperties: false
+    trips.v1.EndTripResponse:
+      type: object
+      properties:
+        trip:
+          title: trip
+          $ref: "#/components/schemas/trips.v1.Trip"
+      title: EndTripResponse
+      additionalProperties: false
+    trips.v1.GetTripRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+      title: GetTripRequest
+      additionalProperties: false
+    trips.v1.GetTripResponse:
+      type: object
+      properties:
+        trip:
+          title: trip
+          $ref: "#/components/schemas/trips.v1.Trip"
+      title: GetTripResponse
+      additionalProperties: false
+    trips.v1.RecordTripRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          title: user_id
+        vehicleId:
+          type: string
+          title: vehicle_id
+        tripId:
+          type: string
+          title: trip_id
+      title: RecordTripRequest
+      additionalProperties: false
+    trips.v1.RecordTripResponse:
+      type: object
+      properties:
+        trip:
+          title: trip
+          $ref: "#/components/schemas/trips.v1.Trip"
+      title: RecordTripResponse
+      additionalProperties: false
+    trips.v1.StartTripRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          title: user_id
+        vehicleId:
+          type: string
+          title: vehicle_id
+      title: StartTripRequest
+      additionalProperties: false
+    trips.v1.StartTripResponse:
+      type: object
+      properties:
+        trip:
+          title: trip
+          $ref: "#/components/schemas/trips.v1.Trip"
+        workflowId:
+          type: string
+          title: workflow_id
+          description: >-
+            The durable Temporal workflow id (== the trip id) that orchestrates
+            the
+             saga. Clients poll status via GetTrip(trip.id). (Additive in Phase 2.)
+      title: StartTripResponse
+      additionalProperties: false
+    trips.v1.Trip:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+        status:
+          type: string
+          title: status
+          description: >-
+            Trip lifecycle status: "STARTED" | "ENDED" | "SETTLED" |
+            "CANCELLED".
+             Modeled as a string (not a proto enum) so the generated TypeScript stays
+             erasable (this example's tsconfig sets `erasableSyntaxOnly`). The domain is
+             pinned in code by the TripStatus `const` object (src/temporal/tripStatus.ts).
+      title: Trip
+      additionalProperties: false
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Connectum JWT auth (createJwtAuthInterceptor / proto authz).
+        Required for every non-public method.
+security: []
+tags:
+  - name: trips.v1.TripService
+    description: >-
+      TripService is the EDGE service — the only one external clients call.
+
+       Phase 2: StartTrip no longer orchestrates with ctx.call. It now does a
+       SYNCHRONOUS availability pre-check (a ctx.call to FleetService/GetVehicle,
+       preserving today's FAILED_PRECONDITION/NOT_FOUND error contract) and then
+       STARTS a durable Temporal workflow (TripWorkflow) that owns the saga:
+       reserve → record → end → openTab → addCharge → settle, with automatic
+       compensation on failure. StartTrip returns immediately with the trip id, an
+       initial status, and the workflow id. Live status is read via GetTrip, which
+       issues a Temporal Workflow Query.
+
+       RecordTrip and EndTrip are INTERNAL RPCs the workflow's activities call from
+       the (JWT-less) Temporal worker. They own the in-memory trip ledger.
+
+       Authorization is declared in proto and enforced by the gateway interceptors:
+         - service_auth.default_policy = "allow": any AUTHENTICATED caller may invoke
+           methods that carry no method-level rule (StartTrip, GetTrip) — a valid JWT
+           is required (no token -> UNAUTHENTICATED) but no particular role.
+         - method_auth { public: true } on RecordTrip/EndTrip: those two skip both
+           authn and authz, so the worker's tokenless ConnectRPC client may call
+           them (mirroring how fleet/billing are service-level public). The real
+           network trust boundary is the mesh (Istio mTLS + AuthorizationPolicy).
