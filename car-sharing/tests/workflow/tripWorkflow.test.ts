@@ -132,6 +132,24 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
         assert.deepEqual(calls, ["reserveVehicle"]);
     });
 
+    it("recordTrip fails: its PRE-registered cancel still unwinds (markTripCancelled → releaseVehicle)", async () => {
+        // F4 (register-before): markTripCancelled is on the stack BEFORE recordTrip
+        // is awaited, so an ambiguous recordTrip failure still unwinds it (it
+        // no-ops if the record never committed). With the old register-AFTER order
+        // this compensation would have been missed entirely.
+        const calls: string[] = [];
+        await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "recordTrip" }), "wf-record-fail"));
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "markTripCancelled", "releaseVehicle"]);
+    });
+
+    it("openTab fails: its PRE-registered void still unwinds (void → cancel → release)", async () => {
+        // F4 (register-before): voidTab is registered BEFORE openTab, so an
+        // ambiguous openTab failure still unwinds it (no-op on a missing tab).
+        const calls: string[] = [];
+        await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "openTab" }), "wf-opentab-fail"));
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "voidTab", "markTripCancelled", "releaseVehicle"]);
+    });
+
     it("the REAL activities module + real workflowsPath register on a Worker (production startup path)", async () => {
         // The other tests pass hand-built mock activities; this is the ONLY test
         // that exercises the exact registration `src/worker.ts` does — the real

@@ -95,12 +95,13 @@ export function createFleetService(db: Db): ServiceDefinition {
         },
 
         async reserveVehicle(req) {
-            // Atomic reserve: only flips a vehicle that is currently available.
-            // An empty result means either the id is unknown OR it was not
-            // available — a follow-up read disambiguates the error code.
+            // Atomic reserve: only flips a vehicle that is currently available,
+            // stamping the holder (the trip/workflow id). An empty result means
+            // either the id is unknown OR it was not available — a follow-up read
+            // disambiguates the error code AND the idempotent-retry case below.
             const updated = await db
                 .update(vehicles)
-                .set({ available: false, status: VehicleStatus.RESERVED, updatedAt: new Date() })
+                .set({ available: false, status: VehicleStatus.RESERVED, holder: req.holderId, updatedAt: new Date() })
                 .where(and(eq(vehicles.id, req.id), eq(vehicles.available, true)))
                 .returning();
 
@@ -110,10 +111,17 @@ export function createFleetService(db: Db): ServiceDefinition {
             }
 
             const existing = await db.select().from(vehicles).where(eq(vehicles.id, req.id)).limit(1);
-            if (existing[0] === undefined) {
+            const current = existing[0];
+            if (current === undefined) {
                 throw new ConnectError(`No vehicle with id "${req.id}".`, Code.NotFound);
             }
-            throw new ConnectError(`Vehicle "${req.id}" is not available (status "${existing[0].status}").`, Code.FailedPrecondition);
+            // Idempotent retry: the SAME holder re-reserving its own vehicle (a
+            // Temporal retry that observed its prior commit) succeeds. A held
+            // vehicle with a different (or empty) holder is a genuine conflict.
+            if (req.holderId !== "" && current.holder === req.holderId) {
+                return toVehicle(current);
+            }
+            throw new ConnectError(`Vehicle "${req.id}" is not available (status "${current.status}").`, Code.FailedPrecondition);
         },
 
         async releaseVehicle(req) {
@@ -130,7 +138,7 @@ export function createFleetService(db: Db): ServiceDefinition {
 
             const updated = await db
                 .update(vehicles)
-                .set({ available: true, status: VehicleStatus.AVAILABLE, updatedAt: new Date() })
+                .set({ available: true, status: VehicleStatus.AVAILABLE, holder: null, updatedAt: new Date() })
                 .where(eq(vehicles.id, req.id))
                 .returning();
 

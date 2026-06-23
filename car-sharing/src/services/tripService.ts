@@ -34,6 +34,7 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { ServiceDefinition } from "@connectum/core";
 import { defineService } from "@connectum/core";
+import { QueryNotRegisteredError, QueryRejectedError, WorkflowNotFoundError } from "@temporalio/client";
 import { GetVehicleRequestSchema } from "#gen/fleet/v1/fleet_pb.ts";
 import { EndTripResponseSchema, GetTripResponseSchema, RecordTripResponseSchema, StartTripResponseSchema, TripSchema, TripService } from "#gen/trips/v1/trips_pb.ts";
 import type { TripStatus as TripStatusT } from "#temporal/tripStatus.ts";
@@ -109,6 +110,16 @@ function terminalStatusFor(workflowStatusName: string): TripStatusT {
 }
 
 /**
+ * True when a failed Query legitimately means "the run is closed/gone or its
+ * query handler is unavailable" — the only cases where falling back to a
+ * terminal status from `describe()` is correct. A transient/other error must
+ * NOT be collapsed into a terminal status (it is surfaced as `Unavailable`).
+ */
+function isClosedOrMissingRun(err: unknown): boolean {
+    return err instanceof WorkflowNotFoundError || err instanceof QueryNotRegisteredError || err instanceof QueryRejectedError;
+}
+
+/**
  * Build the TripService definition with an injected Temporal client.
  *
  * @param options - {@link TripServiceOptions}.
@@ -157,13 +168,18 @@ export function createTripService(options: TripServiceOptions): ServiceDefinitio
 
             const handle = workflowClient.getHandle(req.tripId);
 
-            // Prefer the LIVE status from the running workflow's Query. If the
-            // workflow has closed (queries are rejected on closed runs), fall
-            // back to a terminal status derived from describe().
+            // Prefer the LIVE status from the running workflow's Query. Only when
+            // the Query is unavailable because the run is closed/gone or its
+            // query handler isn't registered do we fall back to a terminal status
+            // derived from describe(). A transient/other failure is surfaced as
+            // Unavailable, never silently mapped to a terminal status.
             let status: TripStatusT;
             try {
                 status = await handle.query<TripStatusT>("getTripStatus");
-            } catch {
+            } catch (err) {
+                if (!isClosedOrMissingRun(err)) {
+                    throw new ConnectError(`Could not read status for trip "${req.tripId}".`, Code.Unavailable);
+                }
                 const description = await handle.describe();
                 status = terminalStatusFor(description.status.name);
             }

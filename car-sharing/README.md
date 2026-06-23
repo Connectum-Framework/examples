@@ -230,10 +230,13 @@ falling back to a terminal status (`SETTLED` / `CANCELLED`) once it closes.
 
 ### The saga and its compensations
 
-`TripWorkflow` runs the forward steps in order, pushing a compensation onto a
-stack after each side-effecting step; on **any** failure it unwinds the stack in
-reverse (LIFO) and rethrows — the canonical Temporal saga pattern. Each step is
-an **activity** that makes one ConnectRPC call to a role service.
+`TripWorkflow` runs the forward steps in order, registering each step's
+compensation on a stack — **before** the forward call when the compensation's
+inputs are already known (so an ambiguous failure that committed the side effect
+is still unwound), or **after** when the compensation needs the call's result
+(step 6's `refundCharge` needs the charge id). On **any** failure it unwinds the
+stack in reverse (LIFO) and rethrows — the canonical Temporal saga pattern. Each
+step is an **activity** that makes one ConnectRPC call to a role service.
 
 | #   | Forward step (activity → RPC)            | Compensation (activity → RPC)             |
 | --- | ---------------------------------------- | ----------------------------------------- |
@@ -253,6 +256,12 @@ refunded charge are all no-op successes), because Temporal may run a compensatio
 after a forward step partially applied. Step 1's availability failure is a
 **non-retryable** `ApplicationFailure`, so the workflow fails fast with nothing
 to undo.
+
+Forward steps are made **idempotent under at-least-once retries** the same way:
+`reserveVehicle` carries the trip id as a `holder_id`, so a Temporal retry that
+re-runs the activity after its first attempt already committed the reservation
+re-reserves *its own* vehicle (success) instead of being mistaken for a
+double-booking — while a different trip on a held vehicle is still rejected.
 
 ### Processes
 

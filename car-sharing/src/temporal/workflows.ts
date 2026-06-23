@@ -8,11 +8,13 @@
  * (that would break determinism). All I/O is in the activities; the workflow
  * only orchestrates.
  *
- * Saga (compensation-stack pattern, samples-repo style): run the forward steps
- * in order; after each side-effecting step `unshift` its compensation onto a
- * stack; on ANY failure, run the compensations in LIFO order (each wrapped in
- * its own try/catch so the unwind never throws), then rethrow the original
- * error. The result:
+ * Saga (compensation-stack pattern): run the forward steps in order, registering
+ * each step's compensation on a LIFO stack — BEFORE the forward call when the
+ * compensation's inputs are already known (so an ambiguous failure that DID
+ * commit the side effect is still unwound), or AFTER when the compensation needs
+ * the call's result (the charge id). On ANY failure, run the compensations in
+ * LIFO order (each wrapped in its own try/catch so the unwind never throws),
+ * then rethrow the original error. The result:
  *   - settle fails  → refundCharge → voidTab → markTripCancelled → releaseVehicle
  *   - endTrip fails → markTripCancelled → releaseVehicle
  *   - reserve fails → (non-retryable) fail fast, NOTHING to compensate.
@@ -81,18 +83,26 @@ export async function TripWorkflow(input: TripWorkflowInput): Promise<TripStatus
     let status: TripStatusT = TripStatus.STARTED;
     setHandler(getTripStatusQuery, () => status);
 
-    // LIFO compensation stack: unshift after each side-effecting forward step.
+    // LIFO compensation stack: each step registers its compensation here, BEFORE
+    // its forward call where the inputs are already known (so an ambiguous
+    // failure that committed the side effect is still unwound), or AFTER where
+    // the compensation needs the call's result.
     const compensations: Compensation[] = [];
 
     try {
-        // Step 1 — reserve the vehicle (business failure here is non-retryable
-        // and fails the workflow fast; nothing pushed, nothing to undo).
-        await acts.reserveVehicle({ vehicleId });
+        // Step 1 — reserve the vehicle. `holderId: tripId` makes the reserve
+        // idempotent across Temporal retries (the same holder re-reserving its
+        // own vehicle succeeds). A business failure here is non-retryable and
+        // fails the workflow fast; registered AFTER, since a failed reserve held
+        // nothing and the release would have nothing to undo.
+        await acts.reserveVehicle({ vehicleId, holderId: tripId });
         compensations.unshift({ name: "releaseVehicle", run: () => acts.releaseVehicle({ vehicleId }) });
 
-        // Step 2 — record the trip (STARTED).
-        await acts.recordTrip({ userId, vehicleId, tripId });
+        // Step 2 — record the trip (STARTED). Register the cancel BEFORE the
+        // call: markTripCancelled is idempotent (a no-op if the record never
+        // committed), so an ambiguous recordTrip failure is still unwound.
         compensations.unshift({ name: "markTripCancelled", run: () => acts.markTripCancelled({ tripId }) });
+        await acts.recordTrip({ userId, vehicleId, tripId });
         status = TripStatus.STARTED;
 
         // Step 3 — the drive. A timer; time-skipped instantly under test.
@@ -103,9 +113,11 @@ export async function TripWorkflow(input: TripWorkflowInput): Promise<TripStatus
         await acts.endTrip({ tripId });
         status = TripStatus.ENDED;
 
-        // Step 5 — open the billing tab.
-        await acts.openTab({ tripId });
+        // Step 5 — open the billing tab. Register the void BEFORE the call:
+        // voidTab is idempotent (a no-op on a missing tab), so an ambiguous
+        // openTab failure is still unwound.
         compensations.unshift({ name: "voidTab", run: () => acts.voidTab({ tripId }) });
+        await acts.openTab({ tripId });
 
         // Step 6 — add the charge derived from the drive duration.
         const chargeId = await acts.addCharge({ tripId, durationMs: DRIVE_DURATION_MS });
