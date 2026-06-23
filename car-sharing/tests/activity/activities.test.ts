@@ -91,7 +91,7 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
 
     it("reserveVehicle drives FleetService and recordTrip/endTrip drive the trip ledger", async () => {
         const tripId = "trip-act-2";
-        await run(activities.reserveVehicle, { vehicleId: "v-001" });
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: tripId });
 
         await run(activities.recordTrip, { userId: "user-42", vehicleId: "v-001", tripId });
         assert.equal(tripStatus(tripId), TripStatus.STARTED);
@@ -105,7 +105,7 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         // which the activity rethrows as a non-retryable ApplicationFailure whose
         // `type` is exactly the value the workflow lists in nonRetryableErrorTypes.
         await assert.rejects(
-            run(activities.reserveVehicle, { vehicleId: "v-003" }),
+            run(activities.reserveVehicle, { vehicleId: "v-003", holderId: "trip-unavail" }),
             (err: unknown) =>
                 err instanceof ApplicationFailure && err.type === "VehicleUnavailable" && err.nonRetryable === true && /not available/i.test(err.message),
         );
@@ -113,13 +113,32 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
 
     it("reserveVehicle on an UNKNOWN vehicle also throws a NON-RETRYABLE VehicleUnavailable ApplicationFailure", async () => {
         await assert.rejects(
-            run(activities.reserveVehicle, { vehicleId: "ghost" }),
+            run(activities.reserveVehicle, { vehicleId: "ghost", holderId: "trip-ghost" }),
+            (err: unknown) => err instanceof ApplicationFailure && err.type === "VehicleUnavailable" && err.nonRetryable === true,
+        );
+    });
+
+    it("reserveVehicle is idempotent for the SAME holder: a retry observing its own reservation succeeds", async () => {
+        // A Temporal retry re-runs the activity. Re-reserving the SAME vehicle
+        // with the SAME holder must succeed (no VehicleUnavailable): the holder
+        // proves this is our own prior commit, not a conflicting second trip.
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-A" });
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-A" });
+    });
+
+    it("reserveVehicle rejects a DIFFERENT holder on a held vehicle (no double-booking)", async () => {
+        // trip-A holds v-001; trip-B must NOT be able to reserve it — the guard
+        // that keeps two trips off one vehicle. The activity rethrows the conflict
+        // as a non-retryable VehicleUnavailable.
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-A" });
+        await assert.rejects(
+            run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-B" }),
             (err: unknown) => err instanceof ApplicationFailure && err.type === "VehicleUnavailable" && err.nonRetryable === true,
         );
     });
 
     it("releaseVehicle is idempotent: releasing an already-available vehicle is a no-op success", async () => {
-        await run(activities.reserveVehicle, { vehicleId: "v-001" });
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-release" });
         await run(activities.releaseVehicle, { vehicleId: "v-001" });
         // Second release on an already-available vehicle must not throw.
         await run(activities.releaseVehicle, { vehicleId: "v-001" });

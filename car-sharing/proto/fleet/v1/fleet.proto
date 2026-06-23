@@ -67,6 +67,12 @@ message ListVehiclesRequest {
 
 message ReserveVehicleRequest {
   string id = 1;
+  // Reservation holder — the trip/workflow id acquiring the lock. Makes reserve
+  // idempotent across Temporal retries: the same holder re-reserving its own
+  // vehicle succeeds (returns the vehicle), while a held vehicle with a
+  // different holder is FAILED_PRECONDITION. Empty for a non-saga caller, which
+  // is then treated as having no holder (a held vehicle is always a conflict).
+  string holder_id = 2;
 }
 
 message ReleaseVehicleRequest {

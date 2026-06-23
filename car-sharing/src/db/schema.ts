@@ -35,6 +35,9 @@ export type VehicleStatus = (typeof VehicleStatus)[keyof typeof VehicleStatus];
  *  - `model`     human-readable model name.
  *  - `available` derived boolean, kept in sync with `status`.
  *  - `status`    {@link VehicleStatus} string.
+ *  - `holder`    trip/workflow id currently holding the reservation; null when
+ *                available. Lets ReserveVehicle be idempotent across Temporal
+ *                retries (the same holder re-reserving its own vehicle succeeds).
  *  - `lat`/`lng` last-known position (nullable; double precision so it maps to
  *                the proto `double` location fields without string coercion).
  *  - `updatedAt` last mutation timestamp (defaults to now()).
@@ -44,6 +47,7 @@ export const vehicles = pgTable("vehicles", {
     model: text("model").notNull(),
     available: boolean("available").notNull(),
     status: text("status").notNull(),
+    holder: text("holder"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

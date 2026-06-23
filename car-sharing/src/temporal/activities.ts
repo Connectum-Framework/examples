@@ -68,16 +68,19 @@ function chargeCents(durationMs: number): bigint {
 // ── Forward steps ─────────────────────────────────────────────────────────
 
 /**
- * Step 1 — reserve the vehicle. A business failure (unavailable / unknown) is
- * rethrown as a NON-RETRYABLE `ApplicationFailure(VEHICLE_UNAVAILABLE)` so the
- * workflow fails fast with no compensation; any other (infra) error stays
+ * Step 1 — reserve the vehicle. `holderId` (the trip/workflow id) is the
+ * reservation owner: it makes the reserve idempotent across Temporal retries, so
+ * a retry that observes its OWN prior commit succeeds instead of being mistaken
+ * for a conflict. A real business failure (unavailable / unknown / a different
+ * holder) is rethrown as a NON-RETRYABLE `ApplicationFailure(VEHICLE_UNAVAILABLE)`
+ * so the workflow fails fast with no compensation; any other (infra) error stays
  * retryable.
  *
- * @param input - `{ vehicleId }`.
+ * @param input - `{ vehicleId, holderId }`.
  */
-export async function reserveVehicle(input: { vehicleId: string }): Promise<void> {
+export async function reserveVehicle(input: { vehicleId: string; holderId: string }): Promise<void> {
     try {
-        await clients().fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: input.vehicleId }));
+        await clients().fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: input.vehicleId, holderId: input.holderId }));
     } catch (err) {
         if (err instanceof ConnectError && (err.code === Code.FailedPrecondition || err.code === Code.NotFound)) {
             throw ApplicationFailure.create({

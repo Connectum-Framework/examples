@@ -45,6 +45,7 @@ import type { Client } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import type { Server } from "@connectum/core";
+import { QueryNotRegisteredError } from "@temporalio/client";
 import { JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
 import { BillingService } from "#gen/billing/v1/billing_pb.ts";
 import { FleetService } from "#gen/fleet/v1/fleet_pb.ts";
@@ -63,10 +64,17 @@ interface StartCall {
 
 /** How a stub handle answers GetTrip: a live query result, or a closed describe(). */
 interface StubHandleBehaviour {
-    /** Status the live Query returns; if `undefined`, the Query throws (closed run). */
+    /** Status the live Query returns; if `undefined`, the Query throws. */
     readonly queryStatus?: string;
     /** Workflow status name returned by describe() when the Query is rejected. */
     readonly describeStatusName?: string;
+    /**
+     * When the Query throws (`queryStatus` undefined), what kind of failure:
+     * `"closed"` (default) → a `QueryNotRegisteredError`, which the handler
+     * treats as "run closed/gone" and falls back to describe(); `"transient"` →
+     * a generic error, which the handler must surface as `Unavailable`.
+     */
+    readonly queryError?: "closed" | "transient";
 }
 
 /**
@@ -87,7 +95,13 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
             return {
                 async query<Ret>(): Promise<Ret> {
                     if (behaviour.queryStatus === undefined) {
-                        throw new Error("query not supported on a closed workflow");
+                        if (behaviour.queryError === "transient") {
+                            // A generic/infra failure — NOT a closed-run signal.
+                            throw new Error("temporal frontend unavailable");
+                        }
+                        // Closed/gone run: its query handler is not registered.
+                        // (code 3 = INVALID_ARGUMENT; the handler keys off the type.)
+                        throw new QueryNotRegisteredError("query handler not registered on a closed run", 3);
                     }
                     return behaviour.queryStatus as Ret;
                 },
@@ -181,8 +195,9 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     });
 
     it("GetTrip falls back to a terminal status via describe() when the workflow has CLOSED", async () => {
-        // queryStatus undefined → the stub Query throws (queries are rejected on
-        // a closed run); the handler falls back to describe(): COMPLETED → SETTLED.
+        // queryStatus undefined → the stub Query throws a QueryNotRegisteredError
+        // (the run is closed/gone), which the handler treats as "fall back to
+        // describe()": COMPLETED → SETTLED.
         handleBehaviour = { describeStatusName: "COMPLETED" };
         const settled = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-done" }), {
             headers: { Authorization: `Bearer ${userToken}` },
@@ -195,6 +210,19 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
             headers: { Authorization: `Bearer ${userToken}` },
         });
         assert.equal(cancelled.trip?.status, "CANCELLED");
+    });
+
+    it("GetTrip surfaces Unavailable (NOT a terminal status) when the live Query fails transiently", async () => {
+        // Regression for the blanket catch that mapped ANY query error to a
+        // terminal status: a transient/infra failure must surface as Unavailable,
+        // never be silently reported as a SETTLED/CANCELLED trip.
+        handleBehaviour = { queryError: "transient" };
+        await assert.rejects(
+            trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-flaky" }), {
+                headers: { Authorization: `Bearer ${userToken}` },
+            }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unavailable,
+        );
     });
 
     it("gateway auth: GetTrip with NO token is rejected as Unauthenticated", async () => {
