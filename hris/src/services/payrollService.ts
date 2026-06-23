@@ -16,7 +16,8 @@
 import { create } from "@bufbuild/protobuf";
 import { defineService } from "@connectum/core";
 import type { EventRoute } from "@connectum/events";
-import { BalanceSchema, GetBalanceResponseSchema, PayrollEventHandlers, PayrollService } from "#gen/payroll/v1/payroll_pb.ts";
+import { BalanceSchema, GetBalanceResponseSchema, PayrollEventHandlers, PayrollService, SetupPayrollResponseSchema } from "#gen/payroll/v1/payroll_pb.ts";
+import { empty } from "#empty.ts";
 
 /** Initial leave-days balance per employee (id → days). */
 const INITIAL_BALANCE: ReadonlyArray<readonly [string, number]> = [
@@ -39,6 +40,25 @@ export const payrollService = defineService(PayrollService, {
         create(GetBalanceResponseSchema, {
             balance: create(BalanceSchema, { employeeId: req.employeeId, remainingDays: balances.get(req.employeeId) ?? 0 }),
         }),
+
+    // Onboarding saga step 2 — enroll a new hire with an initial leave balance.
+    // Idempotent: if already enrolled, the existing balance is kept (a re-run
+    // does not reset a balance OnLeaveApproved may have since decremented).
+    setupPayroll(req) {
+        if (!balances.has(req.employeeId)) {
+            balances.set(req.employeeId, req.initialDays);
+        }
+        return create(SetupPayrollResponseSchema, {
+            balance: create(BalanceSchema, { employeeId: req.employeeId, remainingDays: balances.get(req.employeeId) ?? 0 }),
+        });
+    },
+
+    // Compensation for step 2 — drop the payroll enrollment. Idempotent: a
+    // no-op success for an unknown employee.
+    teardownPayroll(req) {
+        balances.delete(req.employeeId);
+        return empty();
+    },
 });
 
 /**

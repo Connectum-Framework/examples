@@ -19,28 +19,32 @@
 import { parseServicesEnv, perServiceEnvResolver } from "@connectum/core";
 import type { RemoteResolver } from "@connectum/core";
 
-/** Canonical proto `typeName`s of the three RPC services. */
+/** Canonical proto `typeName`s of the RPC services. */
 export const TYPE_NAMES = {
     directory: "directory.v1.DirectoryService",
     timeoff: "timeoff.v1.TimeOffService",
     payroll: "payroll.v1.PayrollService",
+    access: "access.v1.AccessService",
+    onboarding: "onboarding.v1.OnboardingService",
 } as const;
 
 /** All RPC service typeNames (the monolith set). */
-const ALL_TYPE_NAMES: readonly string[] = [TYPE_NAMES.directory, TYPE_NAMES.timeoff, TYPE_NAMES.payroll];
+const ALL_TYPE_NAMES: readonly string[] = [TYPE_NAMES.directory, TYPE_NAMES.timeoff, TYPE_NAMES.payroll, TYPE_NAMES.access, TYPE_NAMES.onboarding];
 
 /** Per-service endpoint env var, consumed by the remote resolver. */
 const ENDPOINT_ENV: Readonly<Record<string, string>> = {
     [TYPE_NAMES.directory]: "DIRECTORY_ADDR",
     [TYPE_NAMES.timeoff]: "TIMEOFF_ADDR",
     [TYPE_NAMES.payroll]: "PAYROLL_ADDR",
+    [TYPE_NAMES.access]: "ACCESS_ADDR",
+    [TYPE_NAMES.onboarding]: "ONBOARDING_ADDR",
 };
 
 /** The resolved deployment topology for this process. */
 export interface Topology {
     /**
      * Proto `typeName`s mounted locally, as a concrete list (always populated;
-     * `*`/unset expands to all three). Drives the EventBus role decisions.
+     * `*`/unset expands to all five). Drives the EventBus role decisions.
      */
     readonly localTypeNames: readonly string[];
     /**

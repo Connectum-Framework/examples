@@ -3,13 +3,17 @@
 # the monolith in-process with an in-memory bus and a PGlite Postgres; see
 # tests/e2e).
 #
-#   docker compose --profile mono  up    # all services in one process
-#   docker compose --profile split up    # directory + timeoff + payroll split
+#   docker compose --profile mono  up                      # all services in one process
+#   docker compose --profile split up                      # directory + timeoff + payroll + access split
+#   docker compose --profile split --profile saga up       # + Temporal, the onboarding gateway, and the worker
 #
-# Both profiles share the same `nats` broker and `postgres` database. The split
-# profile shows the headline: identical handler code, three processes, ctx.call
-# auto-routing across the network and LeaveApproved flowing over NATS to the
-# payroll role.
+# All profiles share the same `nats` broker and `postgres` database. The split
+# profile shows the headline: identical handler code, separate processes,
+# ctx.call auto-routing across the network and LeaveApproved flowing over NATS to
+# the payroll role. The `saga` profile adds the durable onboarding saga — a
+# Temporal server + Web UI (http://localhost:8088), the OnboardingService gateway
+# (:5005), and the worker that hosts OnboardingWorkflow and drives the role
+# services. It pairs with `split` (the worker targets the per-role services).
 #
 # Persistence (Phase 1): DirectoryService is backed by Drizzle ORM over Postgres.
 # Every app role wires DATABASE_URL (postgres.js connects lazily, so the timeoff
@@ -168,9 +172,157 @@ services:
       - hris
     profiles: ["split"]
 
+  # ── ACCESS role — the saga's IT-provisioning leaf (in-memory) ─────────────
+  access:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5004:5004"
+    environment:
+      - PORT=5004
+      - NATS_URL=nats://nats:4222
+      - DATABASE_URL=postgresql://hris:hris@postgres:5432/hris
+      - SERVICES=access.v1.AccessService
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5004/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["split"]
+
+  # ── ONBOARDING role — the saga gateway (pre-check + start workflow) ───────
+  #
+  # Reaches the directory over the network for its pre-check (DIRECTORY_ADDR) and
+  # builds a lazy @temporalio/client to start OnboardingWorkflow (TEMPORAL_ADDRESS).
+  onboarding:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5005:5005"
+    environment:
+      - PORT=5005
+      - NATS_URL=nats://nats:4222
+      - DATABASE_URL=postgresql://hris:hris@postgres:5432/hris
+      - SERVICES=onboarding.v1.OnboardingService
+      - DIRECTORY_ADDR=http://directory:5001
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_TASK_QUEUE=hris-onboarding
+    depends_on:
+      directory:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5005/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  # ── Temporal's own metadata store (SEPARATE from the app Postgres) ─────────
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  # ── Temporal server (auto-setup creates the `default` namespace) ───────────
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+    ports:
+      - "7233:7233"
+    healthcheck:
+      # Wait until the frontend is serving and the default namespace exists.
+      test: ["CMD", "tctl", "--address", "temporal:7233", "namespace", "describe", "default"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  # ── Temporal Web UI — inspect onboarding workflows + their compensations ───
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8088
+    ports:
+      - "8088:8080"
+    networks:
+      - hris
+    profiles: ["saga"]
+
+  # ── WORKER — hosts OnboardingWorkflow + the activities (node src/worker.ts) ─
+  #
+  # A separate process type (NOT a SERVICES-selected RPC role): no inbound RPC;
+  # it polls Temporal for workflow/activity tasks and drives the role services
+  # over ConnectRPC. The ONLY process that loads the @temporalio/worker native
+  # addon. Pairs with the `split` profile (it targets the per-role services):
+  #
+  #   docker compose --profile split --profile saga up
+  worker:
+    build: .
+    command: ["node", "src/worker.ts"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=hris-onboarding
+      - DIRECTORY_ADDR=http://directory:5001
+      - PAYROLL_ADDR=http://payroll:5003
+      - TIMEOFF_ADDR=http://timeoff:5002
+      - ACCESS_ADDR=http://access:5004
+    depends_on:
+      temporal:
+        condition: service_healthy
+      directory:
+        condition: service_healthy
+      payroll:
+        condition: service_healthy
+      timeoff:
+        condition: service_healthy
+      access:
+        condition: service_healthy
+    networks:
+      - hris
+    profiles: ["saga"]
+
 networks:
   hris:
     driver: bridge
 
 volumes:
   pgdata:
+  temporal-pgdata:

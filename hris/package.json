@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node src/index.ts",
     "dev": "node --watch src/index.ts",
+    "worker": "node src/worker.ts",
     "typecheck": "tsc --noEmit",
     "buf:generate": "buf generate",
     "buf:lint": "buf lint",
@@ -50,6 +51,10 @@
     "@connectum/healthcheck": "^1.0.0",
     "@connectum/interceptors": "^1.0.0",
     "@connectum/reflection": "^1.0.0",
+    "@temporalio/activity": "^1.18.1",
+    "@temporalio/client": "^1.18.1",
+    "@temporalio/worker": "^1.18.1",
+    "@temporalio/workflow": "^1.18.1",
     "drizzle-orm": "^0.45.0",
     "postgres": "^3.4.0"
   },
@@ -58,6 +63,7 @@
     "@bufbuild/protoc-gen-es": "^2.11.0",
     "@connectum/protoc-gen-catalog": "^1.0.0",
     "@electric-sql/pglite": "^0.5.0",
+    "@temporalio/testing": "^1.18.1",
     "@types/node": "^25.2.0",
     "drizzle-kit": "^0.31.0",
     "typescript": "^5.9.3"

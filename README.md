@@ -37,7 +37,7 @@ Ready-to-run examples demonstrating Connectum features — from a one-service [q
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
-| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus saga | Ready |
+| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus + durable onboarding saga with Temporal | Ready |
 | [car-sharing](car-sharing/) | Enterprise deploy — Kubernetes + Istio | Split microservices + JWT/proto authz gateway + OpenTelemetry; durable trip saga with Temporal; k8s/Istio manifests (mTLS, canary) | Ready |
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
 | [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
