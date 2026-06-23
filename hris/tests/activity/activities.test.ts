@@ -130,6 +130,20 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         );
     });
 
+    it("createEmployee is idempotent: a retry observing its OWN prior commit succeeds (read-back equivalence)", async () => {
+        // The first create commits the row; a Temporal retry re-runs the activity
+        // and sees ALREADY_EXISTS. Read-back equivalence recognises the stored row
+        // as THIS hire's own and returns success — not a duplicate-id failure.
+        await run(activities.createEmployee, HIRE);
+        await run(activities.createEmployee, HIRE);
+
+        // Still exactly this hire, still in onboarding (the retry did not mutate it).
+        const directory = server.localClient(DirectoryService);
+        const employee = await directory.getEmployee(create(GetEmployeeRequestSchema, { id: HIRE.employeeId }));
+        assert.equal(employee.employee?.status, "onboarding");
+        assert.equal(employee.employee?.name, "New Hire");
+    });
+
     it("offboardEmployee is idempotent: marking offboarded twice (and an unknown id) is a no-op success", async () => {
         const directory = server.localClient(DirectoryService);
         await run(activities.createEmployee, HIRE);

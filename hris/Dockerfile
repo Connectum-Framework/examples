@@ -8,6 +8,11 @@ WORKDIR /app
 # Temporal workflow bundle in the worker; protobufjs is a Temporal gRPC dep), so
 # it MUST be present for `pnpm install` to run those build scripts.
 COPY package.json pnpm-workspace.yaml ./
+# No lockfile is committed for this flagship example (matches getting-started /
+# car-sharing): pnpm resolves @connectum/* and other deps from the caret (^)
+# ranges in package.json, so the image is example-grade, not bit-reproducible.
+# Production services should commit pnpm-lock.yaml and use
+# `pnpm install --frozen-lockfile` (the secondary examples model this).
 RUN pnpm install --prod
 
 FROM node:25-slim AS runtime
@@ -21,4 +26,6 @@ ENV NODE_ENV=production
 EXPOSE 5000 5001 5002 5003 5004 5005
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
     CMD wget -q --spider http://localhost:${PORT:-5000}/healthz || exit 1
+# Run as the built-in non-root `node` user.
+USER node
 CMD ["node", "src/index.ts"]

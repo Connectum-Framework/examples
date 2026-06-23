@@ -11,10 +11,11 @@
  *    provisionAccess → activateEmployee.
  *  - activateEmployee fails: the recorded tail unwinds in LIFO order —
  *    revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee.
- *  - provisionAccess fails: only the 3→1 compensations run (provisionAccess
- *    pushed nothing before failing) — revokeTimeOff → teardownPayroll →
- *    offboardEmployee.
- *  - setupPayroll fails: only offboardEmployee runs.
+ *  - provisionAccess fails: its OWN compensation runs too, because it is
+ *    registered BEFORE the call (register-before) — revokeAccess → revokeTimeOff
+ *    → teardownPayroll → offboardEmployee.
+ *  - setupPayroll fails: teardownPayroll → offboardEmployee (the teardown is
+ *    registered before the call).
  *  - createEmployee fails (non-retryable): fails fast with NO compensation.
  *
  * Failures are forced by making the MOCK throw `ApplicationFailure.nonRetryable`,
@@ -120,21 +121,25 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
         ]);
     });
 
-    it("provisionAccess fails: the 3→1 compensations run (revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {
+    it("provisionAccess fails: its PRE-registered revoke runs too (revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {
         const calls: string[] = [];
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "provisionAccess" }), "wf-provision-fail"));
 
-        // provisionAccess pushed NO compensation before failing, so the unwind
-        // starts from step 3's revokeTimeOff.
-        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "revokeTimeOff", "teardownPayroll", "offboardEmployee"]);
+        // revokeAccess is registered BEFORE provisionAccess (register-before), so
+        // an ambiguous provisionAccess failure still unwinds it (no-op if the
+        // account was never created). With the old register-AFTER order it would
+        // have been missed.
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "revokeAccess", "revokeTimeOff", "teardownPayroll", "offboardEmployee"]);
     });
 
-    it("setupPayroll fails: only offboardEmployee compensates (step 1's undo)", async () => {
+    it("setupPayroll fails: its PRE-registered teardown runs too (teardownPayroll → offboardEmployee)", async () => {
         const calls: string[] = [];
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "setupPayroll" }), "wf-setup-fail"));
 
-        // Only createEmployee pushed a compensation before setupPayroll failed.
-        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "offboardEmployee"]);
+        // teardownPayroll is registered BEFORE setupPayroll (register-before), so
+        // an ambiguous setupPayroll failure still unwinds it (no-op if enrollment
+        // never committed). createEmployee's offboard follows in LIFO order.
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "teardownPayroll", "offboardEmployee"]);
     });
 
     it("createEmployee fails (non-retryable): fails fast with NO compensation", async () => {

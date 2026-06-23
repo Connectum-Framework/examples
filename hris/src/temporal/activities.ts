@@ -28,7 +28,7 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { ApplicationFailure } from "@temporalio/activity";
 import { ProvisionAccessRequestSchema, RevokeAccessRequestSchema } from "#gen/access/v1/access_pb.ts";
-import { ActivateEmployeeRequestSchema, CreateEmployeeRequestSchema, OffboardEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
+import { ActivateEmployeeRequestSchema, CreateEmployeeRequestSchema, GetEmployeeRequestSchema, OffboardEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
 import { SetupPayrollRequestSchema, TeardownPayrollRequestSchema } from "#gen/payroll/v1/payroll_pb.ts";
 import { GrantTimeOffRequestSchema, RevokeTimeOffRequestSchema } from "#gen/timeoff/v1/timeoff_pb.ts";
 import type { ServiceClients } from "#temporal/clients.ts";
@@ -75,10 +75,13 @@ export interface NewHire {
 // ── Forward steps ─────────────────────────────────────────────────────────
 
 /**
- * Step 1 — create the directory row (status "onboarding"). A business failure
- * (the id is already taken → `Code.AlreadyExists`) is rethrown as a
- * NON-RETRYABLE `ApplicationFailure(EMPLOYEE_EXISTS)` so the workflow fails fast
- * with no compensation; any other (infra) error stays retryable.
+ * Step 1 — create the directory row (status "onboarding"). Idempotent across
+ * Temporal retries: on `Code.AlreadyExists` it reads the existing row back and,
+ * if it matches this hire, treats it as success (a retry that observed its OWN
+ * prior commit) rather than a failure. A row that DIFFERS under the same id is a
+ * genuine duplicate-id conflict, rethrown as a NON-RETRYABLE
+ * `ApplicationFailure(EMPLOYEE_EXISTS)` so the workflow fails fast with no
+ * compensation; any other (infra) error stays retryable.
  *
  * @param hire - The {@link NewHire} details.
  */
@@ -96,6 +99,14 @@ export async function createEmployee(hire: NewHire): Promise<void> {
         );
     } catch (err) {
         if (err instanceof ConnectError && err.code === Code.AlreadyExists) {
+            // Read-back equivalence: a retry may observe its own prior commit.
+            // If the stored row matches this hire, the create already succeeded.
+            const existing = await clients().directory.getEmployee(create(GetEmployeeRequestSchema, { id: hire.employeeId }));
+            const e = existing.employee;
+            if (e !== undefined && e.name === hire.name && e.email === hire.email && e.title === hire.title && e.department === hire.department && e.managerId === hire.managerId) {
+                return;
+            }
+            // A genuinely different employee already owns this id → terminal.
             throw ApplicationFailure.create({
                 message: err.message,
                 type: EMPLOYEE_EXISTS,

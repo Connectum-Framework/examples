@@ -31,6 +31,7 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { ServiceDefinition } from "@connectum/core";
 import { defineService } from "@connectum/core";
+import { QueryNotRegisteredError, QueryRejectedError, WorkflowNotFoundError } from "@temporalio/client";
 import { GetEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
 import { GetOnboardingResponseSchema, OnboardEmployeeResponseSchema, OnboardingSchema, OnboardingService } from "#gen/onboarding/v1/onboarding_pb.ts";
 import type { OnboardingStatus as OnboardingStatusT } from "#temporal/onboardingStatus.ts";
@@ -73,6 +74,16 @@ function terminalStatusFor(workflowStatusName: string): OnboardingStatusT {
     // A completed saga activated the employee; anything else (FAILED/CANCELLED/
     // TERMINATED/TIMED_OUT) means the saga unwound.
     return workflowStatusName === "COMPLETED" ? OnboardingStatus.COMPLETED : OnboardingStatus.FAILED;
+}
+
+/**
+ * True when a failed Query legitimately means "the run is closed/gone or its
+ * query handler is unavailable" — the only cases where falling back to a
+ * terminal status from `describe()` is correct. A transient/other error must
+ * NOT be collapsed into a terminal status (it is surfaced as `Unavailable`).
+ */
+function isClosedOrMissingRun(err: unknown): boolean {
+    return err instanceof WorkflowNotFoundError || err instanceof QueryNotRegisteredError || err instanceof QueryRejectedError;
 }
 
 /**
@@ -129,13 +140,18 @@ export function createOnboardingService(options: OnboardingServiceOptions): Serv
 
             const handle = workflowClient.getHandle(req.employeeId);
 
-            // Prefer the LIVE status from the running workflow's Query. If the
-            // workflow has closed (queries are rejected on closed runs), fall
-            // back to a terminal status derived from describe().
+            // Prefer the LIVE status from the running workflow's Query. Only when
+            // the Query is unavailable because the run is closed/gone or its
+            // query handler isn't registered do we fall back to a terminal status
+            // from describe(). A transient/other failure is surfaced as
+            // Unavailable, never silently mapped to a terminal status.
             let status: OnboardingStatusT;
             try {
                 status = await handle.query<OnboardingStatusT>("getOnboardingStatus");
-            } catch {
+            } catch (err) {
+                if (!isClosedOrMissingRun(err)) {
+                    throw new ConnectError(`Could not read onboarding status for "${req.employeeId}".`, Code.Unavailable);
+                }
                 const description = await handle.describe();
                 status = terminalStatusFor(description.status.name);
             }

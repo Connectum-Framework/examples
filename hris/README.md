@@ -105,8 +105,10 @@ new id must be **free**). Only after the pre-check passes does it **start** the
 durable `OnboardingWorkflow` and return immediately with `STARTED`. Because the
 pre-check runs first, the error path needs **no live Temporal**.
 
-The workflow runs the forward steps and pushes each step's compensation onto a
-stack; on any failure it unwinds the stack in **LIFO** order, then fails:
+The workflow runs the forward steps, registering each step's compensation on a
+stack **before** its call (steps 2–4, so an ambiguous failure that committed the
+side effect is still unwound) or after it (step 1); on any failure it unwinds the
+stack in **LIFO** order, then fails:
 
 ```
 createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provisionAccess ──▶ activateEmployee  ✓ COMPLETED
@@ -116,9 +118,12 @@ createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provision
 
 - **`createEmployee`** is the saga's first step; a duplicate id is a **business**
   failure surfaced as `Code.AlreadyExists` (via an atomic
-  `insert … on conflict do nothing returning`, never a raw DB error). The activity
-  rethrows it as a **non-retryable** `ApplicationFailure` so the workflow fails
-  fast with nothing to compensate.
+  `insert … on conflict do nothing returning`, never a raw DB error). To stay
+  idempotent under at-least-once retries, the activity reads the row back on
+  conflict: a stored employee that **matches** this hire is treated as success (a
+  retry observing its own prior commit), while a **genuinely different** employee
+  under the same id is rethrown as a **non-retryable** `ApplicationFailure` so the
+  workflow fails fast with nothing to compensate.
 - Every other step keeps Temporal's **default retry policy** — the durability the
   saga demonstrates. The compensations are **idempotent**, so an unwind after a
   partially-applied step is safe.

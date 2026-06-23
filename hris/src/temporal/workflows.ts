@@ -9,15 +9,16 @@
  * runtime (that would break determinism). All I/O is in the activities; the
  * workflow only orchestrates.
  *
- * Saga (compensation-stack pattern, samples-repo style): run the forward steps
- * in order; after each side-effecting step `unshift` its compensation onto a
- * stack; on ANY failure, run the compensations in LIFO order (each wrapped in
- * its own try/catch so the unwind never throws), then rethrow the original
- * error. The result:
- *   - provisionAccess fails → teardownPayroll → ... wait, LIFO from the failing
- *     point: revokeTimeOff → teardownPayroll → offboardEmployee
- *   - grantTimeOff fails    → teardownPayroll → offboardEmployee
- *   - setupPayroll fails    → offboardEmployee
+ * Saga (compensation-stack pattern): run the forward steps in order, registering
+ * each step's compensation on a LIFO stack — BEFORE the forward call (steps 2-4),
+ * so an ambiguous failure that DID commit the side effect is still unwound, or
+ * AFTER for step 1 (a failed create committed nothing, and a retry that observed
+ * its own commit is reconciled in the activity). On ANY failure, run the
+ * compensations in LIFO order (each wrapped in its own try/catch so the unwind
+ * never throws), then rethrow the original error. The result:
+ *   - provisionAccess fails → revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee
+ *   - grantTimeOff fails    → revokeTimeOff → teardownPayroll → offboardEmployee
+ *   - setupPayroll fails    → teardownPayroll → offboardEmployee
  *   - createEmployee fails  → (non-retryable) fail fast, NOTHING to compensate.
  *
  * activateEmployee (step 5) pushes NO compensation: it is the terminal
@@ -86,27 +87,34 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
     let status: OnboardingStatusT = OnboardingStatus.STARTED;
     setHandler(getOnboardingStatusQuery, () => status);
 
-    // LIFO compensation stack: unshift after each side-effecting forward step.
+    // LIFO compensation stack: each step registers its compensation here, BEFORE
+    // its forward call (steps 2-4) so an ambiguous failure that committed the
+    // side effect is still unwound, or AFTER for step 1.
     const compensations: Compensation[] = [];
 
     try {
-        // Step 1 — create the directory row (business failure here is
-        // non-retryable and fails the workflow fast; nothing pushed, nothing to
-        // undo).
+        // Step 1 — create the directory row. A business failure here (the id is
+        // already taken) is non-retryable and fails the workflow fast; registered
+        // AFTER, since a failed create committed nothing to offboard (and the
+        // activity reconciles a retry that observed its own prior commit).
         await acts.createEmployee({ employeeId, name, email, title, department, managerId });
         compensations.unshift({ name: "offboardEmployee", run: () => acts.offboardEmployee({ employeeId }) });
 
-        // Step 2 — enroll in payroll.
-        await acts.setupPayroll({ employeeId });
+        // Step 2 — enroll in payroll. Register the teardown BEFORE the call:
+        // teardownPayroll is idempotent (a no-op if enrollment never committed),
+        // so an ambiguous setupPayroll failure is still unwound.
         compensations.unshift({ name: "teardownPayroll", run: () => acts.teardownPayroll({ employeeId }) });
+        await acts.setupPayroll({ employeeId });
 
-        // Step 3 — grant the annual PTO policy.
-        await acts.grantTimeOff({ employeeId });
+        // Step 3 — grant the annual PTO policy. Register the revoke BEFORE the
+        // call (revokeTimeOff is a no-op if the grant never committed).
         compensations.unshift({ name: "revokeTimeOff", run: () => acts.revokeTimeOff({ employeeId }) });
+        await acts.grantTimeOff({ employeeId });
 
-        // Step 4 — provision system access.
-        await acts.provisionAccess({ employeeId, email });
+        // Step 4 — provision system access. Register the revoke BEFORE the call
+        // (revokeAccess is a no-op if the account was never created).
         compensations.unshift({ name: "revokeAccess", run: () => acts.revokeAccess({ employeeId }) });
+        await acts.provisionAccess({ employeeId, email });
 
         // Step 5 — activate the employee (onboarding → active). Terminal; no
         // compensation.
