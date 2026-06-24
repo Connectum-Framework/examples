@@ -443,10 +443,11 @@ The committed `openapi/*.yaml` is the showcase output — regenerate with
 `pnpm openapi` after changing the proto or its auth options.
 
 > **Notes.** Streaming RPCs (`ListVehicles`) are omitted from the base spec
-> unless the plugin's `with-streaming` opt is set. The overlay works on the
-> published `@connectum/auth` 1.0.0; once 1.1.0 is out, methods marked
-> `internal` in the proto also get `x-internal: true` (the resolver then
-> exposes that marker).
+> unless the plugin's `with-streaming` opt is set. The overlay targets the
+> `@connectum/auth` 1.0.0 API this example pins. `@connectum/auth` 1.1.0 adds an
+> `internal` method marker that the resolver exposes as `x-internal: true`;
+> migrating this example onto that marker is tracked in
+> [examples#36](https://github.com/Connectum-Framework/examples/issues/36).
 
 ## Build the image
 

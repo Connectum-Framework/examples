@@ -10,8 +10,9 @@
 // Run via `pnpm openapi` (generates the base from buf.gen.openapi.yaml, then this
 // overlay). NOTE: streaming RPCs (e.g. ListVehicles) are omitted from the base
 // unless the plugin's `with-streaming` opt is set, so they get no operation here.
-// A method marked `internal` (1.1.0) would also add `x-internal: true` once the
-// resolver exposes that field.
+// `@connectum/auth` 1.1.0 adds an `internal` method marker; this example targets
+// the 1.0.0 API (no `internal` field on the resolver), so only `public` is mapped.
+// On 1.1.0 a method marked `internal` would also add `x-internal: true`.
 
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -60,7 +61,8 @@ for (const { svc, file } of SPECS) {
         op.security = [{ bearerAuth: [] }];
         if (auth.requires && auth.requires.roles.length > 0) op["x-connectum-required-roles"] = [...auth.requires.roles];
         if (auth.requires && auth.requires.scopes.length > 0) op["x-connectum-required-scopes"] = [...auth.requires.scopes];
-        // A method marked `internal` (1.1.0) would add `op["x-internal"] = true` here.
+        // On `@connectum/auth` 1.1.0, a method marked `internal` would add
+        // `op["x-internal"] = true` here (this example targets 1.0.0, so it does not).
         securedCount += 1;
     }
 
