@@ -11,7 +11,7 @@
  *
  * The status is a plain string on the wire (no proto enum — the example's
  * `erasableSyntaxOnly` tsconfig rejects the native `enum` protoc-gen-es emits),
- * with the domain pinned by this `const` object (ADR-001: no `enum`).
+ * with the domain pinned by this `const` object.
  *
  * @module temporal/tripStatus
  */
