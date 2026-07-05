@@ -153,6 +153,28 @@ services:
       - car-sharing
     profiles: ["saga"]
 
+  # ── NATS (JetStream) — the broadcast broker for Phase 3 ────────────────────
+  #
+  # The trip saga publishes ONE `trips.completed` event on settle; the three
+  # reactor processes (below) each subscribe with a DISTINCT consumer group, so
+  # each gets its OWN durable consumer = fan-out (a shared group would load-
+  # balance / steal). JetStream (`-js`) is REQUIRED because the NATS adapter uses
+  # durable consumers. `-m 8222` exposes the monitoring endpoint for the probe.
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
   # ── FLEET role — the persistent leaf (Drizzle + app Postgres) ──────────────
   fleet:
     build: .
@@ -249,6 +271,9 @@ services:
       - FLEET_ADDR=http://fleet:5001
       - TRIPS_ADDR=http://trips:5002
       - BILLING_ADDR=http://billing:5003
+      # The worker hosts the publish-only EventBus: on settle it broadcasts ONE
+      # `trips.completed` event here (the reactors below consume it).
+      - NATS_URL=nats://nats:4222
     depends_on:
       temporal:
         condition: service_healthy
@@ -257,6 +282,54 @@ services:
       trips:
         condition: service_healthy
       billing:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── REACTORS — three INDEPENDENT broadcast subscribers (node src/reactor.ts) ─
+  #
+  # Each is the SAME image with a different `REACTOR` selector, on its OWN
+  # consumer group (cs-pricing / cs-audit / cs-notify), so NATS gives each its
+  # own durable consumer and every reactor receives every `trips.completed` =
+  # fan-out. Co-hosting all three buses in one process would change the process
+  # count, NOT the fan-out semantics (still three durable consumers).
+  reactor-pricing:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=pricing
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  reactor-audit:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=audit
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  reactor-notify:
+    build: .
+    command: ["node", "src/reactor.ts"]
+    environment:
+      - REACTOR=notify
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
         condition: service_healthy
     networks:
       - car-sharing

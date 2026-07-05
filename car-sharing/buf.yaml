@@ -7,6 +7,11 @@ modules:
   # `import "connectum/auth/v1/options.proto"` in the service protos resolves.
   # `pnpm install` MUST run before `buf generate` (it populates node_modules).
   - path: node_modules/@connectum/auth/proto
+  # The events options.proto (connectum.events.v1.event), shipped inside
+  # @connectum/events. Declared as a workspace module so the
+  # `import "connectum/events/v1/options.proto"` in trip_events.proto resolves —
+  # the same mechanism as the auth module above (no BSR / vendoring).
+  - path: node_modules/@connectum/events/proto
 lint:
   use:
     - STANDARD
@@ -14,6 +19,9 @@ lint:
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
     - RPC_REQUEST_RESPONSE_UNIQUE
+    # TripEventHandlers is an event-handler service (each RPC is a subscription),
+    # so the conventional "...Service" suffix does not apply.
+    - SERVICE_SUFFIX
 breaking:
   use:
     - FILE

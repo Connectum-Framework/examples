@@ -62,6 +62,9 @@ function makeMockActivities(calls: string[], failing?: { step: string }): Record
         addCharge: async () => record("addCharge", "charge-mock-1"),
         refundCharge: async () => record("refundCharge"),
         settle: async () => record("settle"),
+        // Phase 3 terminal broadcast — fired from the success-only tail AFTER the
+        // saga try/catch, so it appears only on the SETTLED path.
+        publishTripCompleted: async () => record("publishTripCompleted"),
     };
 }
 
@@ -87,12 +90,14 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
         return worker.runUntil(testEnv.client.workflow.execute(TripWorkflow, { args: [INPUT], taskQueue: TASK_QUEUE, workflowId }));
     }
 
-    it("success: runs the forward steps in order and SETTLES", async () => {
+    it("success: runs the forward steps in order, SETTLES, then broadcasts TripCompleted (success-only tail)", async () => {
         const calls: string[] = [];
         const result = await runWorkflow(makeMockActivities(calls), "wf-success");
 
         assert.equal(result, "SETTLED");
-        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "addCharge", "settle"]);
+        // The terminal broadcast fires LAST, after settle — the success-only tail
+        // outside the saga try/catch (Phase 3).
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "addCharge", "settle", "publishTripCompleted"]);
     });
 
     it("settle fails: compensations run in REVERSE order (refund → void → cancel → release)", async () => {
@@ -100,7 +105,9 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "settle" }), "wf-settle-fail"));
 
         // Forward path up to and including the failing settle, then the LIFO
-        // unwind of every pushed compensation.
+        // unwind of every pushed compensation. The ABSENCE of `publishTripCompleted`
+        // here is the negative guard: the broadcast fires only on the SETTLED tail,
+        // NEVER on a compensated (CANCELLED) run.
         assert.deepEqual(calls, [
             "reserveVehicle",
             "recordTrip",
@@ -148,6 +155,20 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
         const calls: string[] = [];
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "openTab" }), "wf-opentab-fail"));
         assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "voidTab", "markTripCancelled", "releaseVehicle"]);
+    });
+
+    it("broadcast failure leaves the trip SETTLED — the success-only tail swallows it, NO compensation runs", async () => {
+        // The CRITICAL Phase 3 guarantee (D4): a failed/timed-out broadcast must
+        // NEVER roll back a settled, paid trip. The mock's `publishTripCompleted`
+        // throws (nonRetryable), but it runs in the success-only tail OUTSIDE the
+        // saga try/catch, so the catch does not see it: the workflow still returns
+        // SETTLED and NO compensation follows. This proves the guard behaviorally
+        // (the structural placement), not by code-reading.
+        const calls: string[] = [];
+        const result = await runWorkflow(makeMockActivities(calls, { step: "publishTripCompleted" }), "wf-broadcast-fail");
+
+        assert.equal(result, "SETTLED");
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "addCharge", "settle", "publishTripCompleted"]);
     });
 
     it("the REAL activities module + real workflowsPath register on a Worker (production startup path)", async () => {

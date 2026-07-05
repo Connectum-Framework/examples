@@ -18,12 +18,21 @@
 
 import { fileURLToPath } from "node:url";
 import { NativeConnection, Worker } from "@temporalio/worker";
+import { buildPublisherBus } from "#events/eventBus.ts";
 import * as activities from "#temporal/activities.ts";
 import { TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
 
 async function main(): Promise<void> {
     const connection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS });
+    // Build + start the publish-only EventBus (Phase 3 broadcast) and inject it
+    // into the activities module BEFORE the worker polls, so the terminal
+    // `publishTripCompleted` activity publishes on a ready bus. The worker owns
+    // its lifecycle: stopped in the `finally` below.
+    const publisherBus = buildPublisherBus();
     try {
+        await publisherBus.start();
+        activities.setPublisherBus(publisherBus);
+
         const worker = await Worker.create({
             connection,
             namespace: TEMPORAL_NAMESPACE,
@@ -36,7 +45,9 @@ async function main(): Promise<void> {
         console.log(`car-sharing temporal worker ready — taskQueue=${TEMPORAL_TASK_QUEUE} namespace=${TEMPORAL_NAMESPACE} temporal=${TEMPORAL_ADDRESS}`);
         await worker.run();
     } finally {
-        await connection.close();
+        // Settle both regardless of individual failures — a stop() rejection
+        // must not leak the Temporal connection.
+        await Promise.allSettled([publisherBus.stop(), connection.close()]);
     }
 }
 
