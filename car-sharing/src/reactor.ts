@@ -47,9 +47,14 @@ async function main(): Promise<void> {
     console.log(`car-sharing reactor ready — REACTOR=${key} topic=trips.completed nats=${process.env.NATS_URL ?? "nats://localhost:4222"}`);
 
     const stop = async (): Promise<void> => {
-        await bus.stop();
-        console.log(`car-sharing reactor stopped — REACTOR=${key}`);
-        process.exit(0);
+        try {
+            await bus.stop();
+            console.log(`car-sharing reactor stopped — REACTOR=${key}`);
+            process.exit(0);
+        } catch (err) {
+            console.error(`car-sharing reactor shutdown error — REACTOR=${key}:`, err);
+            process.exit(1);
+        }
     };
     process.on("SIGINT", () => void stop());
     process.on("SIGTERM", () => void stop());

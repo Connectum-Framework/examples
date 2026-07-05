@@ -29,9 +29,10 @@ async function main(): Promise<void> {
     // `publishTripCompleted` activity publishes on a ready bus. The worker owns
     // its lifecycle: stopped in the `finally` below.
     const publisherBus = buildPublisherBus();
-    await publisherBus.start();
-    activities.setPublisherBus(publisherBus);
     try {
+        await publisherBus.start();
+        activities.setPublisherBus(publisherBus);
+
         const worker = await Worker.create({
             connection,
             namespace: TEMPORAL_NAMESPACE,
@@ -44,8 +45,9 @@ async function main(): Promise<void> {
         console.log(`car-sharing temporal worker ready — taskQueue=${TEMPORAL_TASK_QUEUE} namespace=${TEMPORAL_NAMESPACE} temporal=${TEMPORAL_ADDRESS}`);
         await worker.run();
     } finally {
-        await publisherBus.stop();
-        await connection.close();
+        // Settle both regardless of individual failures — a stop() rejection
+        // must not leak the Temporal connection.
+        await Promise.allSettled([publisherBus.stop(), connection.close()]);
     }
 }
 
