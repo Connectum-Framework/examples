@@ -37,8 +37,8 @@ Ready-to-run examples demonstrating Connectum features — from a one-service [q
 | [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
 | [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
 | [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
-| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus saga | Ready |
-| [car-sharing](car-sharing/) | Enterprise deploy — Kubernetes + Istio | Split microservices + JWT/proto authz gateway + OpenTelemetry; k8s/Istio manifests (mTLS, canary) | Ready |
+| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus + durable onboarding saga with Temporal | Ready |
+| [car-sharing](car-sharing/) | Enterprise deploy — Kubernetes + Istio | Split microservices + JWT/proto authz gateway + OpenTelemetry; durable trip saga with Temporal; k8s/Istio manifests (mTLS, canary) | Ready |
 | [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
 | [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
 | [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
@@ -71,14 +71,18 @@ grpcurl -plaintext -d '{"name": "World"}' localhost:5000 greeter.v1.GreeterServi
 ## Enterprise deployment
 
 The [car-sharing](car-sharing/) example demonstrates a split-microservices
-deployment with a JWT/proto-authz gateway and OpenTelemetry, plus the manifests
-to run it:
+deployment with a JWT/proto-authz gateway, a durable trip saga with
+[Temporal](https://temporal.io), and OpenTelemetry, plus the manifests to run
+it:
 
 - **Kubernetes** — per-service Deployment / Service / HPA / RBAC, single
   role-selectable image (`SERVICES` env), `perServiceEnvResolver` wiring
   cross-service `ctx.call` across pods.
 - **Istio** — PeerAuthentication mTLS (STRICT), AuthorizationPolicy, VirtualService /
   DestinationRule, a canary example.
+- **Temporal** — durable `TripWorkflow` saga (reserve → charge → settle) with
+  automatic LIFO compensation; a separate worker process keeps the RPC roles
+  build-free.
 
 See [car-sharing/README.md](car-sharing/README.md) for details.
 

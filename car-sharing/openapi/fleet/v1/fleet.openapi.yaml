@@ -1,0 +1,339 @@
+openapi: 3.1.0
+info:
+  title: fleet.v1
+paths:
+  /fleet.v1.FleetService/GetVehicle:
+    post:
+      tags:
+        - fleet.v1.FleetService
+      summary: GetVehicle
+      description: GetVehicle returns a vehicle by id, or NOT_FOUND if unknown.
+      operationId: fleet.v1.FleetService.GetVehicle
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/fleet.v1.GetVehicleRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fleet.v1.GetVehicleResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /fleet.v1.FleetService/ListVehicles: {}
+  /fleet.v1.FleetService/ReleaseVehicle:
+    post:
+      tags:
+        - fleet.v1.FleetService
+      summary: ReleaseVehicle
+      description: >-
+        ReleaseVehicle returns a vehicle to the available pool (available=true,
+         status="available") and returns it. NOT_FOUND if the id is unknown.
+         FAILED_PRECONDITION if the vehicle is in maintenance (cannot be released
+         back into service from the fleet API).
+      operationId: fleet.v1.FleetService.ReleaseVehicle
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/fleet.v1.ReleaseVehicleRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fleet.v1.Vehicle"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /fleet.v1.FleetService/ReserveVehicle:
+    post:
+      tags:
+        - fleet.v1.FleetService
+      summary: ReserveVehicle
+      description: >-
+        ReserveVehicle marks a vehicle reserved (available=false,
+         status="reserved") and returns it. NOT_FOUND if the id is unknown;
+         FAILED_PRECONDITION if the vehicle is already reserved or in maintenance
+         (not currently available).
+      operationId: fleet.v1.FleetService.ReserveVehicle
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/fleet.v1.ReserveVehicleRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fleet.v1.Vehicle"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+components:
+  schemas:
+    connect-protocol-version:
+      type: number
+      title: Connect-Protocol-Version
+      enum:
+        - 1
+      description: Define the version of the Connect protocol
+      const: 1
+    connect-timeout-header:
+      type: number
+      title: Connect-Timeout-Ms
+      description: Define the timeout, in ms
+    connect.error:
+      type: object
+      properties:
+        code:
+          type: string
+          examples:
+            - not_found
+          enum:
+            - canceled
+            - unknown
+            - invalid_argument
+            - deadline_exceeded
+            - not_found
+            - already_exists
+            - permission_denied
+            - resource_exhausted
+            - failed_precondition
+            - aborted
+            - out_of_range
+            - unimplemented
+            - internal
+            - unavailable
+            - data_loss
+            - unauthenticated
+          description: The status code, which should be an enum value of
+            [google.rpc.Code][google.rpc.Code].
+        message:
+          type: string
+          description: A developer-facing error message, which should be in English. Any
+            user-facing error message should be localized and sent in the
+            [google.rpc.Status.details][google.rpc.Status.details] field, or
+            localized by the client.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/connect.error_details.Any"
+          description: A list of messages that carry the error details. There is no limit
+            on the number of messages.
+      title: Connect Error
+      additionalProperties: true
+      description: "Error type returned by Connect:
+        https://connectrpc.com/docs/go/errors/#http-representation"
+    connect.error_details.Any:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "A URL that acts as a globally unique identifier for the type of
+            the serialized message. For example:
+            `type.googleapis.com/google.rpc.ErrorInfo`. This is used to
+            determine the schema of the data in the `value` field and is the
+            discriminator for the `debug` field."
+        value:
+          type: string
+          format: binary
+          description: The Protobuf message, serialized as bytes and base64-encoded. The
+            specific message type is identified by the `type` field.
+        debug:
+          oneOf:
+            - type: object
+              title: Any
+              additionalProperties: true
+              description: Detailed error information.
+          discriminator:
+            propertyName: type
+          title: Debug
+          description: Deserialized error detail payload. The 'type' field indicates the
+            schema. This field is for easier debugging and should not be relied
+            upon for application logic.
+      additionalProperties: true
+      description: Contains an arbitrary serialized message along with a @type that
+        describes the type of the serialized message, with an additional debug
+        field for ConnectRPC error details.
+    fleet.v1.GetVehicleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+      title: GetVehicleRequest
+      additionalProperties: false
+    fleet.v1.GetVehicleResponse:
+      type: object
+      properties:
+        vehicle:
+          title: vehicle
+          $ref: "#/components/schemas/fleet.v1.Vehicle"
+      title: GetVehicleResponse
+      additionalProperties: false
+    fleet.v1.ListVehiclesRequest:
+      type: object
+      properties:
+        availableOnly:
+          type: boolean
+          title: available_only
+          description: When true, only vehicles that are currently available are streamed.
+        pageSize:
+          type: integer
+          title: page_size
+          format: int32
+          description: Max vehicles per page. Server clamps to a sane default/max when 0
+            or large.
+        pageToken:
+          type: string
+          title: page_token
+          description: >-
+            Cursor: the id of the last vehicle from the previous page. Empty =
+            first
+             page. The stream itself carries no token, so the client derives the cursor
+             from the last streamed Vehicle.id.
+      title: ListVehiclesRequest
+      additionalProperties: false
+    fleet.v1.Location:
+      type: object
+      properties:
+        lat:
+          type: number
+          title: lat
+          format: double
+        lng:
+          type: number
+          title: lng
+          format: double
+      title: Location
+      additionalProperties: false
+      description: Location is a vehicle's last-known position.
+    fleet.v1.ReleaseVehicleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+      title: ReleaseVehicleRequest
+      additionalProperties: false
+    fleet.v1.ReserveVehicleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+      title: ReserveVehicleRequest
+      additionalProperties: false
+    fleet.v1.Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+        model:
+          type: string
+          title: model
+        available:
+          type: boolean
+          title: available
+          description: >-
+            available <=> status == "available". Kept for the trip handler,
+            which only
+             checks availability.
+        status:
+          type: string
+          title: status
+          description: >-
+            Lifecycle state: "available" | "reserved" | "maintenance". Modeled
+            as a
+             string (not a proto enum) so the generated TypeScript stays erasable —
+             this example's tsconfig sets `erasableSyntaxOnly`, which rejects the native
+             `enum` that protoc-gen-es emits. The string domain is pinned in code via a
+             `const` object (see src/db/schema.ts VehicleStatus).
+        location:
+          title: location
+          $ref: "#/components/schemas/fleet.v1.Location"
+      title: Vehicle
+      additionalProperties: false
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Connectum JWT auth (createJwtAuthInterceptor / proto authz).
+        Required for every non-public method.
+security: []
+tags:
+  - name: fleet.v1.FleetService
+    description: >-
+      FleetService is the vehicle system of record (a leaf service).
+
+       It is an INTERNAL service: it is reached only by the trip handler via a
+       cross-service ctx.call, never by external clients. The service-level
+       `public: true` option marks every RPC as public, so the gateway-facing JWT
+       auth and proto authz interceptors skip it. An internal ctx.call carries no
+       Authorization header (Connectum does not auto-propagate inbound headers), so
+       without this annotation an in-process call from the trip handler would be
+       rejected as unauthenticated by the same interceptor chain that protects the
+       edge. In production the network boundary is enforced by Istio mTLS + an
+       AuthorizationPolicy that only admits the trips ServiceAccount (see istio/).
+
+       Persistence (Phase 1): the fleet is the only service backed by a real
+       database — Drizzle ORM over Postgres (postgres.js). Tests inject a PGlite
+       in-process Postgres via the same DI the server uses, so no Docker is needed.

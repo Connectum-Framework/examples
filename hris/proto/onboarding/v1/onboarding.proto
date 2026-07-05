@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package onboarding.v1;
+
+// OnboardingService is the edge orchestrator for new-hire onboarding, backed by
+// a durable Temporal saga.
+//
+// A monolith ran onboarding inline; this service splits it. OnboardEmployee runs
+// a SYNCHRONOUS pre-check (the employee id must be free) and only then STARTS a
+// durable OnboardingWorkflow — a multi-step saga that provisions the new hire
+// across the directory, payroll, time-off, and access services, with automatic
+// LIFO compensation if any step fails. The long-running saga lives in Temporal,
+// not in the handler; GetOnboarding reads its live status via a workflow query.
+service OnboardingService {
+  // OnboardEmployee validates that the id is free (a ctx.call to the directory:
+  // an EXISTING employee is rejected with ALREADY_EXISTS), then starts the
+  // durable onboarding saga and returns immediately with status STARTED and the
+  // workflow id. The pre-check runs BEFORE any Temporal use, so the error path
+  // needs no live Temporal.
+  rpc OnboardEmployee(OnboardEmployeeRequest) returns (OnboardEmployeeResponse) {}
+
+  // GetOnboarding reads the new hire's live onboarding status from the running
+  // workflow (a Temporal query), falling back to a terminal status once the
+  // saga has closed (COMPLETED on success, FAILED if it rolled back).
+  rpc GetOnboarding(GetOnboardingRequest) returns (GetOnboardingResponse) {}
+}
+
+message OnboardEmployeeRequest {
+  // Desired employee id (must be free; e.g. "e-100").
+  string employee_id = 1;
+  string name = 2;
+  // Work email address.
+  string email = 3;
+  // Job title (e.g. "Staff Engineer").
+  string title = 4;
+  string department = 5;
+  // The id of this hire's manager, or empty for the top of the org chart.
+  string manager_id = 6;
+}
+
+message OnboardEmployeeResponse {
+  Onboarding onboarding = 1;
+  // The Temporal workflow id (equals the employee id) — GetOnboarding maps an
+  // employee id straight to its onboarding workflow.
+  string workflow_id = 2;
+}
+
+message GetOnboardingRequest {
+  string employee_id = 1;
+}
+
+message GetOnboardingResponse {
+  Onboarding onboarding = 1;
+}
+
+message Onboarding {
+  string employee_id = 1;
+  // Onboarding saga lifecycle state, modeled as a plain string (not a proto
+  // enum) so the generated TypeScript stays erasable under this example's
+  // `erasableSyntaxOnly` tsconfig. The domain is pinned in code via a `const`
+  // object (see src/temporal/onboardingStatus.ts): "STARTED" | "COMPLETED" |
+  // "FAILED".
+  string status = 2;
+}

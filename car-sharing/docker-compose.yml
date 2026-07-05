@@ -1,0 +1,455 @@
+# Two stacks from one image, selected by compose profile. Config only — NOT part
+# of the automated test run (the e2e suite uses an in-process PGlite Postgres and
+# the time-skipping Temporal test server; see tests/).
+#
+#   docker compose --profile mono up --build    # Phase 1: monolith + Postgres
+#   docker compose --profile saga up --build     # Phase 2: durable saga on Temporal
+#   docker compose --profile ory  up --build     # Phase 4: Ory (Kratos+Oathkeeper) edge
+#
+# ── Phase 1 (mono) ──────────────────────────────────────────────────────────
+# FleetService over Drizzle + Postgres; every service in-process (SERVICES
+# unset). StartTrip needs Temporal, so the `mono` profile is for the fleet /
+# persistence demo; the trip saga lives in the `saga` profile.
+#
+# First run — migrate + seed the fleet:
+#   docker compose up -d postgres
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:migrate
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:seed
+#   docker compose --profile mono up app
+#
+# ── Phase 2 (saga) ──────────────────────────────────────────────────────────
+# The three RPC roles split (one process each, role by SERVICES), the Temporal
+# WORKER as its own process (`node src/worker.ts`), the Temporal server + Web UI,
+# Temporal's OWN Postgres, and the app Postgres (above) for the fleet. Temporal
+# owns + migrates its schema (auto-setup), so its store is kept SEPARATE from the
+# app db. Run it and watch the saga (and its compensations) in the Web UI:
+#
+#   docker compose up -d postgres
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:migrate
+#   DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnpm db:seed
+#   docker compose --profile saga up --build
+#   open http://localhost:8088   # Temporal Web UI
+#   # Start a trip against the trips role (gRPC :5002, e.g. via grpcurl) and watch
+#   # TripWorkflow reserve → record → end → openTab → addCharge → settle. Stop the
+#   # billing role mid-run to watch the compensations unwind in reverse.
+#
+# ── Phase 4 (ory) ───────────────────────────────────────────────────────────
+# Ory as the IdP, Connectum as a thin consumer. Kratos owns users/sessions (its
+# OWN Postgres — a THIRD independent store next to the app + Temporal dbs);
+# Oathkeeper is the edge proxy that validates the Kratos session and MINTS an
+# RS256 JWT; the trips gateway validates that JWT against Oathkeeper's published
+# JWKS (createRemoteJWKSet). The trips role serves the edge over Connect/HTTP1
+# (ALLOW_HTTP1=true) because Oathkeeper's standalone proxy is HTTP, not gRPC. The
+# RS256 signing keyset is GENERATED at up-time into a shared volume (no private
+# key in git). Config only — NOT part of the automated test run (the e2e simulates
+# the mutator with an in-process JWKS server; see tests/helpers/jwks.ts). See
+# ory/oathkeeper/README.md for the flow + the k8s/istio ext_authz production path.
+#
+#   docker compose --profile ory up --build
+#   open http://localhost:4458            # Kratos self-service UI — register/login
+#   # The browser gets an ory_kratos_session cookie, then calls the trips edge via
+#   # Oathkeeper (:4455) with that cookie; Oathkeeper mints the JWT and forwards.
+#   # Edge is Connect/HTTP1, so demo with curl (NOT grpcurl):
+#   #   curl -i http://localhost:4455/trips.v1.TripService/GetTrip \
+#   #     -H 'Content-Type: application/json' -b 'ory_kratos_session=...' \
+#   #     -d '{"tripId":"trip-demo"}'
+
+services:
+  # ── App Postgres for the fleet (shared by both profiles) ───────────────────
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: car_sharing
+      POSTGRES_PASSWORD: car_sharing
+      POSTGRES_DB: car_sharing
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U car_sharing -d car_sharing"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["mono", "saga", "ory"]
+
+  # ── Phase 1: monolith — every service in-process (SERVICES unset) ──────────
+  app:
+    build: .
+    image: car-sharing:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # Monolith: SERVICES unset → every service mounted in-process.
+      DATABASE_URL: postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    ports:
+      - "5000:5000"
+    networks:
+      - car-sharing
+    profiles: ["mono"]
+
+  # ── Temporal's own metadata store (SEPARATE from the app Postgres) ─────────
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── Temporal server (auto-setup creates the `default` namespace) ───────────
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+    ports:
+      - "7233:7233"
+    healthcheck:
+      # Wait until the frontend is serving and the default namespace exists.
+      test: ["CMD", "tctl", "--address", "temporal:7233", "namespace", "describe", "default"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── Temporal Web UI — inspect workflows + their compensations ──────────────
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8088
+    ports:
+      - "8088:8080"
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── FLEET role — the persistent leaf (Drizzle + app Postgres) ──────────────
+  fleet:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - SERVICES=fleet.v1.FleetService
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── TRIPS role — the edge/gateway; starts TripWorkflow on Temporal ─────────
+  trips:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - SERVICES=trips.v1.TripService
+      # buildServer() builds the fleet db client for every role (postgres.js
+      # connects lazily, so this role never opens it — fleet is reached over the
+      # network); DATABASE_URL must still be present.
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      # The pre-check ctx.call to GetVehicle routes here:
+      - FLEET_ADDR=http://fleet:5001
+      # StartTrip starts the durable workflow here:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=car-sharing-trips
+    depends_on:
+      fleet:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── BILLING role — the in-memory billing leaf ─────────────────────────────
+  billing:
+    build: .
+    command: ["node", "src/index.ts"]
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+      - SERVICES=billing.v1.BillingService
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5003/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── WORKER — hosts TripWorkflow + the activities (node src/worker.ts) ──────
+  #
+  # A separate process type (NOT a SERVICES-selected RPC role): no inbound RPC;
+  # it polls Temporal for workflow/activity tasks and drives the role services
+  # over ConnectRPC. The ONLY process that loads the @temporalio/worker native
+  # addon.
+  worker:
+    build: .
+    command: ["node", "src/worker.ts"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=car-sharing-trips
+      - FLEET_ADDR=http://fleet:5001
+      - TRIPS_ADDR=http://trips:5002
+      - BILLING_ADDR=http://billing:5003
+    depends_on:
+      temporal:
+        condition: service_healthy
+      fleet:
+        condition: service_healthy
+      trips:
+        condition: service_healthy
+      billing:
+        condition: service_healthy
+    networks:
+      - car-sharing
+    profiles: ["saga"]
+
+  # ── Phase 4: Ory edge (Kratos + Oathkeeper) ───────────────────────────────
+  #
+  # Kratos's OWN Postgres — a THIRD store, separate from the app `postgres` and
+  # `temporal-postgres`.
+  kratos-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: kratos
+      POSTGRES_DB: kratos
+    volumes:
+      - kratos-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos -d kratos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # Apply Kratos SQL migrations once, then exit.
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      kratos-postgres:
+        condition: service_healthy
+    volumes:
+      - ./ory/kratos:/etc/config/kratos
+    command: ["migrate", "sql", "-e", "--yes", "--config", "/etc/config/kratos/kratos.yml"]
+    restart: on-failure
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # Kratos — the identity provider (public :4433, admin :4434).
+  kratos:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+    volumes:
+      - ./ory/kratos:/etc/config/kratos
+    # --dev relaxes the prod guards (https base_urls, mandatory secrets) for the
+    # demo; the kratos.yml secrets are DEV placeholders. Remove --dev + harden
+    # secrets/TLS for any real use.
+    command: ["serve", "--config", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4433/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # Self-service UI so a browser can register/login and obtain the
+  # ory_kratos_session cookie used at the edge.
+  kratos-selfservice-ui:
+    image: oryd/kratos-selfservice-ui-node:v26.2.0
+    depends_on:
+      kratos:
+        condition: service_healthy
+    environment:
+      - KRATOS_PUBLIC_URL=http://kratos:4433/
+      - KRATOS_BROWSER_URL=http://localhost:4433/
+      - COOKIE_SECRET=PLEASE-CHANGE-ME-ui-cookie-secret
+      - CSRF_COOKIE_NAME=ory_csrf_ui
+      - CSRF_COOKIE_SECRET=PLEASE-CHANGE-ME-ui-csrf-secret
+      - PORT=4458
+    ports:
+      - "4458:4458"
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # One-shot: generate Oathkeeper's RS256 id_token signing keyset into a SHARED
+  # volume. No private key is committed to git — it is materialized at up-time.
+  oathkeeper-keygen:
+    image: oryd/oathkeeper:v0.40.9
+    volumes:
+      - oathkeeper-keys:/etc/keys
+    # `credentials generate` prints the JWKS to stdout; redirect into the volume.
+    entrypoint: ["sh", "-c"]
+    command:
+      - "test -f /etc/keys/id_token.jwks.json || oathkeeper credentials generate --alg RS256 > /etc/keys/id_token.jwks.json"
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # Oathkeeper — the edge proxy (proxy :4455, api :4456 serves the public JWKS).
+  oathkeeper:
+    image: oryd/oathkeeper:v0.40.9
+    depends_on:
+      kratos:
+        condition: service_healthy
+      oathkeeper-keygen:
+        condition: service_completed_successfully
+    ports:
+      - "4455:4455"
+      - "4456:4456"
+    volumes:
+      - ./ory/oathkeeper:/etc/config/oathkeeper:ro
+      - oathkeeper-keys:/etc/keys:ro
+    command: ["serve", "--config", "/etc/config/oathkeeper/config.yml"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4456/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # trips behind Oathkeeper — reached ONLY through oathkeeper:4455. It validates
+  # the minted RS256 JWT against Oathkeeper's JWKS (no shared secret) and serves
+  # the all-unary edge over Connect/HTTP1.
+  trips-ory:
+    build: .
+    image: car-sharing:local
+    command: ["node", "src/index.ts"]
+    environment:
+      - PORT=5000
+      - SERVICES=trips.v1.TripService
+      # Fleet is reached over the network; postgres.js connects lazily so this
+      # role never opens the app db, but DATABASE_URL must be present.
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      - FLEET_ADDR=http://fleet-ory:5000
+      # Temporal is optional for the auth demo (StartTrip's workflow start needs
+      # it; GetTrip pre-checks run lazily). Point at a saga-profile Temporal if
+      # running both, else StartTrip's start step will error after the auth+pre-check.
+      - TEMPORAL_TASK_QUEUE=car-sharing-trips
+      # Phase 4 identity inputs — Connectum as a thin consumer (no JWT_SECRET):
+      - OATHKEEPER_JWKS_URI=http://oathkeeper:4456/.well-known/jwks.json
+      - JWT_ISSUER=http://oathkeeper:4455/
+      - JWT_AUDIENCE=car-sharing-trips
+      # Serve the edge over Connect/HTTP1 so Oathkeeper's HTTP proxy can front it.
+      - ALLOW_HTTP1=true
+    depends_on:
+      oathkeeper:
+        condition: service_healthy
+      fleet-ory:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+  # The fleet leaf for the ory profile (the pre-check ctx.call target). Public,
+  # keeps the gRPC/h2c default.
+  fleet-ory:
+    build: .
+    image: car-sharing:local
+    command: ["node", "src/index.ts"]
+    environment:
+      - PORT=5000
+      - SERVICES=fleet.v1.FleetService
+      - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - car-sharing
+    profiles: ["ory"]
+
+networks:
+  car-sharing:
+    driver: bridge
+
+volumes:
+  pgdata:
+  temporal-pgdata:
+  kratos-pgdata:
+  oathkeeper-keys:

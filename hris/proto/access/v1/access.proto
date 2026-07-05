@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package access.v1;
+
+import "google/protobuf/empty.proto";
+
+// AccessService provisions and revokes system access (the IT side of
+// onboarding). It is a leaf service with an in-memory account ledger — the
+// onboarding saga's fourth forward step.
+service AccessService {
+  // ProvisionAccess creates the employee's system account. Idempotent:
+  // re-provisioning returns the existing account. Onboarding saga step 4.
+  rpc ProvisionAccess(ProvisionAccessRequest) returns (ProvisionAccessResponse) {}
+
+  // RevokeAccess removes the employee's system account (the ProvisionAccess
+  // compensation). Idempotent; a no-op for an unknown employee.
+  rpc RevokeAccess(RevokeAccessRequest) returns (google.protobuf.Empty) {}
+}
+
+message ProvisionAccessRequest {
+  string employee_id = 1;
+  // Work email the account is keyed on.
+  string email = 2;
+}
+
+message ProvisionAccessResponse {
+  Access access = 1;
+}
+
+message RevokeAccessRequest {
+  string employee_id = 1;
+}
+
+message Access {
+  string employee_id = 1;
+  // The provisioned account handle (e.g. an SSO subject id).
+  string account_id = 2;
+  // True once an account exists for this employee.
+  bool provisioned = 3;
+}

@@ -216,7 +216,7 @@ inventoryAdapter.subscribe(
 | `dlq.original-topic` | Topic the event was originally published to |
 | `dlq.original-id` | Unique event ID from the original message |
 | `dlq.error` | Error message from the last failed handler invocation |
-| `dlq.attempt` | Number of attempts made before routing to DLQ |
+| `dlq.attempt` | Delivery attempt number (1-based) of the original message at the broker. NATS does not redeliver here, so retries are in-process and this stays `1`. |
 
 ## EventBus Configuration
 
@@ -232,7 +232,13 @@ export const inventoryEventBus = createEventBus({
     group: "inventory-service",
     middleware: {
         retry: { maxRetries: 2, backoff: "fixed", initialDelay: 200 },
-        dlq: { topic: "dead-letter-queue" },
+        dlq: {
+            topic: "dead-letter-queue",
+            // Emit the full error message into dlq.error. Without a custom
+            // errorSerializer the framework default emits only the error NAME
+            // (error.name) to avoid leaking sensitive data into the DLQ.
+            errorSerializer: (err) => (err instanceof Error ? err.message : String(err)),
+        },
     },
 });
 ```

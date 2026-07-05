@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package timeoff.v1;
 
+import "google/protobuf/empty.proto";
+
 // TimeOffService approves leave requests. Its handler validates the employee
 // via a cross-service ctx.call to directory.v1.DirectoryService, then publishes
 // a LeaveApproved event that payroll.v1.PayrollService consumes.
@@ -10,6 +12,16 @@ service TimeOffService {
   // the request, and emits LeaveApproved. Returns NOT_FOUND when the employee
   // is unknown.
   rpc RequestLeave(RequestLeaveRequest) returns (RequestLeaveResponse) {}
+
+  // GrantTimeOff assigns a new hire their annual PTO policy allotment (distinct
+  // from the payroll leave-days balance — this is the entitlement, not the
+  // decrementable balance) — the onboarding saga's third forward step.
+  // Idempotent: re-granting keeps the existing grant.
+  rpc GrantTimeOff(GrantTimeOffRequest) returns (GrantTimeOffResponse) {}
+
+  // RevokeTimeOff removes an employee's PTO grant — the GrantTimeOff
+  // compensation. Idempotent; a no-op for an unknown employee.
+  rpc RevokeTimeOff(RevokeTimeOffRequest) returns (google.protobuf.Empty) {}
 }
 
 message RequestLeaveRequest {
@@ -25,4 +37,24 @@ message LeaveRequest {
   string id = 1;
   // Approval status: "APPROVED" in this demo (always approved once validated).
   string status = 2;
+}
+
+message GrantTimeOffRequest {
+  string employee_id = 1;
+  // Annual PTO policy allotment in days.
+  int32 policy_days = 2;
+}
+
+message GrantTimeOffResponse {
+  TimeOffGrant grant = 1;
+}
+
+message RevokeTimeOffRequest {
+  string employee_id = 1;
+}
+
+message TimeOffGrant {
+  string employee_id = 1;
+  // Annual PTO policy allotment in days.
+  int32 policy_days = 2;
 }

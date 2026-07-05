@@ -1,0 +1,86 @@
+# Ory Oathkeeper — the EDGE Identity & Access Proxy for car-sharing Phase 4.
+#
+# Flow (compose `ory` profile):
+#   1. A browser logs in via Kratos self-service → gets an `ory_kratos_session`
+#      cookie.
+#   2. The browser calls the trips edge THROUGH Oathkeeper's proxy (:4455).
+#   3. The `cookie_session` authenticator validates the cookie against Kratos
+#      (`/sessions/whoami`); the `id_token` mutator MINTS an RS256 JWT (iss =
+#      issuer_url) projecting sub/name/roles/aud to top-level claims.
+#   4. Oathkeeper forwards the request to the trips upstream with
+#      `Authorization: Bearer <RS256 JWT>`.
+#   5. trips validates that JWT against Oathkeeper's PUBLIC JWKS
+#      (:4456/.well-known/jwks.json) — the createRemoteJWKSet branch — and runs
+#      proto authz. trips never talks to Kratos: Connectum stays a thin consumer.
+#
+# Pinned to docker-compose.yml's image tag (oryd/oathkeeper:v0.40.9).
+
+serve:
+  proxy:
+    port: 4455
+    cors:
+      enabled: true
+      allowed_origins: ["*"]
+      allowed_methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+      allowed_headers: ["Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"]
+      allow_credentials: true
+  api:
+    port: 4456
+
+access_rules:
+  matching_strategy: regexp
+  repositories:
+    - file:///etc/config/oathkeeper/access-rules.yml
+
+errors:
+  fallback:
+    - json
+  handlers:
+    json:
+      enabled: true
+      config:
+        verbose: true
+
+authenticators:
+  # Validates the Kratos browser session and exposes the whole /whoami body as
+  # `.Extra` so the mutator can read `.Extra.identity.traits.{email,roles}`.
+  # This is the only authenticator the edge rule uses.
+  cookie_session:
+    enabled: true
+    config:
+      check_session_url: http://kratos:4433/sessions/whoami
+      preserve_path: true
+      preserve_query: true
+      extra_from: "@this"
+      subject_from: "identity.id"
+      only:
+        - ory_kratos_session
+
+authorizers:
+  # Minimal phase: any AUTHENTICATED session may reach the edge. Per-role gating
+  # is enforced downstream by the trips proto authz (extension point: add a
+  # method_auth { requires { roles } } on a future admin RPC).
+  allow:
+    enabled: true
+
+mutators:
+  # Mints the RS256 JWT the trips gateway consumes.
+  #
+  # issuer_url MUST equal JWT_ISSUER in src/auth.ts (the single source of truth,
+  # also the trips JWT_ISSUER env). The `claims` template projects the session
+  # identity to TOP-LEVEL JWT claims so the gateway's claimsMapping reads
+  # roles/name by their top-level keys. `aud` is set here to car-sharing-trips so
+  # the gateway's audience check passes.
+  id_token:
+    enabled: true
+    config:
+      issuer_url: http://oathkeeper:4455/
+      jwks_url: file:///etc/keys/id_token.jwks.json
+      ttl: 60s
+      claims: |
+        {
+          "sub": "{{ print .Subject }}",
+          "name": "{{ print .Extra.identity.traits.email }}",
+          "roles": {{ if .Extra.identity.traits.roles }}{{ toJson .Extra.identity.traits.roles }}{{ else }}[]{{ end }},
+          "aud": ["car-sharing-trips"]
+        }

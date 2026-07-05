@@ -1,0 +1,434 @@
+openapi: 3.1.0
+info:
+  title: billing.v1
+paths:
+  /billing.v1.BillingService/AddCharge:
+    post:
+      tags:
+        - billing.v1.BillingService
+      summary: AddCharge
+      description: >-
+        AddCharge adds a charge line (in minor units, e.g. cents) to a trip's
+        tab
+         and returns the minted charge id. The saga derives the amount from the trip
+         duration.
+      operationId: billing.v1.BillingService.AddCharge
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/billing.v1.AddChargeRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/billing.v1.AddChargeResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /billing.v1.BillingService/OpenTab:
+    post:
+      tags:
+        - billing.v1.BillingService
+      summary: OpenTab
+      description: >-
+        OpenTab opens a billing tab for the given trip and returns it.
+        Idempotent
+         by trip_id: re-opening an existing tab returns the same tab.
+      operationId: billing.v1.BillingService.OpenTab
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/billing.v1.OpenTabRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/billing.v1.OpenTabResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /billing.v1.BillingService/RefundCharge:
+    post:
+      tags:
+        - billing.v1.BillingService
+      summary: RefundCharge
+      description: |-
+        RefundCharge refunds a charge by id (saga compensation for AddCharge).
+         Idempotent: a missing or already-refunded charge is a no-op success.
+      operationId: billing.v1.BillingService.RefundCharge
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/billing.v1.RefundChargeRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/billing.v1.RefundChargeResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /billing.v1.BillingService/Settle:
+    post:
+      tags:
+        - billing.v1.BillingService
+      summary: Settle
+      description: |-
+        Settle finalizes (closes) a trip's tab — the terminal happy-path billing
+         step. FAILED_PRECONDITION if there is no tab for the trip.
+      operationId: billing.v1.BillingService.Settle
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/billing.v1.SettleRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/billing.v1.SettleResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+  /billing.v1.BillingService/VoidTab:
+    post:
+      tags:
+        - billing.v1.BillingService
+      summary: VoidTab
+      description: >-
+        VoidTab voids a trip's tab (saga compensation for OpenTab). Idempotent:
+        a
+         missing or already-void tab is a no-op success.
+      operationId: billing.v1.BillingService.VoidTab
+      parameters:
+        - name: Connect-Protocol-Version
+          in: header
+          required: true
+          schema:
+            $ref: "#/components/schemas/connect-protocol-version"
+        - name: Connect-Timeout-Ms
+          in: header
+          schema:
+            $ref: "#/components/schemas/connect-timeout-header"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/billing.v1.VoidTabRequest"
+        required: true
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/billing.v1.VoidTabResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/connect.error"
+      security: []
+      x-connectum-public: true
+components:
+  schemas:
+    billing.v1.AddChargeRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+        amountCents:
+          type:
+            - integer
+            - string
+          title: amount_cents
+          format: int64
+          description: >-
+            Charge amount in minor units (e.g. cents). The saga derives it from
+            the
+             trip duration.
+      title: AddChargeRequest
+      additionalProperties: false
+    billing.v1.AddChargeResponse:
+      type: object
+      properties:
+        chargeId:
+          type: string
+          title: charge_id
+      title: AddChargeResponse
+      additionalProperties: false
+    billing.v1.OpenTabRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+      title: OpenTabRequest
+      additionalProperties: false
+    billing.v1.OpenTabResponse:
+      type: object
+      properties:
+        tab:
+          title: tab
+          $ref: "#/components/schemas/billing.v1.Tab"
+      title: OpenTabResponse
+      additionalProperties: false
+    billing.v1.RefundChargeRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+        chargeId:
+          type: string
+          title: charge_id
+      title: RefundChargeRequest
+      additionalProperties: false
+    billing.v1.RefundChargeResponse:
+      type: object
+      properties:
+        refunded:
+          type: boolean
+          title: refunded
+          description: >-
+            True if the charge existed and is now refunded (or was already
+            refunded);
+             false if the charge id is unknown. Either way the call succeeds.
+      title: RefundChargeResponse
+      additionalProperties: false
+    billing.v1.SettleRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+      title: SettleRequest
+      additionalProperties: false
+    billing.v1.SettleResponse:
+      type: object
+      properties:
+        tab:
+          title: tab
+          $ref: "#/components/schemas/billing.v1.Tab"
+      title: SettleResponse
+      additionalProperties: false
+    billing.v1.Tab:
+      type: object
+      properties:
+        id:
+          type: string
+          title: id
+        open:
+          type: boolean
+          title: open
+          description: True while the tab is open; false once it is settled or voided.
+      title: Tab
+      additionalProperties: false
+    billing.v1.VoidTabRequest:
+      type: object
+      properties:
+        tripId:
+          type: string
+          title: trip_id
+      title: VoidTabRequest
+      additionalProperties: false
+    billing.v1.VoidTabResponse:
+      type: object
+      properties:
+        voided:
+          type: boolean
+          title: voided
+          description: >-
+            True if a tab existed and is now void (or was already void); false
+            if there
+             was never a tab for the trip. Either way the call succeeds (idempotent).
+      title: VoidTabResponse
+      additionalProperties: false
+    connect-protocol-version:
+      type: number
+      title: Connect-Protocol-Version
+      enum:
+        - 1
+      description: Define the version of the Connect protocol
+      const: 1
+    connect-timeout-header:
+      type: number
+      title: Connect-Timeout-Ms
+      description: Define the timeout, in ms
+    connect.error:
+      type: object
+      properties:
+        code:
+          type: string
+          examples:
+            - not_found
+          enum:
+            - canceled
+            - unknown
+            - invalid_argument
+            - deadline_exceeded
+            - not_found
+            - already_exists
+            - permission_denied
+            - resource_exhausted
+            - failed_precondition
+            - aborted
+            - out_of_range
+            - unimplemented
+            - internal
+            - unavailable
+            - data_loss
+            - unauthenticated
+          description: The status code, which should be an enum value of
+            [google.rpc.Code][google.rpc.Code].
+        message:
+          type: string
+          description: A developer-facing error message, which should be in English. Any
+            user-facing error message should be localized and sent in the
+            [google.rpc.Status.details][google.rpc.Status.details] field, or
+            localized by the client.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/connect.error_details.Any"
+          description: A list of messages that carry the error details. There is no limit
+            on the number of messages.
+      title: Connect Error
+      additionalProperties: true
+      description: "Error type returned by Connect:
+        https://connectrpc.com/docs/go/errors/#http-representation"
+    connect.error_details.Any:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "A URL that acts as a globally unique identifier for the type of
+            the serialized message. For example:
+            `type.googleapis.com/google.rpc.ErrorInfo`. This is used to
+            determine the schema of the data in the `value` field and is the
+            discriminator for the `debug` field."
+        value:
+          type: string
+          format: binary
+          description: The Protobuf message, serialized as bytes and base64-encoded. The
+            specific message type is identified by the `type` field.
+        debug:
+          oneOf:
+            - type: object
+              title: Any
+              additionalProperties: true
+              description: Detailed error information.
+          discriminator:
+            propertyName: type
+          title: Debug
+          description: Deserialized error detail payload. The 'type' field indicates the
+            schema. This field is for easier debugging and should not be relied
+            upon for application logic.
+      additionalProperties: true
+      description: Contains an arbitrary serialized message along with a @type that
+        describes the type of the serialized message, with an additional debug
+        field for ConnectRPC error details.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Connectum JWT auth (createJwtAuthInterceptor / proto authz).
+        Required for every non-public method.
+security: []
+tags:
+  - name: billing.v1.BillingService
+    description: >-
+      BillingService keeps a trip's billing tab and charges (a leaf service).
+
+       Like FleetService, it is INTERNAL: it is reached only by the trip handler's
+       ctx.call (OpenTab pre-Phase-2) and, in Phase 2, by the Temporal worker's
+       activities (OpenTab / AddCharge / Settle and their compensations VoidTab /
+       RefundCharge). It is marked `service_auth { public: true }`, so the
+       gateway-facing JWT auth and proto authz interceptors skip every RPC: the
+       worker's ConnectRPC clients carry no Authorization header, exactly like the
+       in-process ctx.call did. The trust boundary is the mesh (Istio mTLS +
+       AuthorizationPolicy; see istio/).
+
+       Persistence stays in-memory in Phase 2 — the DURABLE billing state lives in
+       the Temporal workflow history. The in-memory ledger only needs to record
+       enough (tab state, charges keyed by id) for the compensations to be
+       idempotent: VoidTab on an already-void tab and RefundCharge on an
+       already-refunded charge are no-op successes.

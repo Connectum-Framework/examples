@@ -11,6 +11,15 @@ import "google/protobuf/empty.proto";
 service PayrollService {
   // GetBalance returns the remaining leave-days balance for an employee.
   rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse) {}
+
+  // SetupPayroll enrolls a new hire with an initial leave-days balance (the
+  // balance OnLeaveApproved later decrements) — the onboarding saga's second
+  // forward step. Idempotent: re-running keeps the existing enrollment.
+  rpc SetupPayroll(SetupPayrollRequest) returns (SetupPayrollResponse) {}
+
+  // TeardownPayroll removes an employee's payroll enrollment — the SetupPayroll
+  // compensation. Idempotent; a no-op for an unknown employee.
+  rpc TeardownPayroll(TeardownPayrollRequest) returns (google.protobuf.Empty) {}
 }
 
 message GetBalanceRequest {
@@ -19,6 +28,20 @@ message GetBalanceRequest {
 
 message GetBalanceResponse {
   Balance balance = 1;
+}
+
+message SetupPayrollRequest {
+  string employee_id = 1;
+  // Initial leave-days balance to enroll the new hire with.
+  int32 initial_days = 2;
+}
+
+message SetupPayrollResponse {
+  Balance balance = 1;
+}
+
+message TeardownPayrollRequest {
+  string employee_id = 1;
 }
 
 message Balance {
