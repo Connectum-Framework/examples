@@ -107,7 +107,8 @@ See `src/topology.ts` (env → `enabledServices` + `perServiceEnvResolver`).
 
 This example uses the 1.0.0 service-catalog API (`defineService`, `ctx.call`).
 Install with a plain `pnpm install` — the `@connectum/*` packages are published
-on npm at 1.0.0 (this example's `package.json` pins `^1.0.0`).
+on npm (this example's `package.json` pins `^1.0.0`, except the events stack at
+`^1.1.0` for the Phase 3 broadcast API).
 
 ```bash
 pnpm install
@@ -603,12 +604,12 @@ reactor logs each print their independent reaction to the one `trips.completed`
 event. Stop one reactor and replay — the others still receive (broadcast, not
 steal).
 
-> **Version note.** This phase uses the `publishes` option on `createEventBus`,
-> added after `@connectum/events@1.0.0`. Until events `>= 1.1.0` is published,
-> the example typechecks and runs against the **local** packages (the repo's
-> local-package test flow), not the published `1.0.0` — against `1.0.0` the topic
-> would fall back to the message `typeName`. Run with the local packages while
-> the option is unreleased.
+> **Version note.** This phase uses `createBroadcastSubscribers` and the
+> `publishes` option on `createEventBus`, both added in `@connectum/events@1.1.0`.
+> The example pins the events stack at `^1.1.0` (the project's pnpm setup
+> resolves a range to its **lowest** version, so a `^1.0.0` pin would install
+> `1.0.0` and this phase would break at runtime). A plain `pnpm install` works —
+> `1.1.0+` is published on npm.
 
 ## Build the image
 
