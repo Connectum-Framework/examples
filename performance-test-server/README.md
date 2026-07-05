@@ -131,7 +131,7 @@ k6 writes a machine-readable JSON summary to `k6/results/otel-export-overhead.js
 | p95 latency | ~2–5 ms | ~3–8 ms | +1–3 ms | 1.3×–2× |
 | p99 latency | ~5–10 ms | ~8–20 ms | +3–10 ms | 1.5×–2.5× |
 
-A **relative overhead >1.5×** on p95 — or any sudden jump from a previous run — is a signal to investigate the `@opentelemetry/otlp-transformer` version. See Connectum recommendations R1.2 and upstream issues [#6221](https://github.com/open-telemetry/opentelemetry-js/issues/6221), PR [#6225](https://github.com/open-telemetry/opentelemetry-js/pull/6225), PR [#6390](https://github.com/open-telemetry/opentelemetry-js/pull/6390), issue [#6570](https://github.com/open-telemetry/opentelemetry-js/issues/6570).
+A **relative overhead >1.5×** on p95 — or any sudden jump from a previous run — is a signal to investigate the `@opentelemetry/otlp-transformer` version, which has a history of serialization-performance regressions: see upstream issues [#6221](https://github.com/open-telemetry/opentelemetry-js/issues/6221), PR [#6225](https://github.com/open-telemetry/opentelemetry-js/pull/6225), PR [#6390](https://github.com/open-telemetry/opentelemetry-js/pull/6390), issue [#6570](https://github.com/open-telemetry/opentelemetry-js/issues/6570).
 
 ### Cleanup
 

@@ -5,7 +5,7 @@
  *          @connectum/otel export path (BatchSpanProcessor + otlp-transformer
  *          + OTLP/gRPC) under a production-like RPC workload.
  *
- * Why this exists (R1.3, connectum-recommendations.md):
+ * Why this exists:
  *   The existing interceptor-overhead scenario runs the OTel interceptor with
  *   the provider UNSET — it emits no-op spans/metrics. That's correct for
  *   measuring interceptor *wiring* cost, but it tells us nothing about the
@@ -214,7 +214,7 @@ export function teardown(_data) {
     console.log("   - Compute overhead = with_otel_export(p95) - baseline_no_otel(p95)");
     console.log("   - Compute relative = with_otel_export / baseline_no_otel");
     console.log("   - If relative > 1.5x, investigate otlp-transformer version");
-    console.log("     (Connectum recommendations R1.2; see upstream #6221, #6390, #6570)\n");
+    console.log("     (see upstream opentelemetry-js #6221, #6390, #6570)\n");
     console.log("   JSON summary (when running under docker compose):");
     console.log("     examples/performance-test-server/k6/results/otel-export-overhead.json\n");
 }
