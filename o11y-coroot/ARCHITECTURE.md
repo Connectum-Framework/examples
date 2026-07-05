@@ -85,7 +85,7 @@ kernel tracing is not available: stat /sys/kernel/debug/tracing: no such file or
 ```
 
 **Advantages**:
-- Compatible with existing `production-ready` configuration (microservices already export to `otel-collector:4318`)
+- The services' default OTLP endpoint (`otel-collector:4318`) works unchanged
 - OTel Collector adds batch processing, resource attributes enrichment
 - Single routing point — easy to add additional exporters
 - Microservices DO NOT need to change `OTEL_EXPORTER_OTLP_ENDPOINT`
@@ -128,9 +128,9 @@ logs:     [otlp] → [batch] → [otlphttp/coroot]
 |-----------|-------|-------------|-----------|
 | Coroot | `ghcr.io/coroot/coroot` | latest | Community Edition, frequently updated |
 | ClickHouse | `clickhouse/clickhouse-server` | `24.3` | LTS, verified in official Coroot docker-compose |
-| OTel Collector | `otel/opentelemetry-collector-contrib` | `0.115.0` | Matches production-ready for consistency |
-| order-service | build context | local | From `production-ready/services/order-service` |
-| inventory-service | build context | local | From `production-ready/services/inventory-service` |
+| OTel Collector | `otel/opentelemetry-collector-contrib` | `0.120.0` | Current contrib release at the time of writing |
+| order-service | build context | local | Built from the local `service/` directory |
+| inventory-service | build context | local | Built from the local `service/` directory |
 
 ---
 
@@ -153,10 +153,9 @@ logs:     [otlp] → [batch] → [otlphttp/coroot]
 | Port | o11y-coroot | Conflict with | Resolution |
 |------|-------------|---------------|------------|
 | **8080** | Coroot UI | `with-events-redpanda` (Redpanda Console) | No conflict — separate docker networks, examples run independently |
-| **5000-5001** | Microservices | `production-ready`, `runn` | No conflict — separate docker networks |
-| **4317-4318** | OTel Collector | `production-ready`, `runn` | No conflict — separate docker networks |
+| **5000-5001** | Microservices | — | Unique among the Docker-based examples |
+| **4317-4318** | OTel Collector | — | Unique among the Docker-based examples |
 | **9000** | ClickHouse | — | Unique among examples |
-| **3000** | — | `production-ready` (Grafana) | NOT used in o11y-coroot |
 
 **Conclusion**: No conflicts. All examples use isolated docker networks and are not run simultaneously. If simultaneous execution is needed, port mapping can be shifted (e.g., `8081:8080` for Coroot).
 
@@ -234,7 +233,7 @@ Host ports exposed:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Metrics backend | ClickHouse (not Prometheus) | Coroot prioritizes CH; single backend for all telemetry |
-| OTLP routing | Via OTel Collector | Compatible with production-ready, batch processing, extensibility |
+| OTLP routing | Via OTel Collector | Keeps the services' default OTLP endpoint; batch processing, extensibility |
 | Node agent | Excluded | Docker Desktop incompatibility, OTLP is sufficient |
 | Cluster agent | Excluded | Kubernetes-only |
 | Coroot UI port | 8080 | Coroot default, no conflicts |
@@ -249,15 +248,16 @@ Host ports exposed:
 examples/o11y-coroot/
 ├── docker-compose.yml              # All services: Coroot + CH + OTel + microservices
 ├── otel-collector-config.yaml      # OTel Collector → Coroot routing
-├── clickhouse/
-│   └── config.xml                  # ClickHouse optimizations (log disabling)
-├── services/
-│   ├── order-service/              # Symlink or copy from production-ready
-│   └── inventory-service/          # Symlink or copy from production-ready
-└── README.md                       # Documentation (technical-writer)
+├── clickhouse-users.xml            # ClickHouse user configuration
+├── prometheus.yml                  # Prometheus scrape configuration
+├── service/                        # Shared source for both microservices
+│   ├── Dockerfile                  # Built twice: order-service and inventory-service
+│   ├── proto/ src/                 # Contracts and implementation
+│   └── buf.gen.yaml buf.yaml       # Proto codegen
+├── scripts/
+│   └── generate-traffic.sh         # Demo traffic generator
+└── README.md                       # Documentation
 ```
-
-**Alternative to symlinks**: use `build.context: ../production-ready/services/order-service` to reference existing Dockerfiles directly without duplication.
 
 ---
 
