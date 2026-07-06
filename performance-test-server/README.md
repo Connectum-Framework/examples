@@ -113,6 +113,11 @@ it too and run the interceptor benchmark concurrently, stealing CPU from and
 contaminating the OTLP-export measurement. Listing only the services this
 scenario needs keeps the run isolated.
 
+The `OTEL_EXPORT_ENABLED=1` env and the `--profile otel-export` flag are a
+**pair** — the env makes the server bind port 8085 with a real OTLP provider,
+the profile starts the collector and the k6 runner. Setting only one of them
+fails fast: the k6 setup health check aborts the run if 8085 is not serving.
+
 What this measures that the `k6-interceptor-overhead` scenario does *not*:
 
 - Real `BatchSpanProcessor` + `@opentelemetry/otlp-transformer` serialization cost per exported span

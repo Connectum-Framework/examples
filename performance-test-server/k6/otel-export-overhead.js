@@ -183,21 +183,18 @@ export function setup() {
 
     console.log("\n  Health checks:\n");
     for (const { port, name } of ports) {
-        const healthResponse = http.post(
-            `${PROTOCOL}://${BASE_HOST}:${port}/greeter.v1.GreeterService/SayHello`,
-            JSON.stringify({ name: "healthcheck" }),
-            {
-                headers: {
-                    "Content-Type": "application/json",
-                    "Connect-Protocol-Version": "1",
-                },
+        const healthResponse = http.post(`${PROTOCOL}://${BASE_HOST}:${port}${SERVICE_PATH}`, JSON.stringify({ name: "healthcheck" }), {
+            headers: {
+                "Content-Type": "application/json",
+                "Connect-Protocol-Version": "1",
             },
-        );
+        });
         if (healthResponse.status === 200) {
             console.log(`   OK   ${name.padEnd(15)} - :${port}`);
         } else {
             console.error(`   FAIL ${name.padEnd(15)} - :${port} (status: ${healthResponse.status})`);
-            throw new Error(`Health check failed for ${name} on port ${port}. ` + "Did you start the server with OTEL_EXPORT_ENABLED=1?");
+            const hint = port === OTEL_EXPORT_PORT ? " Did you start the server with OTEL_EXPORT_ENABLED=1?" : "";
+            throw new Error(`Health check failed for ${name} on port ${port}.${hint}`);
         }
     }
 
@@ -216,5 +213,5 @@ export function teardown(_data) {
     console.log("   - If relative > 1.5x, investigate otlp-transformer version");
     console.log("     (see upstream opentelemetry-js #6221, #6390, #6570)\n");
     console.log("   JSON summary (when running under docker compose):");
-    console.log("     examples/performance-test-server/k6/results/otel-export-overhead.json\n");
+    console.log("     k6/results/otel-export-overhead.json (relative to performance-test-server)\n");
 }
