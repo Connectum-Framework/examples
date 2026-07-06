@@ -71,7 +71,8 @@ ENV NODE_ENV=production
 ENV TLS_DIR=/app/certs
 
 # Ports: 8080 (full chain), 8081 (baseline), 8082 (validation),
-#        8083 (logger), 8084 (otel)
-EXPOSE 8080 8081 8082 8083 8084
+#        8083 (logger), 8084 (otel no-op), 8085 (otel real OTLP export —
+#        only bound when OTEL_EXPORT_ENABLED=1)
+EXPOSE 8080 8081 8082 8083 8084 8085
 
 CMD ["node", "src/index.ts"]

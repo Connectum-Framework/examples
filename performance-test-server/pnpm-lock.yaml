@@ -15,27 +15,27 @@ importers:
   .:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: ^2.11.0
-        version: 2.12.0
+        specifier: ^2.12.1
+        version: 2.12.1
       '@connectrpc/connect':
         specifier: ^2.1.1
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
+        version: 2.1.1(@bufbuild/protobuf@2.12.1)
       '@connectum/core':
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^1.2.0
+        version: 1.2.0
       '@connectum/interceptors':
-        specifier: ^1.0.0
-        version: 1.0.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))
+        specifier: ^1.2.0
+        version: 1.2.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1))
       '@connectum/otel':
-        specifier: ^1.0.0
-        version: 1.0.0(@bufbuild/protobuf@2.12.0)
+        specifier: ^1.2.0
+        version: 1.2.0(@bufbuild/protobuf@2.12.1)
     devDependencies:
       '@bufbuild/buf':
         specifier: ^1.65.0
         version: 1.69.0
       '@bufbuild/protoc-gen-es':
-        specifier: ^2.11.0
-        version: 2.12.0(@bufbuild/protobuf@2.12.0)
+        specifier: ^2.12.1
+        version: 2.12.1(@bufbuild/protobuf@2.12.1)
       '@types/node':
         specifier: ^25.2.0
         version: 25.6.0
@@ -102,21 +102,21 @@ packages:
     peerDependencies:
       '@bufbuild/protobuf': ^2.6.2
 
-  '@bufbuild/protobuf@2.12.0':
-    resolution: {integrity: sha512-B/XlCaFIP8LOwzo+bz5uFzATYokcwCKQcghqnlfwSmM5eX/qTkvDBnDPs+gXtX/RyjxJ4DRikECcPJbyALA8FA==}
+  '@bufbuild/protobuf@2.12.1':
+    resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
 
-  '@bufbuild/protoc-gen-es@2.12.0':
-    resolution: {integrity: sha512-d9htF6jEkSwPbp9d/vSmZOBF7eeG18AvTMKmVg4I23afnrQOxL2w3WOXa9TaufMCyu24QakEUb4vux8apI5e7A==}
+  '@bufbuild/protoc-gen-es@2.12.1':
+    resolution: {integrity: sha512-SWa7XvRYRouMo+vBQmpNFZ+ZEqQ8AC0LpL4QWAo1gvstLhFh/Y7Nf/a+MK7ZxDq5LZSThwfk974L1sFxO3OaGw==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
     peerDependenciesMeta:
       '@bufbuild/protobuf':
         optional: true
 
-  '@bufbuild/protoplugin@2.12.0':
-    resolution: {integrity: sha512-ORlDITp8AFUXzIhLRoMCG+ud+D3MPKWb5HQXBoskMMnjeyEjE1H1qLonVNPyOr8lkx3xSfYUo8a0dvOZJVAzow==}
+  '@bufbuild/protoplugin@2.12.1':
+    resolution: {integrity: sha512-PY58KxQVAD1BnnKtStOctsMoegEVGfBnY5AOqVQOIu711nA13oYtTqJM8df5lUQg2J1DR3XxUXptE+fWX5oLdA==}
 
   '@bufbuild/protovalidate@1.2.0':
     resolution: {integrity: sha512-tD08DwGrHIV88khLz1Kdz9DYUwEo1TsoepaIg7/B/zd//AymaTx67kvCS1jlkcG/+vgQaSOl6f0HCE3sL8vI7w==}
@@ -147,16 +147,16 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/core@1.0.0':
-    resolution: {integrity: sha512-6xlM4EngNAbM6RJEdVBvDOXyWeQGMPgVMWoprrh9NOlGDddqxd49qYhagyM7qKF5nGrU6Y6mN+INS+RXD4GXeg==}
+  '@connectum/core@1.2.0':
+    resolution: {integrity: sha512-3T8MJP8oeWO+cNgMUEImsMqcMR2SgLgTpbc1aAd6K/uzsFtMQQDIjuAnp0OV2uIVlbvkQHwMhO2pPYGyczHTLg==}
     engines: {node: '>=22.13.0'}
 
-  '@connectum/interceptors@1.0.0':
-    resolution: {integrity: sha512-sgKO+Kgi4QuIOIFdANloj9xI5Uzmdl7KhallUqxsS6z+GqPe87B5gvzWROqK/YWe7oXpos0N76InHYow/7frsg==}
+  '@connectum/interceptors@1.2.0':
+    resolution: {integrity: sha512-4pQ4/sL87xEFROWKXHJVA2HGQubtguYXE2ye1pfwZErQ7Rj0H6s8UebS31nsGnTzXFoNJKzoI2VI+Hh13yK3ng==}
     engines: {node: '>=22.13.0'}
 
-  '@connectum/otel@1.0.0':
-    resolution: {integrity: sha512-qH57KDpt7Vh9v0mIUKCkXB5xNQqdH5iU1MIdloyuyXrYXzUrRuBOOFIm7K9ynQftmkiaAf4Dy1X2QGACEQk2SA==}
+  '@connectum/otel@1.2.0':
+    resolution: {integrity: sha512-SkrRgOqRORiSvXL9u3Z6X0MaAddd310Zj8wG0TvA5QzXWGRWEepW1Ywvby2Ap+DNdSrs9iRFk4Aj9xb+jYda+g==}
     engines: {node: '>=22.13.0'}
 
   '@grpc/grpc-js@1.14.3':
@@ -274,10 +274,6 @@ packages:
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
-
-  '@opentelemetry/semantic-conventions@1.40.0':
-    resolution: {integrity: sha512-cifvXDhcqMwwTlTK04GBNeIe7yyo28Mfby85QXFe1Yk8nmi36Ab/5UQwptOx84SsoGNRg+EVSjwzfSZMy6pmlw==}
-    engines: {node: '>=14'}
 
   '@opentelemetry/semantic-conventions@1.41.1':
     resolution: {integrity: sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA==}
@@ -462,78 +458,78 @@ snapshots:
       '@bufbuild/buf-win32-arm64': 1.69.0
       '@bufbuild/buf-win32-x64': 1.69.0
 
-  '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.12.0)':
+  '@bufbuild/cel-spec@0.4.0(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
 
-  '@bufbuild/cel@0.4.0(@bufbuild/protobuf@2.12.0)':
+  '@bufbuild/cel@0.4.0(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/cel-spec': 0.4.0(@bufbuild/protobuf@2.12.0)
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/cel-spec': 0.4.0(@bufbuild/protobuf@2.12.1)
+      '@bufbuild/protobuf': 2.12.1
 
-  '@bufbuild/protobuf@2.12.0': {}
+  '@bufbuild/protobuf@2.12.1': {}
 
-  '@bufbuild/protoc-gen-es@2.12.0(@bufbuild/protobuf@2.12.0)':
+  '@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/protoplugin': 2.12.0
+      '@bufbuild/protoplugin': 2.12.1
     optionalDependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
     transitivePeerDependencies:
       - supports-color
 
-  '@bufbuild/protoplugin@2.12.0':
+  '@bufbuild/protoplugin@2.12.1':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
       '@typescript/vfs': 1.6.4(typescript@5.4.5)
       typescript: 5.4.5
     transitivePeerDependencies:
       - supports-color
 
-  '@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0)':
+  '@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/cel': 0.4.0(@bufbuild/protobuf@2.12.0)
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/cel': 0.4.0(@bufbuild/protobuf@2.12.1)
+      '@bufbuild/protobuf': 2.12.1
 
-  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))':
+  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
 
-  '@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)':
+  '@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
 
-  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0)':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
+      '@bufbuild/protobuf': 2.12.1
 
-  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))':
+  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.12.1)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protovalidate': 1.2.0(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
 
-  '@connectum/core@1.0.0':
+  '@connectum/core@1.2.0':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       env-var: 7.5.0
       zod: 4.4.3
 
-  '@connectum/interceptors@1.0.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))':
+  '@connectum/interceptors@1.2.0(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.12.0)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.0))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.0))
-      '@connectum/core': 1.0.0
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.12.1)(@bufbuild/protovalidate@1.2.0(@bufbuild/protobuf@2.12.1))(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@connectum/core': 1.2.0
       cockatiel: 4.0.0
     transitivePeerDependencies:
       - '@bufbuild/protovalidate'
 
-  '@connectum/otel@1.0.0(@bufbuild/protobuf@2.12.0)':
+  '@connectum/otel@1.2.0(@bufbuild/protobuf@2.12.1)':
     dependencies:
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.0)
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.219.0
       '@opentelemetry/exporter-logs-otlp-grpc': 0.219.0(@opentelemetry/api@1.9.1)
@@ -578,7 +574,7 @@ snapshots:
   '@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/semantic-conventions': 1.40.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.219.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -668,7 +664,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.8.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.40.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/sdk-logs@0.219.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -676,7 +672,7 @@ snapshots:
       '@opentelemetry/api-logs': 0.219.0
       '@opentelemetry/core': 2.8.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.8.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.40.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/sdk-metrics@2.8.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -689,7 +685,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.8.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.8.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.40.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/sdk-trace-node@2.8.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -697,8 +693,6 @@ snapshots:
       '@opentelemetry/context-async-hooks': 2.8.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/core': 2.8.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.8.0(@opentelemetry/api@1.9.1)
-
-  '@opentelemetry/semantic-conventions@1.40.0': {}
 
   '@opentelemetry/semantic-conventions@1.41.1': {}
 
