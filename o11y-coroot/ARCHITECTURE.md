@@ -152,12 +152,12 @@ logs:     [otlp] → [batch] → [otlphttp/coroot]
 
 | Port | o11y-coroot | Conflict with | Resolution |
 |------|-------------|---------------|------------|
-| **8080** | Coroot UI | `with-events-redpanda` (Redpanda Console) | No conflict — separate docker networks, examples run independently |
+| **8080** | Coroot UI | `with-events-redpanda` (Redpanda Console) | Both map **host** port 8080, so the stacks clash if started together — run one example at a time, or remap one side (e.g., `8081:8080`) |
 | **5000-5001** | Microservices | — | Unique among the Docker-based examples |
 | **4317-4318** | OTel Collector | — | Unique among the Docker-based examples |
 | **9000** | ClickHouse | — | Unique among examples |
 
-**Conclusion**: No conflicts. All examples use isolated docker networks and are not run simultaneously. If simultaneous execution is needed, port mapping can be shifted (e.g., `8081:8080` for Coroot).
+**Conclusion**: No conflicts when examples are run one at a time (the intended mode). Isolated docker networks separate container traffic, but they do NOT prevent **host** port collisions — for simultaneous runs, shift the clashing mapping (e.g., `8081:8080` for Coroot).
 
 ---
 
