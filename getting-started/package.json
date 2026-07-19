@@ -9,16 +9,16 @@
     "#*": "./src/*"
   },
   "scripts": {
-    "start": "node src/index.ts",
+    "start": "buf generate && node src/index.ts",
     "dev": "node --watch src/index.ts",
-    "start:bun": "bun src/index.ts",
-    "start:tsx": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
+    "start:bun": "buf generate && bun src/index.ts",
+    "start:tsx": "buf generate && tsx src/index.ts",
+    "typecheck": "buf generate && tsc --noEmit",
     "buf:generate": "buf generate",
     "buf:lint": "buf lint",
     "build:proto": "pnpm run buf:generate",
-    "test": "node --test tests/**/*.test.ts",
-    "test:bun": "bun test tests/"
+    "test": "buf generate && node --test tests/**/*.test.ts",
+    "test:bun": "buf generate && bun test tests/"
   },
   "keywords": [
     "connectrpc",
