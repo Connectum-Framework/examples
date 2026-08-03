@@ -17,7 +17,12 @@ RUN pnpm install --prod
 
 # ── runtime: copy deps + source + generated proto code ──────────────────────
 FROM node:25-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+# curl, not wget: the default posture is plaintext h2c (`allowHTTP1: false`),
+# and wget speaks HTTP/1.1 only. Against an h2c listener `wget --spider` gets an
+# empty status line yet still exits 0 -- it would report a dead or NOT_SERVING
+# service as healthy. curl reads the real response and `-f` fails on the 503
+# that /healthz returns for NOT_SERVING.
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
@@ -26,8 +31,12 @@ COPY gen/ ./gen/
 ENV NODE_ENV=production
 # Default role: monolith. Kubernetes overrides SERVICES/*_ADDR per Deployment.
 EXPOSE 5000
+# Two probes because this example serves either posture: h2c by default, and
+# HTTP/1.1 when ALLOW_HTTP1=true (the `ory` compose profile, where Oathkeeper
+# proxies plain HTTP). The first probe answers on h2c, the second on HTTP/1.1.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-    CMD wget -q --spider http://localhost:${PORT:-5000}/healthz || exit 1
+    CMD curl -fsS --http2-prior-knowledge http://localhost:${PORT:-5000}/healthz \
+        || curl -fsS http://localhost:${PORT:-5000}/healthz || exit 1
 # Run as the built-in non-root `node` user.
 USER node
 CMD ["node", "src/index.ts"]
