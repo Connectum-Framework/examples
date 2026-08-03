@@ -47,6 +47,27 @@ pnpm start:bun      # Bun
 pnpm start:tsx      # tsx
 ```
 
+## In a container
+
+Two Dockerfiles, one per runtime. Both generate the proto code during the build (`gen/`
+is not committed and `buf` is a devDependency), then ship production dependencies only:
+
+```bash
+docker build -t quickstart .                      # Node.js
+docker build -f Dockerfile.bun -t quickstart .    # Bun
+
+docker run --rm -p 5000:5000 quickstart
+curl -fsS --http2-prior-knowledge http://localhost:5000/healthz
+```
+
+The probe needs `--http2-prior-knowledge` because the service is plaintext h2c
+(`allowHTTP1: false`); `wget` cannot see it at all and would report a dead service as
+healthy.
+
+`scripts/container-e2e.sh` runs the full scenario against a built image — healthcheck,
+`/healthz`, reflection, a real RPC, gRPC health and SIGTERM as PID 1 — and CI runs it for
+both runtimes.
+
 ## Next
 
 - [hris](../hris/) — the same codebase running as a monolith **or** as
