@@ -1,0 +1,10 @@
+node_modules
+gen
+tests
+*.md
+.gitignore
+.pnpmfile.cjs
+pnpm-lock.yaml
+pnpm-workspace.yaml
+Dockerfile*
+.dockerignore

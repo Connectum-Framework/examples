@@ -1,0 +1,66 @@
+name: Container E2E
+
+# Builds the quickstart image and runs the full scenario against it over the wire:
+# HEALTHCHECK, /healthz, gRPC reflection, a real unary RPC, gRPC health, and SIGTERM as
+# PID 1. Nothing else in either repository covers the container -- the existing e2e tests
+# keep client and server in one process, so the production dependency closure (with
+# devDependencies stripped), the healthcheck and signal handling are all untested there.
+#
+# `connectum init` clones getting-started as its base and passes every file through
+# except `pnpm-workspace.yaml` and `.pnpmfile.cjs`, so these Dockerfiles are also what a
+# scaffolded project gets -- testing them here tests what the CLI hands to users.
+#
+# NOT covered, named rather than silently dropped: the tsx execution model (tsx is a
+# devDependency and there is no tsx Dockerfile), the other examples' images, and any
+# broker-backed flow.
+
+on:
+  pull_request:
+    paths:
+      - "getting-started/**"
+      - "scripts/container-e2e.sh"
+      - ".github/workflows/container-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "getting-started/**"
+      - "scripts/container-e2e.sh"
+  schedule:
+    # The images install @connectum/* from npm at build time, so a published regression
+    # can break this without anything in the repository changing.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-e2e:
+    name: "e2e ${{ matrix.runtime.name }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - { name: node, dockerfile: Dockerfile }
+          - { name: bun, dockerfile: Dockerfile.bun }
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up buf (for `buf curl`)
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1
+        with:
+          setup_only: true
+
+      - name: Build the image
+        working-directory: getting-started
+        run: docker build -f ${{ matrix.runtime.dockerfile }} -t quickstart:${{ matrix.runtime.name }} .
+
+      - name: Run the wire-level scenario
+        run: ./scripts/container-e2e.sh quickstart:${{ matrix.runtime.name }} ${{ matrix.runtime.name }}
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker ps -a --filter "name=e2e-" --format '{{.Names}}' | xargs -r -n1 docker logs --tail 100
