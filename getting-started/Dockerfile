@@ -12,6 +12,11 @@
 FROM node:25-slim AS build
 WORKDIR /app
 COPY package.json ./
+# No lockfile is committed for this example (matching car-sharing and hris): deps
+# resolve from the caret (^) ranges in package.json, so the image tracks the latest
+# compatible @connectum/* rather than being bit-reproducible. That is deliberate for an
+# example -- a production service should commit a lockfile and install with
+# `--frozen-lockfile` (the secondary examples model this).
 RUN npm install --no-audit --no-fund
 COPY buf.yaml buf.gen.yaml ./
 COPY proto/ ./proto/
