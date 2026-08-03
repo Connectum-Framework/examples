@@ -189,7 +189,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      test: ["CMD", "curl", "-fsS", "--http2-prior-knowledge", "http://localhost:5001/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -223,7 +223,7 @@ services:
       temporal:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      test: ["CMD", "curl", "-fsS", "--http2-prior-knowledge", "http://localhost:5002/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -246,7 +246,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5003/healthz"]
+      test: ["CMD", "curl", "-fsS", "--http2-prior-knowledge", "http://localhost:5003/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -485,7 +485,7 @@ services:
       fleet-ory:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -508,7 +508,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/healthz"]
+      test: ["CMD", "curl", "-fsS", "--http2-prior-knowledge", "http://localhost:5000/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
