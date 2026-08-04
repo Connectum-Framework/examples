@@ -10,20 +10,30 @@ name: Container E2E
 # except `pnpm-workspace.yaml` and `.pnpmfile.cjs`, so these Dockerfiles are also what a
 # scaffolded project gets -- testing them here tests what the CLI hands to users.
 #
+# The second job covers the two examples whose probes depend on curl being installed:
+# hris and car-sharing serve plaintext h2c, where `wget` exits 0 for any URL and would
+# report a dead service as healthy. They need a database to run, so they are built and
+# inspected rather than started -- enough to catch a Dockerfile that switched probe tool
+# without installing it.
+#
 # NOT covered, named rather than silently dropped: the tsx execution model (tsx is a
-# devDependency and there is no tsx Dockerfile), the other examples' images, and any
-# broker-backed flow.
+# devDependency and there is no tsx Dockerfile), the `with-events-*` images (their probes
+# are plain `curl -f`, correct for their HTTP/1.1 default), and any broker-backed flow.
 
 on:
   pull_request:
     paths:
       - "getting-started/**"
+      - "hris/Dockerfile"
+      - "car-sharing/Dockerfile"
       - "scripts/container-e2e.sh"
       - ".github/workflows/container-e2e.yml"
   push:
     branches: [main]
     paths:
       - "getting-started/**"
+      - "hris/Dockerfile"
+      - "car-sharing/Dockerfile"
       - "scripts/container-e2e.sh"
   schedule:
     # The images install @connectum/* from npm at build time, so a published regression
@@ -64,3 +74,43 @@ jobs:
       - name: Container logs on failure
         if: failure()
         run: docker ps -a --filter "name=e2e-" --format '{{.Names}}' | xargs -r -n1 docker logs --tail 100
+
+  image-build:
+    name: "image ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [hris, car-sharing]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "25.2.0"
+
+      - name: Generate the proto code
+        working-directory: ${{ matrix.example }}
+        # `gen/` is gitignored, and the Dockerfile copies it in.
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run buf:generate
+
+      - name: Build the image
+        run: docker build -t ${{ matrix.example }}:ci ${{ matrix.example }}
+
+      - name: The healthcheck probe must exist in the image
+        # A probe that is not installed fails as "command not found", which Docker reports
+        # the same way as a sick service -- so assert the binary rather than infer it.
+        run: |
+          docker run --rm --entrypoint curl ${{ matrix.example }}:ci --version
+          probe=$(docker inspect -f '{{json .Config.Healthcheck.Test}}' ${{ matrix.example }}:ci)
+          echo "HEALTHCHECK: $probe"
+          case "$probe" in
+            *"--http2-prior-knowledge"*) echo "h2c-aware probe present" ;;
+            *) echo "::error::HEALTHCHECK does not speak HTTP/2; it cannot see an h2c server" >&2; exit 1 ;;
+          esac
