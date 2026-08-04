@@ -87,18 +87,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
-
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "25.2.0"
 
       - name: Generate the proto code
         working-directory: ${{ matrix.example }}
-        # `gen/` is gitignored, and the Dockerfile copies it in.
+        # `gen/` is gitignored and the Dockerfile copies it in, so it has to exist
+        # before the build. npm rather than pnpm: no example declares `packageManager`,
+        # so `pnpm/action-setup` has no version to resolve, and the `allowBuilds` list in
+        # `pnpm-workspace.yaml` exists only because pnpm blocks postinstall scripts --
+        # npm runs the `@bufbuild/buf` postinstall by default, which is all this needs.
         run: |
-          pnpm install --no-frozen-lockfile
-          pnpm run buf:generate
+          npm install --no-audit --no-fund
+          npm run buf:generate
 
       - name: Build the image
         run: docker build -t ${{ matrix.example }}:ci ${{ matrix.example }}
