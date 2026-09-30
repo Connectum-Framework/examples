@@ -606,10 +606,11 @@ steal).
 
 > **Version note.** This phase uses `createBroadcastSubscribers` and the
 > `publishes` option on `createEventBus`, both added in `@connectum/events@1.1.0`.
-> The example pins the events stack at `^1.1.0` (the project's pnpm setup
-> resolves a range to its **lowest** version, so a `^1.0.0` pin would install
-> `1.0.0` and this phase would break at runtime). A plain `pnpm install` works —
-> `1.1.0+` is published on npm.
+> The example pins the events stack at `^1.1.0`, so the manifest itself states
+> the minimum version this phase needs: under `^1.0.0` an install that resolved
+> `1.0.0` (an older lockfile, or a registry mirror that lags behind) would break
+> this phase at runtime. The committed lockfile fixes the exact versions that
+> `pnpm install --frozen-lockfile` installs.
 
 ## Build the image
 
