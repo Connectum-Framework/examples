@@ -11,6 +11,11 @@ allowBuilds:
   protobufjs: true
 
 overrides:
+  # drizzle-kit declares the deprecated @esbuild-kit/esm-loader, whose
+  # core-utils pins esbuild ~0.18.20 (GHSA-67mh-4wv8-2f99). drizzle-kit never
+  # loads it — it loads configs through its bundled tsx on its own esbuild
+  # 0.25 — so move it onto the same 0.25 line to drop the vulnerable copy.
+  '@esbuild-kit/core-utils>esbuild': '^0.25.0'
   'browserslist@<4.28.7': '^4.28.7'
   'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
   'protobufjs@>=7.0.0 <7.6.5': '7.6.5'
