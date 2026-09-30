@@ -12,7 +12,8 @@ if [ -n "$LOCK_FILES" ]; then
   for f in $LOCK_FILES; do
     if git show ":$f" 2>/dev/null | grep -q 'pack/connectum-'; then
       echo "ERROR: $f contains local pack/ paths." >&2
-      echo "Run 'pnpm install' without CONNECTUM_LOCAL before committing." >&2
+      echo "Restore it from the repository root with 'git checkout -- $f'," >&2
+      echo "then run 'pnpm install --frozen-lockfile' in that example." >&2
       exit 1
     fi
   done

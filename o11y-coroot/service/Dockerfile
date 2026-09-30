@@ -3,8 +3,12 @@
 # =============================================================================
 FROM node:22-slim AS deps
 
-# Enable corepack for pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
+# frozen install below reads the lockfile exactly as it was produced. npm rather
+# than corepack, like every other example image: the node:25 images no longer ship
+# corepack, and an unpinned `pnpm@latest` would let the lockfile reader drift
+# between builds.
+RUN npm install -g pnpm@12.4.1
 
 WORKDIR /app
 

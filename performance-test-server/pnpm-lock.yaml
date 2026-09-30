@@ -9,8 +9,6 @@ overrides:
   protobufjs@>=7.0.0 <7.6.5: 7.6.5
   protobufjs@>=8.0.0 <8.6.6: 8.6.6
 
-pnpmfileChecksum: sha256-67N1pxel7+7xAibq49pDwRA2VdI1q0PZkWzV6GHRLhA=
-
 importers:
 
   .:

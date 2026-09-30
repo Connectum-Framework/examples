@@ -3,13 +3,15 @@
 # =============================================================================
 FROM node:25-slim AS deps
 
-# Install pnpm (pinned version)
-RUN npm install -g pnpm@10.12.1
+# pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
+# frozen install reads the lockfile exactly as it was produced.
+RUN npm install -g pnpm@12.4.1
 
 WORKDIR /app
 
-# Copy package manifests for dependency caching
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml holds the dependency overrides and allowBuilds approvals the
+# lockfile was resolved with; without it the frozen install rejects the lockfile.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod
@@ -19,11 +21,14 @@ RUN pnpm install --frozen-lockfile --prod
 # =============================================================================
 FROM node:25-slim AS proto
 
-RUN npm install -g pnpm@10.12.1
+RUN npm install -g pnpm@12.4.1
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
+# Same pinned pnpm and workspace settings as the deps stage; the approval for the
+# @bufbuild/buf install script lives in pnpm-workspace.yaml, and buf generate
+# below needs the binary that script installs.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY proto/ ./proto/
