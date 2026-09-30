@@ -1,7 +1,10 @@
 FROM node:25-slim AS deps
-RUN npm install -g pnpm
+# pnpm is pinned to the version that writes the committed pnpm-lock.yaml, and
+# pnpm-workspace.yaml comes along because it holds the settings the lockfile was
+# resolved with; together they let the frozen install reproduce the lockfile.
+RUN npm install -g pnpm@12.4.1
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 FROM node:25-slim AS runtime
