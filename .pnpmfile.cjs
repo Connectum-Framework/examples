@@ -1,11 +1,25 @@
 // .pnpmfile.cjs — Redirect @connectum/* to local tarballs from Connectum/pack/
 //
-// Usage:
-//   pnpm install                          — uses published npm versions (no-op)
-//   CONNECTUM_LOCAL=1 pnpm install        — uses local tarballs from pack/
+// Usage, from an example directory:
+//   pnpm install
+//       — published npm versions; this hook is not loaded at all
+//   CONNECTUM_LOCAL=1 pnpm_config_pnpmfile=../.pnpmfile.cjs pnpm install
+//       — local tarballs from pack/ (the path is relative to the example
+//         directory: ../../.pnpmfile.cjs for o11y-coroot/service)
+//   git checkout -- pnpm-lock.yaml && pnpm install --frozen-lockfile
+//       — back to the published versions the committed lockfile pins (a plain
+//         `pnpm install` re-resolves the ranges and can move them)
 //
-// This file is committed to git. Symlinks in each example point here.
-// The pack/ directory is populated by: cd connectum && pnpm run pack:all
+// No example links to this file. When an example loads a pnpmfile, pnpm records
+// its checksum in pnpm-lock.yaml, and a hook that lives outside the example's
+// Docker build context makes `pnpm install --frozen-lockfile` fail inside
+// `docker build`. So the hook is opt-in: pnpm reads it only when
+// `pnpm_config_pnpmfile` names it for that one command.
+//
+// pack/ sits next to this repository's checkout and holds the tarballs that
+// `pnpm pack` produces for the framework packages. When it has no tarball for a
+// package the hook leaves that dependency on its published version silently, so
+// check `readlink node_modules/@connectum/core` points at a .tgz.
 
 "use strict";
 

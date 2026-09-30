@@ -93,6 +93,37 @@ service-catalog API, which is published on npm — install them with `pnpm insta
 like the other examples. Every example uses published `@connectum/*` packages
 from npm, so `pnpm install` is all you need.
 
+Every installable example except getting-started commits its `pnpm-lock.yaml`
+(extensions/redact and interceptors/jwt are code snippets with no `package.json`), and the
+Docker images install from it with `pnpm install --frozen-lockfile`. After
+changing an example's `package.json` or `pnpm-workspace.yaml`, run `pnpm install`
+in that example and commit the updated lockfile. getting-started ships without
+one because it is the base `connectum init` copies into new projects.
+
+### Testing against unreleased framework builds
+
+To run an example against locally packed `@connectum/*` tarballs instead of the
+published packages, name the repository's `.pnpmfile.cjs` explicitly for one
+install (the path is relative to the example directory):
+
+```bash
+cd with-custom-interceptor
+CONNECTUM_LOCAL=1 pnpm_config_pnpmfile=../.pnpmfile.cjs pnpm install
+readlink node_modules/@connectum/core   # must name a .tgz, see below
+pnpm build:proto && pnpm test
+# back to the published packages pinned by the committed lockfile:
+git checkout -- pnpm-lock.yaml
+pnpm install --frozen-lockfile
+```
+
+The hook reads the tarballs from a `pack/` directory next to this repository's
+checkout; for a package with no tarball there it silently keeps the published
+version, which is why the `readlink` check matters. Restore the lockfile from git rather than with a plain `pnpm install`: after the
+local install pnpm re-resolves the ranges in `package.json` and can move
+`@connectum/*` to newer published versions than the committed lockfile pins.
+In getting-started, which has no committed lockfile, delete the generated
+`pnpm-lock.yaml` and run `pnpm install` instead. Never commit a lockfile produced in this mode: it points at the local tarballs.
+
 ## License
 
 [Apache License 2.0](LICENSE) · Built by [Highload.Zone](https://highload.zone)

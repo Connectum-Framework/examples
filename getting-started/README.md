@@ -5,7 +5,8 @@ reflection, the default interceptor chain and graceful shutdown all come from a
 single `createServer` call.
 
 > Uses the 1.0.0 API (`defineService`). The published packages install with a
-> plain `pnpm install`; use `CONNECTUM_LOCAL=1` only for local-package development (see below).
+> plain `pnpm install`. To test against locally packed framework tarballs instead, see
+> "Testing against unreleased framework builds" in the repository README.
 
 ## What it shows
 
@@ -24,7 +25,7 @@ single `createServer` call.
 Requires Node.js >= 25.2.0 (or Bun, or tsx) and pnpm >= 10.
 
 ```bash
-pnpm install                     # @connectum/*@^1.0.0 from npm (use CONNECTUM_LOCAL=1 only for local-package dev)
+pnpm install                     # @connectum/*@^1.0.0 from npm
 pnpm build:proto                 # buf generate → gen/
 pnpm start                       # http://localhost:5000
 pnpm test                        # e2e over a real gRPC client
