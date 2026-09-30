@@ -620,9 +620,10 @@ pnpm run docker:build    # docker build -t car-sharing:local .
 
 The Dockerfile is multi-stage and role-agnostic: `node src/index.ts` is the
 entrypoint for every role (engines.node `>=25.2.0` runs TypeScript natively).
-No lockfile is committed for this example; the `deps` stage runs `pnpm install`,
-which resolves `@connectum/*` to the published 1.0.0 versions pinned in
-`package.json` and generates the lockfile inside the image.
+The `deps` stage installs from the committed `pnpm-lock.yaml` with
+`pnpm install --frozen-lockfile --prod`, so every build of a commit gets the same
+dependency tree. After changing `package.json` or `pnpm-workspace.yaml`, run
+`pnpm install` and commit the updated lockfile, or the image build fails.
 
 ## Deploy to Kubernetes + Istio
 

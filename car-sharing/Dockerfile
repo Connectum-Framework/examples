@@ -5,15 +5,18 @@
 
 # ── deps: install production node_modules ───────────────────────────────────
 FROM node:25-slim AS deps
-RUN npm install -g pnpm
+# pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
+# frozen install below reads the lockfile exactly as it was produced.
+RUN npm install -g pnpm@12.4.1
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml ./
-# No lockfile is committed for this flagship example (matches getting-started /
-# hris): pnpm resolves @connectum/* and other deps from the caret (^) ranges in
-# package.json, so the image is example-grade, not bit-reproducible. Production
-# services should commit pnpm-lock.yaml and use `pnpm install --frozen-lockfile`
-# (the secondary examples model this).
-RUN pnpm install --prod
+# pnpm-workspace.yaml carries the allowBuilds approvals and the dependency
+# overrides; the lockfile records those overrides, so without this file the
+# frozen install rejects the lockfile as out of date.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The image installs exactly what the committed lockfile pins: two builds of the
+# same commit get the same dependency tree, and a dependency bump shows up as a
+# reviewed lockfile change instead of an invisible drift inside the image.
+RUN pnpm install --frozen-lockfile --prod
 
 # ── runtime: copy deps + source + generated proto code ──────────────────────
 FROM node:25-slim AS runtime
