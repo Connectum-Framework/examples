@@ -3,5 +3,6 @@ allowBuilds:
   protobufjs: true
 
 overrides:
-  'protobufjs@<7.5.5': '7.5.5'
-  'protobufjs@>=8.0.0 <8.0.1': '8.0.1'
+  '@grpc/grpc-js@>=1.14.0 <1.14.4': '1.14.4'
+  'protobufjs@>=7.0.0 <7.6.5': '7.6.5'
+  'protobufjs@>=8.0.0 <8.6.6': '8.6.6'

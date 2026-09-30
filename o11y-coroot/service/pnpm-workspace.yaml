@@ -1,0 +1,11 @@
+allowBuilds:
+  '@bufbuild/buf': true
+  # protobufjs is pulled transitively by @connectum/otel's OTLP/gRPC exporters
+  # (@grpc/grpc-js → @grpc/proto-loader → protobufjs). Allow its build so pnpm
+  # does not fail the install with ERR_PNPM_IGNORED_BUILDS.
+  protobufjs: true
+
+overrides:
+  '@grpc/grpc-js@>=1.14.0 <1.14.4': '1.14.4'
+  'protobufjs@>=7.0.0 <7.6.5': '7.6.5'
+  'protobufjs@>=8.0.0 <8.6.6': '8.6.6'
