@@ -9,3 +9,8 @@ allowBuilds:
   # (@grpc/grpc-js → @grpc/proto-loader → protobufjs). Allow its build so the
   # deps-status check buf runs before generate does not fail on an ignored build.
   protobufjs: true
+
+overrides:
+  'browserslist@<4.28.7': '^4.28.7'
+  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  'protobufjs@>=7.0.0 <7.6.5': '7.6.5'
