@@ -48,6 +48,22 @@ pnpm start:bun      # Bun
 pnpm start:tsx      # tsx
 ```
 
+## Enums in your protos
+
+Node runs this project's TypeScript by stripping types, and `tsconfig.json` sets
+`erasableSyntaxOnly`, so neither accepts a TypeScript `enum`. `buf.gen.yaml` therefore
+passes `erasable_syntax=true` to protoc-gen-es, and a Protobuf enum is generated as an
+object with `as const` plus a type of the same name:
+
+```typescript
+export const Color = { UNSPECIFIED: 0, RED: 1, GREEN: 2 } as const;
+export type Color = (typeof Color)[keyof typeof Color] | UnknownEnum;
+```
+
+`Color.RED` works as usual. There is no reverse mapping (`Color[1]` is `undefined` and a
+type error), a single value's type is `typeof Color.RED`, and an open (proto3) enum's
+type also admits `UnknownEnum`.
+
 ## In a container
 
 Two Dockerfiles, one per runtime. Both generate the proto code during the build (`gen/`

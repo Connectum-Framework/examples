@@ -8,3 +8,7 @@ plugins:
     opt:
       - target=ts
       - import_extension=.ts
+      # Protobuf enums become `as const` objects instead of TypeScript `enum`, which
+      # native type stripping (`node src/index.ts`) and `erasableSyntaxOnly` reject.
+      # Needs @bufbuild/protoc-gen-es and @bufbuild/protobuf >= 2.13.0.
+      - erasable_syntax=true
