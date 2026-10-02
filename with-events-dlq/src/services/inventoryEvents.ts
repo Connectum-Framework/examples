@@ -19,7 +19,8 @@ export const inventoryEventRoutes: EventRoute = (events) => {
 
             if (event.product === "FAIL") {
                 console.log(`[InventoryEvents] SIMULATED FAILURE for product "FAIL" — will retry then DLQ`);
-                throw new Error("Simulated failure for product FAIL");
+                // The order id in the message is what ties a dead-lettered event back to its order.
+                throw new Error(`Simulated failure for product FAIL (order ${event.orderId})`);
             }
 
             reservations.set(event.orderId, { orderId: event.orderId, product: event.product, quantity: event.quantity, status: "reserved" });

@@ -43,10 +43,11 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 type Order = { orderId: string; status: string };
 type Reservation = { orderId: string; status: string; product: string };
 
+// JSON omits an empty repeated field, so an empty list arrives as an absent key.
 const getOrders = async (): Promise<Order[]> =>
-    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders: Order[] }).orders;
+    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders?: Order[] }).orders ?? [];
 const getReservations = async (): Promise<Reservation[]> =>
-    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations: Reservation[] }).reservations;
+    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations?: Reservation[] }).reservations ?? [];
 
 const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
 const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
@@ -90,12 +91,14 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
                 };
                 return { events: reply.events ?? [] };
             },
-            (dlq) => dlq.events.some((e) => e.error.includes("FAIL")),
-            "a dead-lettered event for the FAIL order",
+            // Match on this order's id: the DLQ store outlives a single run, so an
+            // event from an earlier FAIL order must not satisfy this test.
+            (dlq) => dlq.events.some((e) => e.error.includes(result.orderId)),
+            `a dead-lettered event for order ${result.orderId}`,
         );
-        assert.ok(dlqResult.events.length > 0, "Should have DLQ events");
-        const dlqEvent = dlqResult.events.find((e) => e.error.includes("FAIL"));
-        assert.ok(dlqEvent, "Should find DLQ event with FAIL error");
+        const dlqEvent = dlqResult.events.find((e) => e.error.includes(result.orderId));
+        assert.ok(dlqEvent, "Should find the DLQ event for this order");
+        assert.equal(dlqEvent.originalTopic, "orders.v1.OrderCreated");
         const orders = await getOrders();
         assert.ok(orders.find((o) => o.orderId === result.orderId));
         assert.equal(statusOf(orders, result.orderId), "pending", "FAIL order should remain pending");

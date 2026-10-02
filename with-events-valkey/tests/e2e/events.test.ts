@@ -43,10 +43,11 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 type Order = { orderId: string; status: string };
 type Reservation = { orderId: string; status: string; product: string };
 
+// JSON omits an empty repeated field, so an empty list arrives as an absent key.
 const getOrders = async (): Promise<Order[]> =>
-    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders: Order[] }).orders;
+    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders?: Order[] }).orders ?? [];
 const getReservations = async (): Promise<Reservation[]> =>
-    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations: Reservation[] }).reservations;
+    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations?: Reservation[] }).reservations ?? [];
 
 const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
 const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
