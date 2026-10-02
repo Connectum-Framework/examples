@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka:latest
+    image: apache/kafka:4.2.0
     ports:
       - "9092:9092"
     environment:
@@ -23,6 +23,27 @@ services:
     networks:
       - events
 
+  # Creates the example's topics before the services start, as a production
+  # cluster would have them. @connectum/events-kafka does not create topics by
+  # default, and Kafka 4 answers the first subscribe to a missing topic with
+  # UNKNOWN_TOPIC_OR_PARTITION, which the kafkajs consumer does not retry.
+  # The names come from the proto: the (event).topic options, and the input
+  # message type for handlers without one.
+  kafka-init:
+    image: apache/kafka:4.2.0
+    command:
+      - sh
+      - -c
+      - |
+        for topic in orders.v1.OrderCreated orders.cancelled inventory.reserved; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1 || exit 1
+        done
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - events
+
   order-service:
     build: .
     command: ["node", "src/order-service.ts"]
@@ -33,10 +54,10 @@ services:
       - PORT=5001
       - KAFKA_BROKERS=kafka:29092
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -54,10 +75,10 @@ services:
       - PORT=5002
       - KAFKA_BROKERS=kafka:29092
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5002/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
