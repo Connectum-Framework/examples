@@ -3,9 +3,14 @@
 // Usage, from an example directory:
 //   pnpm install
 //       — published npm versions; this hook is not loaded at all
-//   CONNECTUM_LOCAL=1 pnpm_config_pnpmfile=../.pnpmfile.cjs pnpm install
+//   export CONNECTUM_LOCAL=1 PNPM_CONFIG_PNPMFILE=../.pnpmfile.cjs
+//   pnpm install && pnpm test
 //       — local tarballs from pack/ (the path is relative to the example
-//         directory: ../../.pnpmfile.cjs for o11y-coroot/service)
+//         directory: ../../.pnpmfile.cjs for o11y-coroot/service). Export both
+//         variables for every pnpm command, not only for the install: before
+//         `pnpm run` / `pnpm exec`, pnpm 12 checks the dependencies and, without
+//         the hook, reinstalls the published versions. pnpm 12 reads only the
+//         uppercase PNPM_CONFIG_PNPMFILE.
 //   git checkout -- pnpm-lock.yaml && pnpm install --frozen-lockfile
 //       — back to the published versions the committed lockfile pins (a plain
 //         `pnpm install` re-resolves the ranges and can move them)
@@ -14,12 +19,13 @@
 // its checksum in pnpm-lock.yaml, and a hook that lives outside the example's
 // Docker build context makes `pnpm install --frozen-lockfile` fail inside
 // `docker build`. So the hook is opt-in: pnpm reads it only when
-// `pnpm_config_pnpmfile` names it for that one command.
+// PNPM_CONFIG_PNPMFILE names it.
 //
 // pack/ sits next to this repository's checkout and holds the tarballs that
 // `pnpm pack` produces for the framework packages. When it has no tarball for a
 // package the hook leaves that dependency on its published version silently, so
-// check `readlink node_modules/@connectum/core` points at a .tgz.
+// check that `readlink -f node_modules/@connectum/core` points at a .tgz, after
+// the tests as well as after the install.
 
 "use strict";
 
