@@ -75,13 +75,15 @@ pnpm install
 # 2. Generate protobuf code
 pnpm run build:proto
 
-# 3. Start Kafka (KRaft mode)
-docker compose up -d kafka
+# 3. Start Kafka (KRaft mode) and create the example's topics
+docker compose up -d kafka kafka-init
 
 # 4. Start microservices (in separate terminals)
 KAFKA_BROKERS=localhost:9092 pnpm run start:order      # port 5001
 KAFKA_BROKERS=localhost:9092 pnpm run start:inventory   # port 5002
 ```
+
+The `kafka-init` service creates the topics before anything subscribes to them, the way a production cluster has its topics provisioned up front. `@connectum/events-kafka` does not create topics by default (`consumerOptions.allowAutoTopicCreation` is `false`), and Kafka 4 answers the first subscribe to a missing topic with `UNKNOWN_TOPIC_OR_PARTITION`, which the kafkajs consumer does not retry. When you add an event with a new topic, add it to the list in `docker-compose.yml` too.
 
 ### Testing
 
