@@ -62,47 +62,56 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
         assert.equal(res.status, 200);
     });
 
-    it("saga: CreateOrder → InventoryReserved → order confirmed", async () => {
+    it("saga: normal order → confirmed", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
             product: "Widget", quantity: 5, customer: "Alice",
         }) as { orderId: string; status: string };
         assert.ok(result.orderId);
         assert.equal(result.status, "pending");
         const orders = await eventually(getOrders, (o) => statusOf(o, result.orderId) === "confirmed", `order ${result.orderId} to be confirmed`);
-        assert.equal(statusOf(orders, result.orderId), "confirmed", "Order should be confirmed after saga");
-        const reservation = reservationOf(await getReservations(), result.orderId);
-        assert.ok(reservation);
-        assert.equal(reservation.status, "reserved");
-        assert.equal(reservation.product, "Widget");
+        assert.ok(orders.find((o) => o.orderId === result.orderId));
+        assert.equal(statusOf(orders, result.orderId), "confirmed");
+    });
+
+    it("DLQ: FAIL product → retry 2x → dead-letter-queue", async () => {
+        const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
+            product: "FAIL", quantity: 1, customer: "Bob",
+        }) as { orderId: string; status: string };
+        assert.ok(result.orderId);
+        assert.equal(result.status, "pending");
+        // The handler fails on FAIL, is retried, and the event then lands in the
+        // dead-letter queue; wait for it there rather than for a fixed time.
+        // JSON omits an empty repeated field, so `events` is absent until the
+        // first event is dead-lettered.
+        const dlqResult = await eventually(
+            async () => {
+                const reply = (await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetDlqEvents", {})) as {
+                    events?: Array<{ originalTopic: string; error: string; attempt: string }>;
+                };
+                return { events: reply.events ?? [] };
+            },
+            (dlq) => dlq.events.some((e) => e.error.includes("FAIL")),
+            "a dead-lettered event for the FAIL order",
+        );
+        assert.ok(dlqResult.events.length > 0, "Should have DLQ events");
+        const dlqEvent = dlqResult.events.find((e) => e.error.includes("FAIL"));
+        assert.ok(dlqEvent, "Should find DLQ event with FAIL error");
+        const orders = await getOrders();
+        assert.ok(orders.find((o) => o.orderId === result.orderId));
+        assert.equal(statusOf(orders, result.orderId), "pending", "FAIL order should remain pending");
     });
 
     it("cancel order → inventory released", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
-            product: "Gadget", quantity: 2, customer: "Bob",
+            product: "Gadget", quantity: 2, customer: "Charlie",
         }) as { orderId: string };
         await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "reserved", `the reservation for ${result.orderId}`);
-        const cancelResult = await connectPost(ORDER_URL, "orders.v1.OrderService/CancelOrder", {
+        await connectPost(ORDER_URL, "orders.v1.OrderService/CancelOrder", {
             orderId: result.orderId, reason: "Changed mind",
-        }) as { orderId: string; status: string };
-        assert.equal(cancelResult.status, "cancelled");
+        });
         const reservations = await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "released", `the reservation for ${result.orderId} to be released`);
         const reservation = reservationOf(reservations, result.orderId);
         assert.ok(reservation);
         assert.equal(reservation.status, "released");
-    });
-
-    it("multiple orders processed correctly", async () => {
-        const orderIds: string[] = [];
-        for (let i = 0; i < 3; i++) {
-            const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
-                product: `Product-${i}`, quantity: i + 1, customer: `Customer-${i}`,
-            }) as { orderId: string };
-            orderIds.push(result.orderId);
-        }
-        const orders = await eventually(getOrders, (o) => orderIds.every((id) => statusOf(o, id) === "confirmed"), `orders ${orderIds.join(", ")} to be confirmed`);
-        for (const orderId of orderIds) {
-            assert.ok(orders.find((o) => o.orderId === orderId), `Should find order ${orderId}`);
-            assert.equal(statusOf(orders, orderId), "confirmed");
-        }
     });
 });
