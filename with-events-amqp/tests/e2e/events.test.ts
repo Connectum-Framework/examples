@@ -21,6 +21,37 @@ function sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Poll `read` until `done` holds. The saga runs through the broker
+ * asynchronously, so a fixed pause is either too short on a slow machine (a
+ * false failure) or longer than needed. The deadline is generous; when it
+ * passes, the error shows the last value read.
+ */
+async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, what: string, timeoutMs = 30_000): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    let last = await read();
+    while (!done(last)) {
+        if (Date.now() > deadline) {
+            throw new Error(`timed out after ${timeoutMs} ms waiting for ${what}; last value: ${JSON.stringify(last)}`);
+        }
+        await sleep(200);
+        last = await read();
+    }
+    return last;
+}
+
+type Order = { orderId: string; status: string };
+type Reservation = { orderId: string; status: string; product: string };
+
+// JSON omits an empty repeated field, so an empty list arrives as an absent key.
+const getOrders = async (): Promise<Order[]> =>
+    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders?: Order[] }).orders ?? [];
+const getReservations = async (): Promise<Reservation[]> =>
+    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations?: Reservation[] }).reservations ?? [];
+
+const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
+const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
+
 describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
     it("health check — order service", async () => {
         const res = await fetch(`${ORDER_URL}/healthz`);
@@ -38,38 +69,27 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
         }) as { orderId: string; status: string };
         assert.ok(result.orderId);
         assert.equal(result.status, "pending");
-        await sleep(3000);
-        const ordersResult = await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {}) as {
-            orders: Array<{ orderId: string; status: string }>;
-        };
-        const order = ordersResult.orders.find((o) => o.orderId === result.orderId);
-        assert.ok(order, `Should find order ${result.orderId}`);
-        assert.equal(order!.status, "confirmed", "Order should be confirmed after saga");
-        const inventory = await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {}) as {
-            reservations: Array<{ orderId: string; status: string; product: string }>;
-        };
-        const reservation = inventory.reservations.find((r) => r.orderId === result.orderId);
+        const orders = await eventually(getOrders, (o) => statusOf(o, result.orderId) === "confirmed", `order ${result.orderId} to be confirmed`);
+        assert.equal(statusOf(orders, result.orderId), "confirmed", "Order should be confirmed after saga");
+        const reservation = reservationOf(await getReservations(), result.orderId);
         assert.ok(reservation);
-        assert.equal(reservation!.status, "reserved");
-        assert.equal(reservation!.product, "Widget");
+        assert.equal(reservation.status, "reserved");
+        assert.equal(reservation.product, "Widget");
     });
 
     it("cancel order → inventory released", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
             product: "Gadget", quantity: 2, customer: "Bob",
         }) as { orderId: string };
-        await sleep(3000);
+        await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "reserved", `the reservation for ${result.orderId}`);
         const cancelResult = await connectPost(ORDER_URL, "orders.v1.OrderService/CancelOrder", {
             orderId: result.orderId, reason: "Changed mind",
         }) as { orderId: string; status: string };
         assert.equal(cancelResult.status, "cancelled");
-        await sleep(2000);
-        const inventory = await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {}) as {
-            reservations: Array<{ orderId: string; status: string }>;
-        };
-        const reservation = inventory.reservations.find((r) => r.orderId === result.orderId);
+        const reservations = await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "released", `the reservation for ${result.orderId} to be released`);
+        const reservation = reservationOf(reservations, result.orderId);
         assert.ok(reservation);
-        assert.equal(reservation!.status, "released");
+        assert.equal(reservation.status, "released");
     });
 
     it("multiple orders processed correctly", async () => {
@@ -80,14 +100,10 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
             }) as { orderId: string };
             orderIds.push(result.orderId);
         }
-        await sleep(5000);
-        const ordersResult = await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {}) as {
-            orders: Array<{ orderId: string; status: string }>;
-        };
+        const orders = await eventually(getOrders, (o) => orderIds.every((id) => statusOf(o, id) === "confirmed"), `orders ${orderIds.join(", ")} to be confirmed`);
         for (const orderId of orderIds) {
-            const order = ordersResult.orders.find((o) => o.orderId === orderId);
-            assert.ok(order, `Should find order ${orderId}`);
-            assert.equal(order!.status, "confirmed");
+            assert.ok(orders.find((o) => o.orderId === orderId), `Should find order ${orderId}`);
+            assert.equal(statusOf(orders, orderId), "confirmed");
         }
     });
 });

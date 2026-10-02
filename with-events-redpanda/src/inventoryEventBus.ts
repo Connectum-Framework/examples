@@ -5,7 +5,14 @@ import { inventoryEventRoutes } from "./services/inventoryEvents.ts";
 const REDPANDA_BROKERS = (process.env.REDPANDA_BROKERS ?? "localhost:9092").split(",");
 
 export const inventoryEventBus = createEventBus({
-    adapter: KafkaAdapter({ brokers: REDPANDA_BROKERS, clientId: "inventory-service" }),
+    adapter: KafkaAdapter({
+        brokers: REDPANDA_BROKERS,
+        clientId: "inventory-service",
+        // A fresh demo broker has none of the topics yet, and the adapter does not
+        // create topics unless told to. Production clusters create their topics up
+        // front, so a misspelled topic fails instead of appearing silently.
+        consumerOptions: { allowAutoTopicCreation: true },
+    }),
     routes: [inventoryEventRoutes],
     group: "inventory-service",
     middleware: { retry: { maxRetries: 3, backoff: "exponential" } },

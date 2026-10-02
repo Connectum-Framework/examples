@@ -133,7 +133,7 @@ curl -X POST http://localhost:5001/orders.v1.OrderService/CreateOrder \
 # After ~1 second: inspect DLQ events captured by the DLQ monitor
 curl -X POST http://localhost:5002/orders.v1.InventoryService/GetDlqEvents \
   -H "Content-Type: application/json" -d '{}'
-# → {"events":[{"originalTopic":"orders.v1.OrderCreated","originalEventId":"...","error":"Simulated failure for product FAIL","attempt":"1"}]}
+# → {"events":[{"originalTopic":"orders.v1.OrderCreated","originalEventId":"...","error":"Simulated failure for product FAIL (order ...)","attempt":"1"}]}
 ```
 
 ### Stopping

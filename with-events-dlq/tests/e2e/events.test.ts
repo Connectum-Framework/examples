@@ -21,6 +21,37 @@ function sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Poll `read` until `done` holds. The saga runs through the broker
+ * asynchronously, so a fixed pause is either too short on a slow machine (a
+ * false failure) or longer than needed. The deadline is generous; when it
+ * passes, the error shows the last value read.
+ */
+async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, what: string, timeoutMs = 30_000): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    let last = await read();
+    while (!done(last)) {
+        if (Date.now() > deadline) {
+            throw new Error(`timed out after ${timeoutMs} ms waiting for ${what}; last value: ${JSON.stringify(last)}`);
+        }
+        await sleep(200);
+        last = await read();
+    }
+    return last;
+}
+
+type Order = { orderId: string; status: string };
+type Reservation = { orderId: string; status: string; product: string };
+
+// JSON omits an empty repeated field, so an empty list arrives as an absent key.
+const getOrders = async (): Promise<Order[]> =>
+    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders?: Order[] }).orders ?? [];
+const getReservations = async (): Promise<Reservation[]> =>
+    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations?: Reservation[] }).reservations ?? [];
+
+const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
+const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
+
 describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
     it("health check — order service", async () => {
         const res = await fetch(`${ORDER_URL}/healthz`);
@@ -38,13 +69,9 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
         }) as { orderId: string; status: string };
         assert.ok(result.orderId);
         assert.equal(result.status, "pending");
-        await sleep(3000);
-        const ordersResult = await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {}) as {
-            orders: Array<{ orderId: string; status: string }>;
-        };
-        const order = ordersResult.orders.find((o) => o.orderId === result.orderId);
-        assert.ok(order);
-        assert.equal(order!.status, "confirmed");
+        const orders = await eventually(getOrders, (o) => statusOf(o, result.orderId) === "confirmed", `order ${result.orderId} to be confirmed`);
+        assert.ok(orders.find((o) => o.orderId === result.orderId));
+        assert.equal(statusOf(orders, result.orderId), "confirmed");
     });
 
     it("DLQ: FAIL product → retry 2x → dead-letter-queue", async () => {
@@ -53,35 +80,41 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
         }) as { orderId: string; status: string };
         assert.ok(result.orderId);
         assert.equal(result.status, "pending");
-        await sleep(5000);
-        const ordersResult = await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {}) as {
-            orders: Array<{ orderId: string; status: string }>;
-        };
-        const order = ordersResult.orders.find((o) => o.orderId === result.orderId);
-        assert.ok(order);
-        assert.equal(order!.status, "pending", "FAIL order should remain pending");
-        const dlqResult = await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetDlqEvents", {}) as {
-            events: Array<{ originalTopic: string; error: string; attempt: string }>;
-        };
-        assert.ok(dlqResult.events.length > 0, "Should have DLQ events");
-        const dlqEvent = dlqResult.events.find((e) => e.error.includes("FAIL"));
-        assert.ok(dlqEvent, "Should find DLQ event with FAIL error");
+        // The handler fails on FAIL, is retried, and the event then lands in the
+        // dead-letter queue; wait for it there rather than for a fixed time.
+        // JSON omits an empty repeated field, so `events` is absent until the
+        // first event is dead-lettered.
+        const dlqResult = await eventually(
+            async () => {
+                const reply = (await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetDlqEvents", {})) as {
+                    events?: Array<{ originalTopic: string; error: string; attempt: string }>;
+                };
+                return { events: reply.events ?? [] };
+            },
+            // Match on this order's id: the DLQ store outlives a single run, so an
+            // event from an earlier FAIL order must not satisfy this test.
+            (dlq) => dlq.events.some((e) => e.error.includes(result.orderId)),
+            `a dead-lettered event for order ${result.orderId}`,
+        );
+        const dlqEvent = dlqResult.events.find((e) => e.error.includes(result.orderId));
+        assert.ok(dlqEvent, "Should find the DLQ event for this order");
+        assert.equal(dlqEvent.originalTopic, "orders.v1.OrderCreated");
+        const orders = await getOrders();
+        assert.ok(orders.find((o) => o.orderId === result.orderId));
+        assert.equal(statusOf(orders, result.orderId), "pending", "FAIL order should remain pending");
     });
 
     it("cancel order → inventory released", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
             product: "Gadget", quantity: 2, customer: "Charlie",
         }) as { orderId: string };
-        await sleep(3000);
+        await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "reserved", `the reservation for ${result.orderId}`);
         await connectPost(ORDER_URL, "orders.v1.OrderService/CancelOrder", {
             orderId: result.orderId, reason: "Changed mind",
         });
-        await sleep(2000);
-        const inventory = await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {}) as {
-            reservations: Array<{ orderId: string; status: string }>;
-        };
-        const reservation = inventory.reservations.find((r) => r.orderId === result.orderId);
+        const reservations = await eventually(getReservations, (r) => reservationOf(r, result.orderId)?.status === "released", `the reservation for ${result.orderId} to be released`);
+        const reservation = reservationOf(reservations, result.orderId);
         assert.ok(reservation);
-        assert.equal(reservation!.status, "released");
+        assert.equal(reservation.status, "released");
     });
 });
