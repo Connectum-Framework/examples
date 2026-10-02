@@ -103,15 +103,21 @@ one because it is the base `connectum init` copies into new projects.
 ### Testing against unreleased framework builds
 
 To run an example against locally packed `@connectum/*` tarballs instead of the
-published packages, name the repository's `.pnpmfile.cjs` explicitly for one
-install (the path is relative to the example directory):
+published packages, name the repository's `.pnpmfile.cjs` explicitly (the path
+is relative to the example directory). Export the variables for every pnpm
+command, not only for the install: before `pnpm run` and `pnpm exec`, pnpm 12
+checks the dependencies and reinstalls the published versions when the hook is
+not named. pnpm 12 reads only the uppercase `PNPM_CONFIG_PNPMFILE`.
 
 ```bash
 cd with-custom-interceptor
-CONNECTUM_LOCAL=1 pnpm_config_pnpmfile=../.pnpmfile.cjs pnpm install
-readlink node_modules/@connectum/core   # must name a .tgz, see below
+export CONNECTUM_LOCAL=1 PNPM_CONFIG_PNPMFILE=../.pnpmfile.cjs
+pnpm install
+readlink -f node_modules/@connectum/core   # must name a .tgz, see below
 pnpm build:proto && pnpm test
+readlink -f node_modules/@connectum/core   # still the .tgz
 # back to the published packages pinned by the committed lockfile:
+unset CONNECTUM_LOCAL PNPM_CONFIG_PNPMFILE
 git checkout -- pnpm-lock.yaml
 pnpm install --frozen-lockfile
 ```
