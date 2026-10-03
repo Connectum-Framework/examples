@@ -1,61 +1,66 @@
 /**
- * ConnectRPC client factory for the Temporal activities.
+ * Catalog client for the Temporal activities.
  *
  * The worker is a separate process with NO Connectum `Server`, so the in-process
- * `ctx.call` / `server.localClient` facilities are unavailable there. Activities
- * therefore reach the role services as a plain network client — exactly the
- * example's split-topology story (`*_ADDR` env), just initiated from the worker
- * instead of a request handler.
+ * `ctx.call` / `server.localClient` facilities are unavailable there. Instead of
+ * hand-building one `createClient(Service, transport)` per role service, the
+ * worker uses `createCatalogClient`: the SAME typed
+ * `call("<typeName>/<Method>", req)` surface handlers get from `ctx.call`, keyed
+ * off the generated service catalog, with every target resolved over the
+ * network through a `RemoteResolver` — exactly the example's split-topology
+ * story (`*_ADDR` env), just initiated from the worker instead of a handler.
  *
- * The clients carry no Authorization header — the HRIS edge has no auth chain
+ * The client carries no Authorization header — the HRIS edge has no auth chain
  * (the real trust boundary is the mesh). Each activity is one RPC against one
  * role service over the network.
  *
  * @module temporal/clients
  */
 
-import type { Client } from "@connectrpc/connect";
-import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { AccessService } from "#gen/access/v1/access_pb.ts";
-import { DirectoryService } from "#gen/directory/v1/directory_pb.ts";
-import { PayrollService } from "#gen/payroll/v1/payroll_pb.ts";
-import { TimeOffService } from "#gen/timeoff/v1/timeoff_pb.ts";
+import { createCatalogClient, perServiceEnvResolver } from "@connectum/core";
+import type { CatalogClient, RemoteResolver } from "@connectum/core";
+import { serviceCatalog } from "#gen/catalog.gen.ts";
+import { ENDPOINT_ENV, TYPE_NAMES } from "#topology.ts";
 
-/** Default endpoints for a local `docker compose up` (one role per service). */
-const DEFAULT_DIRECTORY_ADDR = "http://localhost:5001";
-const DEFAULT_PAYROLL_ADDR = "http://localhost:5002";
-const DEFAULT_TIMEOFF_ADDR = "http://localhost:5003";
-const DEFAULT_ACCESS_ADDR = "http://localhost:5004";
+/**
+ * Fallback endpoints for a local run when the matching `*_ADDR` variable is not
+ * set (one role per service). The env resolver alone has no defaults — an unset
+ * variable means "no route" — so without this map a worker started without the
+ * variables would fail every call instead of reaching the local roles.
+ */
+const DEFAULT_ENDPOINTS: Readonly<Record<string, string>> = {
+    [TYPE_NAMES.directory]: "http://localhost:5001",
+    [TYPE_NAMES.timeoff]: "http://localhost:5002",
+    [TYPE_NAMES.payroll]: "http://localhost:5003",
+    [TYPE_NAMES.access]: "http://localhost:5004",
+};
 
-/** The typed clients the activities use to drive the onboarding saga's RPCs. */
-export interface ServiceClients {
-    readonly directory: Client<typeof DirectoryService>;
-    readonly payroll: Client<typeof PayrollService>;
-    readonly timeoff: Client<typeof TimeOffService>;
-    readonly access: Client<typeof AccessService>;
+/**
+ * Resolve a service from its `*_ADDR` env var first (the same variables the RPC
+ * roles use for `ctx.call`), and only when that is unset or empty fall back to
+ * the local default. A service with neither resolves to `null`, which the
+ * catalog client turns into `Code.Unavailable`.
+ *
+ * `createGrpcTransport({ baseUrl })` needs a full URL (`http://host:port`), the
+ * shape the `*_ADDR` variables carry in k8s/compose. The transport connects
+ * lazily, and the catalog client caches it per service, so this runs once per
+ * service, not per call.
+ */
+function workerResolver(): RemoteResolver {
+    const fromEnv = perServiceEnvResolver(ENDPOINT_ENV);
+    return (ctx) => {
+        const transport = fromEnv(ctx);
+        if (transport !== null) return transport;
+        const fallback = DEFAULT_ENDPOINTS[ctx.typeName];
+        return fallback === undefined ? null : createGrpcTransport({ baseUrl: fallback });
+    };
 }
 
 /**
- * Build the directory/payroll/timeoff/access clients from the `*_ADDR` env
- * convention.
- *
- * `createGrpcTransport({ baseUrl })` requires a full URL (`http://host:port`),
- * the same shape `DIRECTORY_ADDR`/`PAYROLL_ADDR`/`TIMEOFF_ADDR`/`ACCESS_ADDR`
- * carry in k8s/compose.
- *
- * @param env - Process env to read endpoints from (defaults to `process.env`).
+ * Build the catalog client the activities drive the onboarding saga's RPCs
+ * with: `client.call("directory.v1.DirectoryService/CreateEmployee", req)`.
  */
-export function createServiceClients(env: NodeJS.ProcessEnv = process.env): ServiceClients {
-    const directoryAddr = env.DIRECTORY_ADDR ?? DEFAULT_DIRECTORY_ADDR;
-    const payrollAddr = env.PAYROLL_ADDR ?? DEFAULT_PAYROLL_ADDR;
-    const timeoffAddr = env.TIMEOFF_ADDR ?? DEFAULT_TIMEOFF_ADDR;
-    const accessAddr = env.ACCESS_ADDR ?? DEFAULT_ACCESS_ADDR;
-
-    return {
-        directory: createClient(DirectoryService, createGrpcTransport({ baseUrl: directoryAddr })),
-        payroll: createClient(PayrollService, createGrpcTransport({ baseUrl: payrollAddr })),
-        timeoff: createClient(TimeOffService, createGrpcTransport({ baseUrl: timeoffAddr })),
-        access: createClient(AccessService, createGrpcTransport({ baseUrl: accessAddr })),
-    };
+export function createWorkerClient(): CatalogClient {
+    return createCatalogClient({ catalog: serviceCatalog, resolver: workerResolver() });
 }

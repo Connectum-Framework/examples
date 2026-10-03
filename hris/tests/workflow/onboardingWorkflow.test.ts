@@ -8,7 +8,12 @@
  * saga's orchestration without any Connectum server or Temporal cluster:
  *
  *  - success: forward order is createEmployee → setupPayroll → grantTimeOff →
- *    provisionAccess → activateEmployee.
+ *    provisionAccess → activateEmployee, then the announceOnboarded broadcast.
+ *  - announceOnboarded fails: the run still COMPLETES and nothing is
+ *    compensated (the broadcast is outside the saga's rollback scope).
+ *  - a new run records the `announce-employee-onboarded` patch marker, and its
+ *    fetched history replays against the current workflow without error (the
+ *    pre-change history is replayed in `replay.test.ts`).
  *  - activateEmployee fails: the recorded tail unwinds in LIFO order —
  *    revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee.
  *  - provisionAccess fails: its OWN compensation runs too, because it is
@@ -69,6 +74,7 @@ function makeMockActivities(calls: string[], failing?: { step: string }): Record
         provisionAccess: async () => record("provisionAccess"),
         revokeAccess: async () => record("revokeAccess"),
         activateEmployee: async () => record("activateEmployee"),
+        announceOnboarded: async () => record("announceOnboarded"),
     };
 }
 
@@ -94,12 +100,41 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
         return worker.runUntil(testEnv.client.workflow.execute(OnboardingWorkflow, { args: [INPUT], taskQueue: TASK_QUEUE, workflowId }));
     }
 
-    it("success: runs the forward steps in order and COMPLETES", async () => {
+    it("success: runs the forward steps in order, COMPLETES, and announces EmployeeOnboarded last", async () => {
         const calls: string[] = [];
         const result = await runWorkflow(makeMockActivities(calls), "wf-success");
 
         assert.equal(result, "COMPLETED");
-        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee"]);
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
+    });
+
+    it("a failed EmployeeOnboarded announcement neither fails the run nor triggers any compensation", async () => {
+        const calls: string[] = [];
+        // The employee is already active when the announcement runs; losing the
+        // broadcast must not roll that back or turn the run into a failure.
+        const result = await runWorkflow(makeMockActivities(calls, { step: "announceOnboarded" }), "wf-announce-fail");
+
+        assert.equal(result, "COMPLETED");
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
+    });
+
+    it("a new run records the announce patch marker and its history replays cleanly against the current workflow", async () => {
+        const workflowId = "wf-replay-new";
+        await runWorkflow(makeMockActivities([]), workflowId);
+        const history = await testEnv.client.workflow.getHandle(workflowId).fetchHistory();
+
+        // The marker is what tells a later replay of THIS run to take the
+        // announce branch; without it the replay would skip the step and
+        // collide with the announceOnboarded activity this history records.
+        const patchIds = (history.events ?? []).flatMap((event) => {
+            const marker = event.markerRecordedEventAttributes;
+            if (marker?.markerName !== "core_patch") return [];
+            const data = marker.details?.["patch-data"]?.payloads?.[0]?.data;
+            return data ? [(JSON.parse(new TextDecoder().decode(data)) as { id: string }).id] : [];
+        });
+        assert.deepEqual(patchIds, ["announce-employee-onboarded"]);
+
+        await assert.doesNotReject(Worker.runReplayHistory({ workflowsPath: WORKFLOWS_PATH }, history, workflowId));
     });
 
     it("activateEmployee fails: compensations run in REVERSE order (revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {
@@ -164,6 +199,22 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
             activities: realActivities,
         });
         assert.ok(worker);
+        // Every function the activities module exports becomes an activity, so
+        // the export list IS the registered activity set. A helper exported from
+        // there by mistake (say, a bus setter) would turn into an activity that
+        // any workflow could invoke.
+        assert.deepEqual(Object.keys(realActivities).sort(), [
+            "activateEmployee",
+            "announceOnboarded",
+            "createEmployee",
+            "grantTimeOff",
+            "offboardEmployee",
+            "provisionAccess",
+            "revokeAccess",
+            "revokeTimeOff",
+            "setupPayroll",
+            "teardownPayroll",
+        ]);
         // Start and immediately stop so the worker's poll/heartbeat loop is
         // drained and shut down — a created-but-never-run worker leaks a
         // background loop and the test process never exits.
