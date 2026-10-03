@@ -6,24 +6,38 @@ import "connectum/auth/v1/options.proto";
 
 // FleetService is the vehicle system of record (a leaf service).
 //
-// It is an INTERNAL service: it is reached only by the trip handler via a
-// cross-service ctx.call, never by external clients. The service-level
-// `public: true` option marks every RPC as public, so the gateway-facing JWT
-// auth and proto authz interceptors skip it. An internal ctx.call carries no
-// Authorization header (Connectum does not auto-propagate inbound headers), so
-// without this annotation an in-process call from the trip handler would be
-// rejected as unauthenticated by the same interceptor chain that protects the
-// edge. In production the network boundary is enforced by Istio mTLS + an
-// AuthorizationPolicy that only admits the trips ServiceAccount (see istio/).
+// It is an INTERNAL service: never called by external clients, only by other
+// services of this app — the trip handler's availability pre-check (a
+// cross-service ctx.call to GetVehicle) and the Temporal worker's activities
+// (ReserveVehicle / ReleaseVehicle). `service_auth { internal: true }` makes
+// every RPC skip end-user (JWT) authentication but require a service token
+// instead: the caller signs a short-lived JWT with its own key and sends it in
+// `x-internal-token`; the server verifies it against that caller's published
+// JWKS (createInternalAuthInterceptor + signedTokenTrust). A request without a
+// valid token is UNAUTHENTICATED, whoever sends it.
+//
+// Which service may call what is least privilege via `requires { roles }` (the
+// verified token's `roles` claim, any-of): mutations default to the worker,
+// the only service that reserves and releases vehicles; reads are opened per
+// method below.
 //
 // Persistence (Phase 1): the fleet is the only service backed by a real
 // database — Drizzle ORM over Postgres (postgres.js). Tests inject a PGlite
 // in-process Postgres via the same DI the server uses, so no Docker is needed.
 service FleetService {
-  option (connectum.auth.v1.service_auth) = { public: true };
+  option (connectum.auth.v1.service_auth) = {
+    internal: true
+    default_requires: { roles: ["worker"] }
+  };
 
-  // GetVehicle returns a vehicle by id, or NOT_FOUND if unknown.
-  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse) {}
+  // GetVehicle returns a vehicle by id, or NOT_FOUND if unknown. Callable by
+  // trips only — the StartTrip availability pre-check; no worker activity
+  // reads a single vehicle.
+  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse) {
+    option (connectum.auth.v1.method_auth) = {
+      requires: { roles: ["trips"] }
+    };
+  }
 
   // ListVehicles streams vehicles matching a filter, page by page.
   //
@@ -31,18 +45,25 @@ service FleetService {
   // with cursor pagination — the caller re-sends the id of the last streamed
   // vehicle as `page_token` to fetch the next page. With `available_only` the
   // query is narrowed to currently available vehicles.
-  rpc ListVehicles(ListVehiclesRequest) returns (stream Vehicle) {}
+  //
+  // No service calls it today; it is granted to trips alone, the identity that
+  // already reads the fleet, rather than left open to any internal caller.
+  rpc ListVehicles(ListVehiclesRequest) returns (stream Vehicle) {
+    option (connectum.auth.v1.method_auth) = {
+      requires: { roles: ["trips"] }
+    };
+  }
 
   // ReserveVehicle marks a vehicle reserved (available=false,
   // status="reserved") and returns it. NOT_FOUND if the id is unknown;
   // FAILED_PRECONDITION if the vehicle is already reserved or in maintenance
-  // (not currently available).
+  // (not currently available). Worker only (the service default).
   rpc ReserveVehicle(ReserveVehicleRequest) returns (Vehicle) {}
 
   // ReleaseVehicle returns a vehicle to the available pool (available=true,
   // status="available") and returns it. NOT_FOUND if the id is unknown.
   // FAILED_PRECONDITION if the vehicle is in maintenance (cannot be released
-  // back into service from the fleet API).
+  // back into service from the fleet API). Worker only (the service default).
   rpc ReleaseVehicle(ReleaseVehicleRequest) returns (Vehicle) {}
 }
 

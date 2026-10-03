@@ -61,6 +61,7 @@
     "@temporalio/worker": "^1.18.1",
     "@temporalio/workflow": "^1.18.1",
     "drizzle-orm": "^0.45.0",
+    "jose": "^6.2.3",
     "postgres": "^3.4.0"
   },
   "devDependencies": {

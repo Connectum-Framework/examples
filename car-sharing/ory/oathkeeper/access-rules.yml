@@ -4,9 +4,11 @@
 # externally-reachable TripService RPCs (StartTrip, GetTrip). RPC calls are HTTP
 # POST for both the gRPC and the Connect protocol, so `methods: [POST]`.
 #
-# The internal RPCs RecordTrip/EndTrip (method_auth { public: true }) are NOT
-# exposed at the edge — the Temporal worker reaches trips on the internal network
-# directly, never through Oathkeeper — so they are intentionally absent here.
+# The internal RPCs RecordTrip/EndTrip (method_auth { internal: true }, worker
+# role only) are NOT exposed at the edge — the Temporal worker reaches trips on
+# the internal network directly with its own signed service token, never through
+# Oathkeeper — so they are intentionally absent here. (Even if routed, a user's
+# JWT would not open them: internal methods accept only a service token.)
 
 - id: "trips:edge"
   description: "Authenticated car-sharing edge: validate the Kratos session and mint an RS256 JWT for the trips gateway."

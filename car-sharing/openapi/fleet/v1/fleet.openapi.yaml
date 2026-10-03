@@ -7,7 +7,10 @@ paths:
       tags:
         - fleet.v1.FleetService
       summary: GetVehicle
-      description: GetVehicle returns a vehicle by id, or NOT_FOUND if unknown.
+      description: |-
+        GetVehicle returns a vehicle by id, or NOT_FOUND if unknown. Callable by
+         trips only — the StartTrip availability pre-check; no worker activity
+         reads a single vehicle.
       operationId: fleet.v1.FleetService.GetVehicle
       parameters:
         - name: Connect-Protocol-Version
@@ -38,8 +41,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - trips
   /fleet.v1.FleetService/ListVehicles: {}
   /fleet.v1.FleetService/ReleaseVehicle:
     post:
@@ -50,7 +56,7 @@ paths:
         ReleaseVehicle returns a vehicle to the available pool (available=true,
          status="available") and returns it. NOT_FOUND if the id is unknown.
          FAILED_PRECONDITION if the vehicle is in maintenance (cannot be released
-         back into service from the fleet API).
+         back into service from the fleet API). Worker only (the service default).
       operationId: fleet.v1.FleetService.ReleaseVehicle
       parameters:
         - name: Connect-Protocol-Version
@@ -81,8 +87,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
   /fleet.v1.FleetService/ReserveVehicle:
     post:
       tags:
@@ -92,7 +101,7 @@ paths:
         ReserveVehicle marks a vehicle reserved (available=false,
          status="reserved") and returns it. NOT_FOUND if the id is unknown;
          FAILED_PRECONDITION if the vehicle is already reserved or in maintenance
-         (not currently available).
+         (not currently available). Worker only (the service default).
       operationId: fleet.v1.FleetService.ReserveVehicle
       parameters:
         - name: Connect-Protocol-Version
@@ -123,8 +132,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
 components:
   schemas:
     connect-protocol-version:
@@ -278,6 +290,16 @@ components:
         id:
           type: string
           title: id
+        holderId:
+          type: string
+          title: holder_id
+          description: >-
+            Reservation holder — the trip/workflow id acquiring the lock. Makes
+            reserve
+             idempotent across Temporal retries: the same holder re-reserving its own
+             vehicle succeeds (returns the vehicle), while a held vehicle with a
+             different holder is FAILED_PRECONDITION. Empty for a non-saga caller, which
+             is then treated as having no holder (a held vehicle is always a conflict).
       title: ReserveVehicleRequest
       additionalProperties: false
     fleet.v1.Vehicle:
@@ -312,27 +334,35 @@ components:
       title: Vehicle
       additionalProperties: false
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Connectum JWT auth (createJwtAuthInterceptor / proto authz).
-        Required for every non-public method.
+    internalToken:
+      type: apiKey
+      in: header
+      name: x-internal-token
+      description: Service-to-service only. A short-lived RS256 JWT the CALLING
+        SERVICE signs with its own key (iss = the service, aud =
+        car-sharing-internal, roles = [the service]); verified against that
+        service's JWKS. End-user JWTs are not accepted.
+        x-connectum-required-roles names the services allowed to call.
 security: []
 tags:
   - name: fleet.v1.FleetService
     description: >-
       FleetService is the vehicle system of record (a leaf service).
 
-       It is an INTERNAL service: it is reached only by the trip handler via a
-       cross-service ctx.call, never by external clients. The service-level
-       `public: true` option marks every RPC as public, so the gateway-facing JWT
-       auth and proto authz interceptors skip it. An internal ctx.call carries no
-       Authorization header (Connectum does not auto-propagate inbound headers), so
-       without this annotation an in-process call from the trip handler would be
-       rejected as unauthenticated by the same interceptor chain that protects the
-       edge. In production the network boundary is enforced by Istio mTLS + an
-       AuthorizationPolicy that only admits the trips ServiceAccount (see istio/).
+       It is an INTERNAL service: never called by external clients, only by other
+       services of this app — the trip handler's availability pre-check (a
+       cross-service ctx.call to GetVehicle) and the Temporal worker's activities
+       (ReserveVehicle / ReleaseVehicle). `service_auth { internal: true }` makes
+       every RPC skip end-user (JWT) authentication but require a service token
+       instead: the caller signs a short-lived JWT with its own key and sends it in
+       `x-internal-token`; the server verifies it against that caller's published
+       JWKS (createInternalAuthInterceptor + signedTokenTrust). A request without a
+       valid token is UNAUTHENTICATED, whoever sends it.
+
+       Which service may call what is least privilege via `requires { roles }` (the
+       verified token's `roles` claim, any-of): mutations default to the worker,
+       the only service that reserves and releases vehicles; reads are opened per
+       method below.
 
        Persistence (Phase 1): the fleet is the only service backed by a real
        database — Drizzle ORM over Postgres (postgres.js). Tests inject a PGlite

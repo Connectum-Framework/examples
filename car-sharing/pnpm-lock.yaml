@@ -63,6 +63,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.0
         version: 0.45.2(@electric-sql/pglite@0.5.3)(@opentelemetry/api@1.9.1)(postgres@3.4.9)
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       postgres:
         specifier: ^3.4.0
         version: 3.4.9

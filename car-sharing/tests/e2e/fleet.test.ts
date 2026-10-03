@@ -9,8 +9,10 @@
  * not the db directly. (Phase 4 made `allowHTTP1` an opt-in for the Oathkeeper
  * Connect/HTTP1 edge; the gRPC/streaming path here is unaffected by that default.)
  *
- * FleetService is `public` (see fleet.proto), so these calls carry no token,
- * mirroring how the trip handler reaches it via internal `ctx.call`.
+ * FleetService is `internal` (see fleet.proto): every call carries a service
+ * token, exactly as its real callers send one. Reads go out signed as `trips`
+ * (the StartTrip pre-check's identity), reserve/release signed as `worker` (the
+ * saga activities' identity), each the role proto grants for that RPC.
  *
  * Covered:
  *  - GetVehicle: point read returns the persisted Vehicle (incl. status +
@@ -23,6 +25,9 @@
  *    → NOT_FOUND.
  *  - ReleaseVehicle: returns a reserved vehicle to the pool; maintenance →
  *    FAILED_PRECONDITION; unknown id → NOT_FOUND.
+ *  - Least privilege per RPC: a call with no token is UNAUTHENTICATED; a valid
+ *    token from a service the RPC does not list is PERMISSION_DENIED (trips
+ *    cannot reserve, the worker cannot read).
  *
  * Reserve/Release mutate shared rows, so the db is re-seeded before each test.
  */
@@ -40,6 +45,8 @@ import { buildServer } from "#server.ts";
 import type { Db } from "#db/client.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb, reseed } from "../helpers/db.ts";
+import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
+import { signedClient, startInternalAuth } from "../helpers/internalAuth.ts";
 
 /** Drain a server-streaming response into an array. */
 async function collect(stream: AsyncIterable<Vehicle>): Promise<Vehicle[]> {
@@ -51,16 +58,24 @@ async function collect(stream: AsyncIterable<Vehicle>): Promise<Vehicle[]> {
 describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", () => {
     let server: Server;
     let db: Db;
-    let fleet: Client<typeof FleetService>;
+    let internalAuth: InternalAuthFixture;
+    /** Signed as `trips` — the identity proto grants the fleet reads to. */
+    let reader: Client<typeof FleetService>;
+    /** Signed as `worker` — the identity proto grants reserve/release to. */
+    let writer: Client<typeof FleetService>;
+    /** No service token at all. */
+    let anonymous: Client<typeof FleetService>;
 
     before(async () => {
         const topology = resolveTopology("*");
         db = await makeTestDb();
-        server = buildServer({ port: 0, topology, db });
+        internalAuth = await startInternalAuth();
+        server = buildServer({ port: 0, topology, db, internalSigner: internalAuth.trips, internalIssuers: internalAuth.issuers });
         await server.start();
-        const port = server.address?.port ?? 0;
-        // Public service → no Authorization header needed.
-        fleet = createClient(FleetService, createGrpcTransport({ baseUrl: `http://localhost:${port}` }));
+        const baseUrl = `http://localhost:${server.address?.port ?? 0}`;
+        reader = signedClient(FleetService, baseUrl, internalAuth.trips);
+        writer = signedClient(FleetService, baseUrl, internalAuth.worker);
+        anonymous = createClient(FleetService, createGrpcTransport({ baseUrl }));
     });
 
     beforeEach(async () => {
@@ -71,10 +86,11 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
     after(async () => {
         if (server.state === "running") await server.stop();
+        await internalAuth.close();
     });
 
     it("GetVehicle returns the persisted vehicle with status and location", async () => {
-        const res = await fleet.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
+        const res = await reader.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
         assert.equal(res.vehicle?.id, "v-001");
         assert.equal(res.vehicle?.model, "Tesla Model 3");
         assert.equal(res.vehicle?.available, true);
@@ -85,13 +101,13 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
     it("GetVehicle on an unknown id is NOT_FOUND", async () => {
         await assert.rejects(
-            fleet.getVehicle(create(GetVehicleRequestSchema, { id: "ghost" })),
+            reader.getVehicle(create(GetVehicleRequestSchema, { id: "ghost" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
         );
     });
 
     it("ListVehicles streams every seeded vehicle in id order (no filter)", async () => {
-        const all = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, {})));
+        const all = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, {})));
         assert.equal(all.length, 7);
         assert.deepEqual(
             all.map((v) => v.id),
@@ -101,7 +117,7 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
     it("ListVehicles paginates with page_size + page_token (cursor over the stream)", async () => {
         // Page 1 — first three by id.
-        const page1 = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3 })));
+        const page1 = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3 })));
         assert.deepEqual(
             page1.map((v) => v.id),
             ["v-001", "v-002", "v-003"],
@@ -109,7 +125,7 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
         // Page 2 — cursor = last streamed id of page 1.
         const cursor = page1[page1.length - 1]?.id ?? "";
-        const page2 = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3, pageToken: cursor })));
+        const page2 = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3, pageToken: cursor })));
         assert.deepEqual(
             page2.map((v) => v.id),
             ["v-004", "v-005", "v-006"],
@@ -117,7 +133,7 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
         // Page 3 — the remainder (fewer than page_size).
         const cursor2 = page2[page2.length - 1]?.id ?? "";
-        const page3 = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3, pageToken: cursor2 })));
+        const page3 = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 3, pageToken: cursor2 })));
         assert.deepEqual(
             page3.map((v) => v.id),
             ["v-007"],
@@ -125,7 +141,7 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
     });
 
     it("ListVehicles with available_only excludes reserved and maintenance vehicles", async () => {
-        const available = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true })));
+        const available = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true })));
         // Seeds: v-003 is maintenance, v-006 is reserved → both excluded.
         assert.deepEqual(
             available.map((v) => v.id),
@@ -136,14 +152,14 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
     it("ListVehicles combines available_only with cursor pagination", async () => {
         // available seeds in id order: v-001, v-002, v-004, v-005, v-007.
-        const page1 = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true, pageSize: 2 })));
+        const page1 = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true, pageSize: 2 })));
         assert.deepEqual(
             page1.map((v) => v.id),
             ["v-001", "v-002"],
         );
 
         const cursor = page1[page1.length - 1]?.id ?? "";
-        const page2 = await collect(fleet.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true, pageSize: 2, pageToken: cursor })));
+        const page2 = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { availableOnly: true, pageSize: 2, pageToken: cursor })));
         // The cursor skips past v-003 (maintenance) — the filter + cursor compose.
         assert.deepEqual(
             page2.map((v) => v.id),
@@ -153,42 +169,42 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
     });
 
     it("ReserveVehicle flips an available vehicle to reserved", async () => {
-        const reserved = await fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
+        const reserved = await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
         assert.equal(reserved.id, "v-001");
         assert.equal(reserved.available, false);
         assert.equal(reserved.status, "reserved");
 
         // The mutation is persisted — a subsequent read reflects it.
-        const after = await fleet.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
+        const after = await reader.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
         assert.equal(after.vehicle?.available, false);
         assert.equal(after.vehicle?.status, "reserved");
     });
 
     it("ReserveVehicle on an already-reserved vehicle is FAILED_PRECONDITION", async () => {
-        await fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
         await assert.rejects(
-            fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" })),
+            writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
         );
     });
 
     it("ReserveVehicle on a maintenance vehicle is FAILED_PRECONDITION", async () => {
         await assert.rejects(
-            fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-003" })),
+            writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-003" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
         );
     });
 
     it("ReserveVehicle on an unknown id is NOT_FOUND", async () => {
         await assert.rejects(
-            fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "ghost" })),
+            writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "ghost" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
         );
     });
 
     it("ReleaseVehicle returns a reserved vehicle to the available pool", async () => {
-        await fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
-        const released = await fleet.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-001" }));
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" }));
+        const released = await writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-001" }));
         assert.equal(released.id, "v-001");
         assert.equal(released.available, true);
         assert.equal(released.status, "available");
@@ -196,15 +212,43 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
 
     it("ReleaseVehicle on a maintenance vehicle is FAILED_PRECONDITION", async () => {
         await assert.rejects(
-            fleet.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-003" })),
+            writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-003" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
         );
     });
 
     it("ReleaseVehicle on an unknown id is NOT_FOUND", async () => {
         await assert.rejects(
-            fleet.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "ghost" })),
+            writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "ghost" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
+        );
+    });
+
+    it("a fleet call with NO service token is Unauthenticated", async () => {
+        await assert.rejects(
+            anonymous.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("trips may read but NOT reserve: its valid token on ReserveVehicle is PermissionDenied and nothing changes", async () => {
+        const tripsSigned = signedClient(FleetService, `http://localhost:${server.address?.port ?? 0}`, internalAuth.trips);
+        await assert.rejects(
+            tripsSigned.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+        const after = await reader.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
+        assert.equal(after.vehicle?.status, "available");
+    });
+
+    it("the worker may reserve but NOT read: its valid token on ListVehicles and GetVehicle is PermissionDenied", async () => {
+        await assert.rejects(
+            collect(writer.listVehicles(create(ListVehiclesRequestSchema, {}))),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+        await assert.rejects(
+            writer.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
         );
     });
 });

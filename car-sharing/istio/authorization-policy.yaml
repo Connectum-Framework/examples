@@ -1,11 +1,13 @@
-# Authorization policies — the network-level trust boundary that backs the
-# application-level `public` annotation on fleet/billing.
+# Authorization policies — the network layer of the internal trust boundary.
 #
-# fleet and billing are marked `public` in proto (they skip JWT auth), so the
-# ONLY thing stopping arbitrary callers is the mesh: these policies admit
-# fleet/billing traffic exclusively from the trips ServiceAccount principal.
-# trips itself admits ingress only from the Istio ingress gateway; external auth
-# (JWT) is then enforced inside the trips process.
+# fleet and billing are `internal` in proto: the application already rejects any
+# call without a valid per-service signed token (`x-internal-token`, verified
+# against the caller's JWKS) and checks the caller's role per RPC. These mesh
+# policies are the second, independent layer: they admit fleet/billing traffic
+# only from the trips ServiceAccount principal, so a pod that is not trips
+# cannot even reach them. trips itself admits ingress only from the Istio
+# ingress gateway (external auth — the end-user JWT — is then enforced inside
+# the trips process), plus the narrow JWKS rule below.
 ---
 # fleet: only the trips ServiceAccount may call it.
 apiVersion: security.istio.io/v1
@@ -41,8 +43,12 @@ spec:
             principals:
               - "cluster.local/ns/car-sharing/sa/trips"
 ---
-# trips: admit traffic only from the Istio ingress gateway. The gateway is the
-# single external entry point; the trips process then verifies the JWT.
+# trips: admit traffic from the Istio ingress gateway (the single external
+# entry point; the trips process then verifies the end-user JWT), and let fleet
+# and billing fetch trips' service-token public key. That second rule is as
+# narrow as the fetch itself: only those two ServiceAccounts, only GET, only
+# the JWKS path, only the JWKS container port — it opens none of trips' RPCs.
+# (`paths`/`methods` match only because the Service declares the port as HTTP.)
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -58,3 +64,13 @@ spec:
         - source:
             principals:
               - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/car-sharing/sa/fleet"
+              - "cluster.local/ns/car-sharing/sa/billing"
+      to:
+        - operation:
+            ports: ["9101"]
+            methods: ["GET"]
+            paths: ["/.well-known/jwks.json"]

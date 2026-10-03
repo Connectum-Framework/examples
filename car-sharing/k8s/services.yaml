@@ -22,6 +22,14 @@ spec:
       targetPort: grpc
       protocol: TCP
       appProtocol: grpc
+    # trips' service-token public key (JWKS), fetched by fleet to verify the
+    # pre-check ctx.call. Declared as HTTP so the Istio AuthorizationPolicy
+    # can match it by path and method (a TCP port would never match those).
+    - name: http-jwks
+      port: 9101
+      targetPort: jwks
+      protocol: TCP
+      appProtocol: http
 ---
 apiVersion: v1
 kind: Service

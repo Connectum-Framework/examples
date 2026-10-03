@@ -6,14 +6,15 @@ import "connectum/auth/v1/options.proto";
 
 // BillingService keeps a trip's billing tab and charges (a leaf service).
 //
-// Like FleetService, it is INTERNAL: it is reached only by the trip handler's
-// ctx.call (OpenTab pre-Phase-2) and, in Phase 2, by the Temporal worker's
+// Like FleetService, it is INTERNAL: its only caller is the Temporal worker's
 // activities (OpenTab / AddCharge / Settle and their compensations VoidTab /
-// RefundCharge). It is marked `service_auth { public: true }`, so the
-// gateway-facing JWT auth and proto authz interceptors skip every RPC: the
-// worker's ConnectRPC clients carry no Authorization header, exactly like the
-// in-process ctx.call did. The trust boundary is the mesh (Istio mTLS +
-// AuthorizationPolicy; see istio/).
+// RefundCharge). `service_auth { internal: true }` skips end-user (JWT)
+// authentication but requires a service token signed by the caller's own key
+// (header `x-internal-token`, verified against the caller's JWKS); a request
+// without one is UNAUTHENTICATED. `default_requires { roles: ["worker"] }`
+// then admits only the worker: a token from any other service — trips
+// included — is PERMISSION_DENIED, so no edge-facing process can open, charge
+// or settle a tab.
 //
 // Persistence stays in-memory in Phase 2 — the DURABLE billing state lives in
 // the Temporal workflow history. The in-memory ledger only needs to record
@@ -21,7 +22,10 @@ import "connectum/auth/v1/options.proto";
 // idempotent: VoidTab on an already-void tab and RefundCharge on an
 // already-refunded charge are no-op successes.
 service BillingService {
-  option (connectum.auth.v1.service_auth) = { public: true };
+  option (connectum.auth.v1.service_auth) = {
+    internal: true
+    default_requires: { roles: ["worker"] }
+  };
 
   // OpenTab opens a billing tab for the given trip and returns it. Idempotent
   // by trip_id: re-opening an existing tab returns the same tab.

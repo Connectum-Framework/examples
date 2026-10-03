@@ -24,7 +24,15 @@
  *    `jose.createRemoteJWKSet`). A StartTrip/GetTrip with NO / an INVALID /
  *    wrong-issuer / wrong-audience / EXPIRED token is rejected as
  *    `Code.Unauthenticated` by the JWT interceptor (before any pre-check).
- *  - FleetService is `public`: a direct in-process call needs no token.
+ *  - Service-to-service auth: fleet, billing and RecordTrip/EndTrip are
+ *    `internal`. They accept only a service token (`x-internal-token`) signed by
+ *    the calling service's own key and verified against that service's JWKS.
+ *    The suite runs a real `trips` and `worker` signer, each with its own
+ *    in-process JWKS endpoint, and asserts: a worker-signed call succeeds; no
+ *    token, a token signed by a key the issuer never published, or an end
+ *    user's JWT is UNAUTHENTICATED; a valid trips token on a worker-only method
+ *    is PERMISSION_DENIED; and StartTrip's in-process pre-check (`ctx.call` to
+ *    FleetService/GetVehicle) passes because the monolith signs it as trips.
  *
  * The happy-path billing side effects (openTab → addCharge → settle and
  * compensation) are now owned by the Temporal saga and are asserted in the
@@ -49,14 +57,21 @@ import type { TestJwksServer } from "@connectum/auth/testing";
 import { createTestJwtRS256, generateRsaTestKeypair, startTestJwksServer } from "@connectum/auth/testing";
 import type { Server } from "@connectum/core";
 import { QueryNotRegisteredError } from "@temporalio/client";
+import { generateKeyPair, SignJWT } from "jose";
 import { JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
-import { BillingService } from "#gen/billing/v1/billing_pb.ts";
+import { BillingService, OpenTabRequestSchema, SettleRequestSchema } from "#gen/billing/v1/billing_pb.ts";
 import { FleetService } from "#gen/fleet/v1/fleet_pb.ts";
-import { GetTripRequestSchema, StartTripRequestSchema, TripService } from "#gen/trips/v1/trips_pb.ts";
+import { GetTripRequestSchema, RecordTripRequestSchema, StartTripRequestSchema, TripService } from "#gen/trips/v1/trips_pb.ts";
+import { INTERNAL_AUDIENCE, INTERNAL_TOKEN_HEADER, InternalIdentity, internalIssuer } from "#internalAuth.ts";
 import { buildServer } from "#server.ts";
 import type { TripWorkflowClient, TripWorkflowHandle } from "#services/tripService.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb } from "../helpers/db.ts";
+import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
+import { signedClient, startInternalAuth } from "../helpers/internalAuth.ts";
+
+/** Issuer of the test-held service key used to probe the `exp` / `aud` checks. */
+const CLAIMS_ISSUER = "claims-probe";
 
 /** A recorded `start` call (workflow type + the workflow id used). */
 interface StartCall {
@@ -118,6 +133,13 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
 describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Temporal)", () => {
     let server: Server;
     let jwks: TestJwksServer;
+    let internalAuth: InternalAuthFixture;
+    // A third trusted service issuer whose private key the test holds, so it
+    // can mint tokens with a chosen `exp` / `aud`; the real signers only ever
+    // mint the correct claims.
+    let claimsJwks: TestJwksServer;
+    let mintServiceToken: (options: { audience?: string; ttl?: string }) => Promise<string>;
+    let baseUrl: string;
     let trips: Client<typeof TripService>;
     let userToken: string;
     // The RSA signing key behind the published JWKS — used to mint every token
@@ -155,17 +177,35 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
                 { kid: keypair.kid, issuer, audience, expiresIn: ttl },
             );
 
-        server = buildServer({ port: 0, topology, jwksUri: jwks.url, db, workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour) });
+        // Service identities: the monolith signs its own pre-check ctx.call as
+        // trips, and trusts exactly the trips and worker JWKS endpoints.
+        internalAuth = await startInternalAuth();
+        const claimsKeypair = await generateRsaTestKeypair();
+        claimsJwks = await startTestJwksServer(claimsKeypair.publicJwk);
+        mintServiceToken = ({ audience = INTERNAL_AUDIENCE, ttl = "60s" }) =>
+            createTestJwtRS256(claimsKeypair.privateKey, { roles: [InternalIdentity.worker] }, { kid: claimsKeypair.kid, issuer: CLAIMS_ISSUER, audience, expiresIn: ttl });
+
+        server = buildServer({
+            port: 0,
+            topology,
+            jwksUri: jwks.url,
+            db,
+            workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour),
+            internalSigner: internalAuth.trips,
+            internalIssuers: { ...internalAuth.issuers, [CLAIMS_ISSUER]: internalIssuer(claimsJwks.url) },
+        });
         await server.start();
-        const port = server.address?.port ?? 0;
+        baseUrl = `http://localhost:${server.address?.port ?? 0}`;
 
         userToken = await mint({ sub: "user-42", name: "Dana", roles: ["rider"] });
-        trips = createClient(TripService, createGrpcTransport({ baseUrl: `http://localhost:${port}` }));
+        trips = createClient(TripService, createGrpcTransport({ baseUrl }));
     });
 
     after(async () => {
         if (server.state === "running") await server.stop();
         await jwks.close();
+        await internalAuth.close();
+        await claimsJwks.close();
     });
 
     it("mounts all three services from the generated catalog (monolith)", () => {
@@ -175,6 +215,11 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     });
 
     it("StartTrip (authenticated): pre-checks fleet availability then STARTS the workflow", async () => {
+        // The pre-check is an in-process ctx.call to the INTERNAL
+        // FleetService/GetVehicle. It only gets through because the monolith
+        // signs it as trips via outgoingInterceptors — the in-process transport
+        // is not trusted by itself — so this is also the internal-auth proof of
+        // the local ctx.call path.
         const before = starts.length;
 
         const res = await trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
@@ -331,13 +376,116 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         assert.equal(starts.length, before);
     });
 
-    it("internal FleetService is public: a direct in-process GetVehicle needs no token", async () => {
-        // Proves fleet/billing are reachable WITHOUT auth — the "services trust
-        // the gateway" model. localClient dispatches in-process through the same
-        // interceptor chain; the public annotation lets it through.
+    it("internal auth: a worker-signed call to worker-only methods succeeds", async () => {
+        const billing = signedClient(BillingService, baseUrl, internalAuth.worker);
+        const opened = await billing.openTab(create(OpenTabRequestSchema, { tripId: "trip-internal-ok" }));
+        assert.equal(opened.tab?.open, true);
+
+        const tripsAsWorker = signedClient(TripService, baseUrl, internalAuth.worker);
+        const recorded = await tripsAsWorker.recordTrip(create(RecordTripRequestSchema, { userId: "user-42", vehicleId: "v-001", tripId: "trip-internal-ok" }));
+        assert.equal(recorded.trip?.status, "STARTED");
+    });
+
+    it("internal auth: a call with NO x-internal-token is Unauthenticated", async () => {
+        const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
+        await assert.rejects(
+            billing.settle(create(SettleRequestSchema, { tripId: "trip-internal-ok" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+        await assert.rejects(
+            trips.recordTrip(create(RecordTripRequestSchema, { userId: "user-42", vehicleId: "v-001", tripId: "trip-anon" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("internal auth: an in-process localClient call carries no token and is Unauthenticated", async () => {
+        // In-process dispatch runs the same server chain; being local is not
+        // proof of trust, so an unsigned local call is rejected like a remote one.
         const fleet = server.localClient(FleetService);
-        const res = await fleet.getVehicle({ id: "v-002" });
-        assert.equal(res.vehicle?.model, "Renault Zoe");
-        assert.equal(res.vehicle?.available, true);
+        await assert.rejects(
+            fleet.getVehicle({ id: "v-002" }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("internal auth: a token claiming the worker issuer but signed with an unpublished key is Unauthenticated", async () => {
+        // Same issuer, audience, roles AND kid as the real worker — only the key
+        // differs — so the rejection can come solely from the signature check
+        // against the worker's published JWKS.
+        const { privateKey } = await generateKeyPair("RS256");
+        const forged = await new SignJWT({ roles: [InternalIdentity.worker] })
+            .setProtectedHeader({ alg: "RS256", kid: internalAuth.worker.kid, typ: "JWT" })
+            .setIssuer(InternalIdentity.worker)
+            .setSubject(InternalIdentity.worker)
+            .setAudience(INTERNAL_AUDIENCE)
+            .setIssuedAt()
+            .setExpirationTime("60s")
+            .sign(privateKey);
+        const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
+        await assert.rejects(
+            billing.settle(create(SettleRequestSchema, { tripId: "trip-internal-ok" }), { headers: { [INTERNAL_TOKEN_HEADER]: forged } }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("internal auth: a token claiming roles its issuer does not have is PermissionDenied", async () => {
+        // A trusted issuer that is NOT the worker signs a valid token asserting
+        // `roles: ["worker"]`. The token authenticates (its key is trusted), but
+        // the role is taken from the verified issuer, not from the claim, so a
+        // worker-only method stays closed. If roles were read from the token,
+        // any trusted service key could impersonate the worker this way.
+        const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
+        await assert.rejects(
+            billing.openTab(create(OpenTabRequestSchema, { tripId: "trip-claims" }), { headers: { [INTERNAL_TOKEN_HEADER]: await mintServiceToken({}) } }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+    });
+
+    it("internal auth: a trusted issuer's token authenticates, but the same token EXPIRED or for another AUDIENCE is Unauthenticated", async () => {
+        const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
+        const openTabWith = (token: string) =>
+            billing.openTab(create(OpenTabRequestSchema, { tripId: "trip-claims" }), { headers: { [INTERNAL_TOKEN_HEADER]: token } });
+
+        // Control: with correct claims this key IS authenticated — the call gets
+        // past authentication and stops at authorization (the test issuer is not
+        // the worker) — so the two Unauthenticated results below can only come
+        // from the `exp` and `aud` checks.
+        await assert.rejects(openTabWith(await mintServiceToken({})), (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied);
+
+        await assert.rejects(openTabWith(await mintServiceToken({ ttl: "-1m" })), (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated);
+        await assert.rejects(
+            openTabWith(await mintServiceToken({ audience: "car-sharing-trips" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("internal auth: an end user's valid JWT does not open an internal method (Unauthenticated)", async () => {
+        await assert.rejects(
+            trips.recordTrip(create(RecordTripRequestSchema, { userId: "user-42", vehicleId: "v-001", tripId: "trip-user" }), {
+                headers: { Authorization: `Bearer ${userToken}` },
+            }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+        );
+    });
+
+    it("internal auth: a valid trips token on a worker-only method is PermissionDenied", async () => {
+        // Authentic token, wrong service: proto `requires { roles: ["worker"] }`
+        // keeps the edge-facing trips process away from billing and the ledger.
+        const billingAsTrips = signedClient(BillingService, baseUrl, internalAuth.trips);
+        await assert.rejects(
+            billingAsTrips.settle(create(SettleRequestSchema, { tripId: "trip-internal-ok" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+        const tripsAsTrips = signedClient(TripService, baseUrl, internalAuth.trips);
+        await assert.rejects(
+            tripsAsTrips.recordTrip(create(RecordTripRequestSchema, { userId: "user-42", vehicleId: "v-001", tripId: "trip-wrong-role" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+    });
+
+    it("a role hosting TripService refuses to build without the trips signer", () => {
+        // Without it every StartTrip pre-check would fail as Unauthenticated at
+        // runtime; failing at construction names the missing wiring instead.
+        assert.throws(() => buildServer({ port: 0, topology: resolveTopology("*"), internalIssuers: internalAuth.issuers, workflowClient: null }), /internalSigner/);
     });
 });

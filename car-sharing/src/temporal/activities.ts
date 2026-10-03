@@ -5,7 +5,9 @@
  * sandbox), so they may freely create ConnectRPC clients and do I/O. Each
  * activity is one RPC against a role service over the network (`*_ADDR`), made
  * through the catalog client as `client().call("pkg.Service/Method", request)`
- * — the same typed call a handler makes with `ctx.call`. The
+ * — the same typed call a handler makes with `ctx.call`. The client is
+ * injected by the worker (`setServiceClient`) and signs every request with the
+ * worker's service token, because every method called here is `internal`. The
  * workflow (`workflows.ts`) only `proxyActivities` these and never touches a
  * client itself.
  *
@@ -35,7 +37,6 @@ import { TripCompletedSchema } from "#gen/trips/v1/trip_events_pb.ts";
 import { EndTripRequestSchema, RecordTripRequestSchema } from "#gen/trips/v1/trips_pb.ts";
 import type { ManagedBus } from "#events/eventBus.ts";
 import { buildPublisherBus } from "#events/eventBus.ts";
-import { createServiceClient } from "#temporal/clients.ts";
 import { TripStatus } from "#temporal/tripStatus.ts";
 
 /**
@@ -53,13 +54,31 @@ const VEHICLE_UNAVAILABLE = "VehicleUnavailable" as const;
 /** Charge rate in minor units (cents) per second of trip — demo pricing. */
 const CENTS_PER_SECOND = 5;
 
-/** Lazily-built shared catalog client (one transport per service per worker process). */
+/** The shared catalog client (one transport per service per worker process). */
 let sharedClient: CatalogClient | undefined;
 
-/** Get (or build once) the worker's catalog client. */
+/**
+ * Inject the catalog client the activities call through. The worker passes one
+ * signed with its own service identity (`createServiceClient({ signer })`);
+ * tests pass one signed with a test signer.
+ *
+ * @param serviceClient - The client, or `undefined` to reset (tests).
+ */
+export function setServiceClient(serviceClient: CatalogClient | undefined): void {
+    sharedClient = serviceClient;
+}
+
+/**
+ * Get the injected catalog client.
+ *
+ * There is deliberately no lazy fallback: every RPC the activities make is
+ * `internal`, so a client built without the worker's signing key would be
+ * rejected as Unauthenticated on every call. Failing here names the actual
+ * mistake instead.
+ */
 function client(): CatalogClient {
     if (sharedClient === undefined) {
-        sharedClient = createServiceClient();
+        throw new Error("activities: no service client injected — call setServiceClient(createServiceClient({ signer })) before the worker runs.");
     }
     return sharedClient;
 }
@@ -68,7 +87,7 @@ function client(): CatalogClient {
  * The publish-only EventBus used by `publishTripCompleted` to broadcast
  * `TripCompleted`. Injected once (the worker builds + STARTS it before
  * `worker.run()`; tests inject a `MemoryAdapter`-backed bus), and lazily built
- * from `NATS_URL` if never injected — the same seam as {@link client}.
+ * from `NATS_URL` if never injected.
  */
 let publisherBus: ManagedBus | undefined;
 

@@ -16,16 +16,19 @@ import "connectum/auth/v1/options.proto";
 // issues a Temporal Workflow Query.
 //
 // RecordTrip and EndTrip are INTERNAL RPCs the workflow's activities call from
-// the (JWT-less) Temporal worker. They own the in-memory trip ledger.
+// the Temporal worker. They own the in-memory trip ledger.
 //
-// Authorization is declared in proto and enforced by the gateway interceptors:
-//   - service_auth.default_policy = "allow": any AUTHENTICATED caller may invoke
-//     methods that carry no method-level rule (StartTrip, GetTrip) — a valid JWT
-//     is required (no token -> UNAUTHENTICATED) but no particular role.
-//   - method_auth { public: true } on RecordTrip/EndTrip: those two skip both
-//     authn and authz, so the worker's tokenless ConnectRPC client may call
-//     them (mirroring how fleet/billing are service-level public). The real
-//     network trust boundary is the mesh (Istio mTLS + AuthorizationPolicy).
+// Authorization is declared in proto and enforced by the interceptor chain:
+//   - service_auth.default_policy = "allow": any AUTHENTICATED end user may
+//     invoke methods that carry no method-level rule (StartTrip, GetTrip) — a
+//     valid user JWT is required (no token -> UNAUTHENTICATED) but no
+//     particular role.
+//   - method_auth { internal: true, requires { roles: ["worker"] } } on
+//     RecordTrip/EndTrip: a user JWT does not reach them; the caller must
+//     present a service token signed with its own key (`x-internal-token`,
+//     verified against that service's JWKS), and only the worker's token
+//     carries the `worker` role. No token -> UNAUTHENTICATED; another
+//     service's token -> PERMISSION_DENIED.
 service TripService {
   option (connectum.auth.v1.service_auth) = { default_policy: "allow" };
 
@@ -42,17 +45,22 @@ service TripService {
   rpc GetTrip(GetTripRequest) returns (GetTripResponse) {}
 
   // RecordTrip creates the trip ledger row (status STARTED). INTERNAL: called by
-  // the worker's reserve→record activity. Public so the tokenless worker passes
-  // the gateway auth chain.
+  // the worker's reserve→record activity, with the worker's service token.
   rpc RecordTrip(RecordTripRequest) returns (RecordTripResponse) {
-    option (connectum.auth.v1.method_auth) = { public: true };
+    option (connectum.auth.v1.method_auth) = {
+      internal: true
+      requires: { roles: ["worker"] }
+    };
   }
 
   // EndTrip transitions a trip to a terminal status (ENDED on the happy path,
   // CANCELLED as the record-trip compensation). INTERNAL: called by the worker's
-  // activities. Public so the tokenless worker passes the gateway auth chain.
+  // activities, with the worker's service token.
   rpc EndTrip(EndTripRequest) returns (EndTripResponse) {
-    option (connectum.auth.v1.method_auth) = { public: true };
+    option (connectum.auth.v1.method_auth) = {
+      internal: true
+      requires: { roles: ["worker"] }
+    };
   }
 }
 

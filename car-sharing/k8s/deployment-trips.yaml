@@ -2,6 +2,13 @@
 # proto authz. Reaches fleet and billing via `ctx.call` over the mesh (the
 # *_ADDR endpoints in trips-config). This is the only service exposed to
 # external clients (through the Istio ingress gateway / VirtualService).
+#
+# Every trips pod signs its internal calls with the SAME key, mounted from the
+# `trips-internal-signing-key` Secret (create it first — see README "Deploy to
+# Kubernetes + Istio"). One key for all replicas is what lets fleet verify a
+# token from any pod with the single keyset it fetched through the
+# load-balanced `trips` Service, and keeps the `kid` stable across restarts and
+# rollouts. Without the Secret the pod does not start.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,6 +61,11 @@ spec:
             - name: grpc
               containerPort: 5000
               protocol: TCP
+            # JWKS of the key this pod signs its internal calls with
+            # (INTERNAL_JWKS_PORT in trips-config).
+            - name: jwks
+              containerPort: 9101
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: trips-config
@@ -63,6 +75,14 @@ spec:
           # against Oathkeeper's published JWKS. The OATHKEEPER_JWKS_URI /
           # JWT_ISSUER / JWT_AUDIENCE inputs live in trips-config (no Secret).
           # See ory/oathkeeper/README.md for the ext_authz production path.
+          #
+          # The one secret trips does hold is its SERVICE identity: the key it
+          # signs internal calls with (INTERNAL_SIGNING_KEY_FILE in trips-config
+          # points into this read-only mount).
+          volumeMounts:
+            - name: internal-signing-key
+              mountPath: /var/run/secrets/car-sharing/internal-signing-key
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -97,3 +117,14 @@ spec:
               exec:
                 # Let endpoints de-register before SIGTERM.
                 command: ["sh", "-c", "sleep 5"]
+      volumes:
+        # trips' service-token private key. Mode 0440 with the pod's fsGroup
+        # (1000) makes it readable by the app user only; not optional, so a
+        # missing Secret keeps the pod from starting instead of letting it
+        # sign with some other key. The mode is written in decimal (288 =
+        # octal 0440) because YAML 1.2 tools read a leading-zero literal as
+        # decimal 440.
+        - name: internal-signing-key
+          secret:
+            secretName: trips-internal-signing-key
+            defaultMode: 288

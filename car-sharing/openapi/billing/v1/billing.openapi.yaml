@@ -42,8 +42,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
   /billing.v1.BillingService/OpenTab:
     post:
       tags:
@@ -83,8 +86,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
   /billing.v1.BillingService/RefundCharge:
     post:
       tags:
@@ -123,8 +129,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
   /billing.v1.BillingService/Settle:
     post:
       tags:
@@ -163,8 +172,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
   /billing.v1.BillingService/VoidTab:
     post:
       tags:
@@ -204,8 +216,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/connect.error"
-      security: []
-      x-connectum-public: true
+      security:
+        - internalToken: []
+      x-connectum-internal: true
+      x-connectum-required-roles:
+        - worker
 components:
   schemas:
     billing.v1.AddChargeRequest:
@@ -406,26 +421,30 @@ components:
         describes the type of the serialized message, with an additional debug
         field for ConnectRPC error details.
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Connectum JWT auth (createJwtAuthInterceptor / proto authz).
-        Required for every non-public method.
+    internalToken:
+      type: apiKey
+      in: header
+      name: x-internal-token
+      description: Service-to-service only. A short-lived RS256 JWT the CALLING
+        SERVICE signs with its own key (iss = the service, aud =
+        car-sharing-internal, roles = [the service]); verified against that
+        service's JWKS. End-user JWTs are not accepted.
+        x-connectum-required-roles names the services allowed to call.
 security: []
 tags:
   - name: billing.v1.BillingService
     description: >-
       BillingService keeps a trip's billing tab and charges (a leaf service).
 
-       Like FleetService, it is INTERNAL: it is reached only by the trip handler's
-       ctx.call (OpenTab pre-Phase-2) and, in Phase 2, by the Temporal worker's
+       Like FleetService, it is INTERNAL: its only caller is the Temporal worker's
        activities (OpenTab / AddCharge / Settle and their compensations VoidTab /
-       RefundCharge). It is marked `service_auth { public: true }`, so the
-       gateway-facing JWT auth and proto authz interceptors skip every RPC: the
-       worker's ConnectRPC clients carry no Authorization header, exactly like the
-       in-process ctx.call did. The trust boundary is the mesh (Istio mTLS +
-       AuthorizationPolicy; see istio/).
+       RefundCharge). `service_auth { internal: true }` skips end-user (JWT)
+       authentication but requires a service token signed by the caller's own key
+       (header `x-internal-token`, verified against the caller's JWKS); a request
+       without one is UNAUTHENTICATED. `default_requires { roles: ["worker"] }`
+       then admits only the worker: a token from any other service — trips
+       included — is PERMISSION_DENIED, so no edge-facing process can open, charge
+       or settle a tab.
 
        Persistence stays in-memory in Phase 2 — the DURABLE billing state lives in
        the Temporal workflow history. The in-memory ledger only needs to record

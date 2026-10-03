@@ -32,6 +32,18 @@ data:
   OATHKEEPER_JWKS_URI: "http://oathkeeper-api.car-sharing.svc.cluster.local:4456/.well-known/jwks.json"
   JWT_ISSUER: "http://oathkeeper.car-sharing.svc.cluster.local:4455/"
   JWT_AUDIENCE: "car-sharing-trips"
+  # Service-to-service auth. trips signs its pre-check ctx.call to fleet with
+  # the key every trips pod mounts from the `trips-internal-signing-key` Secret
+  # (see deployment-trips.yaml), and serves the public half on this port (the
+  # `http-jwks` port of the trips Service). fleet fetches it from there.
+  INTERNAL_SIGNING_KEY_FILE: "/var/run/secrets/car-sharing/internal-signing-key/trips.pem"
+  INTERNAL_JWKS_PORT: "9101"
+  # trips verifies service tokens only on RecordTrip / EndTrip, which admit the
+  # Temporal worker alone. No worker is deployed in k8s, so the worker issuer
+  # is not trusted; trips' own pod-local JWKS is listed only because a verifier
+  # needs at least one issuer (a trips token fails those methods' role check).
+  INTERNAL_ISSUER_TRIPS_JWKS: "http://localhost:9101/.well-known/jwks.json"
+  INTERNAL_ISSUER_WORKER_JWKS: ""
   # OpenTelemetry
   OTEL_SERVICE_NAME: "trips"
   OTEL_TRACES_EXPORTER: "otlp"
@@ -51,6 +63,11 @@ data:
   PORT: "5000"
   # Leaf service: mounts only FleetService, makes no outbound ctx.call.
   SERVICES: "fleet.v1.FleetService"
+  # Every fleet RPC is `internal`: fleet verifies the caller's signed service
+  # token against that caller's JWKS. Its k8s caller is trips. No Temporal
+  # worker is deployed in k8s, so the worker issuer is not trusted.
+  INTERNAL_ISSUER_TRIPS_JWKS: "http://trips.car-sharing.svc.cluster.local:9101/.well-known/jwks.json"
+  INTERNAL_ISSUER_WORKER_JWKS: ""
   OTEL_SERVICE_NAME: "fleet"
   OTEL_TRACES_EXPORTER: "otlp"
   OTEL_METRICS_EXPORTER: "otlp"
@@ -69,6 +86,12 @@ data:
   PORT: "5000"
   # Leaf service: mounts only BillingService.
   SERVICES: "billing.v1.BillingService"
+  # Every billing RPC is `internal` and admits only the Temporal worker's token.
+  # No worker is deployed in k8s, so nothing can call billing here; the trips
+  # issuer is trusted only because a verifier needs at least one (a trips token
+  # is PERMISSION_DENIED by billing's role check).
+  INTERNAL_ISSUER_TRIPS_JWKS: "http://trips.car-sharing.svc.cluster.local:9101/.well-known/jwks.json"
+  INTERNAL_ISSUER_WORKER_JWKS: ""
   OTEL_SERVICE_NAME: "billing"
   OTEL_TRACES_EXPORTER: "otlp"
   OTEL_METRICS_EXPORTER: "otlp"

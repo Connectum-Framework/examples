@@ -14,7 +14,9 @@
  *    twice (or on already-undone state) is a no-op success.
  *
  * The activities read endpoints from `*_ADDR`; this test points all three at the
- * one in-process monolith before any activity builds its (lazily cached) client.
+ * one in-process monolith and injects a catalog client signed as `worker` —
+ * every RPC an activity makes is `internal` and worker-only in proto, so this
+ * also proves the worker's token is accepted on each of them.
  *
  * @module tests/activity/activities
  */
@@ -28,9 +30,12 @@ import { buildServer } from "#server.ts";
 import { activeChargeCount, chargeCount, openTabCount, resetBilling, tabCount } from "#services/billingService.ts";
 import { resetTrips, tripStatus } from "#services/tripService.ts";
 import * as activities from "#temporal/activities.ts";
+import { createServiceClient } from "#temporal/clients.ts";
 import { TripStatus } from "#temporal/tripStatus.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb, reseed } from "../helpers/db.ts";
+import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
+import { startInternalAuth } from "../helpers/internalAuth.ts";
 
 const env = new MockActivityEnvironment();
 
@@ -42,21 +47,32 @@ function run<A extends unknown[], R>(fn: (...args: A) => Promise<R>, ...args: A)
 describe("Activities: real RPC wiring + compensation idempotency (in-process monolith, PGlite)", () => {
     let server: Server;
     let db: Awaited<ReturnType<typeof makeTestDb>>;
+    let internalAuth: InternalAuthFixture;
 
     before(async () => {
         const topology = resolveTopology("*");
         db = await makeTestDb();
+        internalAuth = await startInternalAuth();
         // Mount trips without a Temporal client (`null`): only RecordTrip/EndTrip
         // are exercised here, which never touch the workflow client.
-        server = buildServer({ port: 0, topology, db, workflowClient: null });
+        server = buildServer({
+            port: 0,
+            topology,
+            db,
+            workflowClient: null,
+            internalSigner: internalAuth.trips,
+            internalIssuers: internalAuth.issuers,
+        });
         await server.start();
         const port = server.address?.port ?? 0;
         const addr = `http://localhost:${port}`;
         // Point every activity client at the one in-process monolith. Set BEFORE
-        // the first activity call, since activities cache their clients lazily.
+        // the first activity call: the client resolves a service's endpoint on
+        // its first call and keeps that transport.
         process.env.FLEET_ADDR = addr;
         process.env.TRIPS_ADDR = addr;
         process.env.BILLING_ADDR = addr;
+        activities.setServiceClient(createServiceClient({ signer: internalAuth.worker }));
     });
 
     beforeEach(async () => {
@@ -66,7 +82,9 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
     });
 
     after(async () => {
+        activities.setServiceClient(undefined);
         if (server.state === "running") await server.stop();
+        await internalAuth.close();
     });
 
     it("forward billing steps open a tab, add a charge, and settle (the moved happy-path side effects)", async () => {
@@ -176,5 +194,17 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         // A late endTrip(ENDED) must not resurrect the trip.
         await run(activities.endTrip, { tripId });
         assert.equal(tripStatus(tripId), TripStatus.CANCELLED);
+    });
+
+    it("an activity with no injected client fails naming the missing setup instead of sending an unsigned call", async () => {
+        // Guards against a quiet fallback to an unsigned client: that would turn
+        // a wiring mistake into a stream of Unauthenticated retries.
+        activities.setServiceClient(undefined);
+        try {
+            await assert.rejects(run(activities.openTab, { tripId: "trip-no-client" }), /no service client injected/);
+            assert.equal(tabCount(), 0);
+        } finally {
+            activities.setServiceClient(createServiceClient({ signer: internalAuth.worker }));
+        }
     });
 });
