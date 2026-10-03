@@ -37,7 +37,15 @@ async function main(): Promise<void> {
     const reactors = selectReactors(process.env.REACTORS);
     const buses = buildReactorBuses({ reactors });
 
-    await Promise.all(buses.map((bus) => bus.start()));
+    // If one reactor fails to start, the others may already hold open NATS
+    // connections, which would keep the process alive half-working. Stop them
+    // all so the process exits and its supervisor can restart it.
+    const started = await Promise.allSettled(buses.map((bus) => bus.start()));
+    const failure = started.find((result) => result.status === "rejected");
+    if (failure !== undefined) {
+        await Promise.allSettled(buses.map((bus) => bus.stop()));
+        throw failure.reason;
+    }
     console.log(`hris reactors ready — ${reactors.join(", ")} on onboarding.employee-onboarded via ${process.env.NATS_URL ?? "nats://localhost:4222"}`);
 
     const stop = async (): Promise<void> => {
