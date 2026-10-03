@@ -69,6 +69,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.0
         version: 0.5.8
+      '@temporalio/common':
+        specifier: ^1.24.0
+        version: 1.24.0
       '@temporalio/testing':
         specifier: ^1.18.1
         version: 1.24.0(esbuild@0.28.2)

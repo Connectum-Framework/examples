@@ -11,6 +11,9 @@
  *    provisionAccess → activateEmployee, then the announceOnboarded broadcast.
  *  - announceOnboarded fails: the run still COMPLETES and nothing is
  *    compensated (the broadcast is outside the saga's rollback scope).
+ *  - a new run records the `announce-employee-onboarded` patch marker, and its
+ *    fetched history replays against the current workflow without error (the
+ *    pre-change history is replayed in `replay.test.ts`).
  *  - activateEmployee fails: the recorded tail unwinds in LIFO order —
  *    revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee.
  *  - provisionAccess fails: its OWN compensation runs too, because it is
@@ -113,6 +116,25 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
 
         assert.equal(result, "COMPLETED");
         assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
+    });
+
+    it("a new run records the announce patch marker and its history replays cleanly against the current workflow", async () => {
+        const workflowId = "wf-replay-new";
+        await runWorkflow(makeMockActivities([]), workflowId);
+        const history = await testEnv.client.workflow.getHandle(workflowId).fetchHistory();
+
+        // The marker is what tells a later replay of THIS run to take the
+        // announce branch; without it the replay would skip the step and
+        // collide with the announceOnboarded activity this history records.
+        const patchIds = (history.events ?? []).flatMap((event) => {
+            const marker = event.markerRecordedEventAttributes;
+            if (marker?.markerName !== "core_patch") return [];
+            const data = marker.details?.["patch-data"]?.payloads?.[0]?.data;
+            return data ? [(JSON.parse(new TextDecoder().decode(data)) as { id: string }).id] : [];
+        });
+        assert.deepEqual(patchIds, ["announce-employee-onboarded"]);
+
+        await assert.doesNotReject(Worker.runReplayHistory({ workflowsPath: WORKFLOWS_PATH }, history, workflowId));
     });
 
     it("activateEmployee fails: compensations run in REVERSE order (revokeAccess → revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {

@@ -278,6 +278,9 @@ tests/
   e2e/onboarding.test.ts             # onboarding edge — pre-check + start (stub Temporal)
   activity/activities.test.ts        # real activities ↔ RPC wiring + compensation idempotency
   workflow/onboardingWorkflow.test.ts# saga orchestration + LIFO compensation (time-skipping)
+  workflow/replay.test.ts            # a run recorded before the EmployeeOnboarded step replays on today's code
+  fixtures/onboarding-before-announce/ # that recorded history + the frozen workflow that produced it
+scripts/record-onboarding-history.ts # re-records the fixture (`pnpm fixtures:onboarding-history`), only to re-baseline
 docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal + reactors)
 Dockerfile                           # one image, role chosen by SERVICES env (worker / reactors = their own command)
 ```
