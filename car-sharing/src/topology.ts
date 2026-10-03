@@ -30,8 +30,12 @@ export const TYPE_NAMES = {
 /** All RPC service typeNames (the monolith set). */
 const ALL_TYPE_NAMES: readonly string[] = [TYPE_NAMES.fleet, TYPE_NAMES.trips, TYPE_NAMES.billing];
 
-/** Per-service endpoint env var, consumed by the remote resolver. */
-const ENDPOINT_ENV: Readonly<Record<string, string>> = {
+/**
+ * Per-service endpoint env var, consumed by the remote resolver here and by the
+ * Temporal worker's catalog client (`temporal/clients.ts`), so both processes
+ * read the same variable for the same service.
+ */
+export const ENDPOINT_ENV: Readonly<Record<string, string>> = {
     [TYPE_NAMES.fleet]: "FLEET_ADDR",
     [TYPE_NAMES.trips]: "TRIPS_ADDR",
     [TYPE_NAMES.billing]: "BILLING_ADDR",

@@ -69,8 +69,9 @@ both). Demo the edge with `curl` (Connect is plain HTTP), not `grpcurl`
 Oathkeeper's RS256 **private** signing keyset is generated at compose-up by a
 one-shot (`oathkeeper credentials generate --alg RS256`) into a shared volume the
 `oathkeeper` service mounts at `/etc/keys/id_token.jwks.json`. Nothing private is
-committed. The dockerless e2e generates its own keypair in-memory (jose,
-`tests/helpers/jwks.ts`), so no key is needed in git there either.
+committed. The dockerless e2e generates its own keypair in-memory
+(`generateRsaTestKeypair` from `@connectum/auth/testing`), so no key is needed in
+git there either.
 
 ## Production (k8s / istio): Oathkeeper as an Istio ext_authz decision service
 

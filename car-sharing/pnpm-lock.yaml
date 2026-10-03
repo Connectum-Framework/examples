@@ -88,9 +88,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.0
         version: 0.31.10
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

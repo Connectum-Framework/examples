@@ -23,6 +23,10 @@
  *    are FORCED onto three buses. On a real broker, distinct groups give
  *    distinct durable consumers → each gets every event = fan-out. A shared
  *    group would load-balance (one reactor steals each event) = queue.
+ *    The reactor buses are built by `createBroadcastSubscribers` from
+ *    `@connectum/events`, which encodes exactly this one-bus-per-reactor rule
+ *    and refuses two reactors with the same group, so an accidental queue
+ *    cannot be wired by copy-paste.
  *
  * The adapter is pluggable: NATS by default (`NATS_URL`), but tests pass ONE
  * shared `MemoryAdapter()` to all four buses so a single publish reaches all
@@ -33,7 +37,7 @@
  * @module events/eventBus
  */
 
-import { createEventBus } from "@connectum/events";
+import { createBroadcastSubscribers, createEventBus } from "@connectum/events";
 import type { EventAdapter, EventBus, EventRoute } from "@connectum/events";
 import type { EventBusLike } from "@connectum/core";
 import { NatsAdapter } from "@connectum/events-nats";
@@ -60,8 +64,8 @@ const NATS_STREAM = "car-sharing";
 
 /**
  * Build the NATS adapter for a process, reading `NATS_URL` (default
- * `nats://localhost:4222`). One adapter instance per bus in the split topology,
- * so each reactor owns an independent broker connection + durable consumer.
+ * `nats://localhost:4222`). One adapter instance per bus, so each reactor owns
+ * an independent broker connection + durable consumer.
  */
 function natsAdapter(): EventAdapter {
     return NatsAdapter({ servers: process.env.NATS_URL ?? "nats://localhost:4222", stream: NATS_STREAM });
@@ -86,19 +90,35 @@ export function buildPublisherBus(options: { readonly adapter?: EventAdapter } =
     });
 }
 
+/** One reactor to wire: its selector (which fixes the consumer group) and its route. */
+export interface ReactorWiring {
+    /** The reactor selector; its consumer group is `REACTOR_GROUP[key]`. */
+    readonly key: ReactorKey;
+    /** The reactor's event route (its `OnTripCompleted` handler). */
+    readonly route: EventRoute;
+}
+
 /**
- * Build ONE reactor bus: a single route subscribed to `trips.completed` (topic
- * from the route's proto option) under its OWN distinct consumer group.
+ * Build the reactor buses via `createBroadcastSubscribers`: one bus per reactor,
+ * each with a single route subscribed to `trips.completed` (topic from the
+ * route's proto option) under its OWN distinct consumer group.
  *
- * @param options.key - The reactor selector, fixing its consumer group.
- * @param options.route - The reactor's event route (its `OnTripCompleted` handler).
+ * A reactor process passes one reactor; the dockerless test passes all three
+ * with a shared `MemoryAdapter()`. The buses are returned NOT started, in the
+ * same order as `options.reactors` (the helper maps the list in order).
+ *
+ * Without an override the NATS adapter is passed as a FACTORY, so the helper
+ * calls it once per reactor and every bus owns its own broker connection and
+ * durable consumer, exactly as one hand-built bus per reactor would.
+ *
+ * @param options.reactors - The reactors to wire; their keys must be distinct
+ *   (a repeated group is rejected, because it would load-balance instead of fan out).
  * @param options.adapter - Adapter override (tests pass a shared `MemoryAdapter()`);
- *   defaults to a NATS adapter from `NATS_URL`.
+ *   defaults to a NATS adapter per bus from `NATS_URL`.
  */
-export function buildReactorBus(options: { readonly key: ReactorKey; readonly route: EventRoute; readonly adapter?: EventAdapter }): ManagedBus {
-    return createEventBus({
-        adapter: options.adapter ?? natsAdapter(),
-        routes: [options.route],
-        group: REACTOR_GROUP[options.key],
+export function buildReactorBuses(options: { readonly reactors: readonly ReactorWiring[]; readonly adapter?: EventAdapter }): ManagedBus[] {
+    return createBroadcastSubscribers({
+        adapter: options.adapter ?? natsAdapter,
+        reactors: options.reactors.map(({ key, route }) => ({ group: REACTOR_GROUP[key], routes: [route] })),
     });
 }

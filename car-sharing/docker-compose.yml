@@ -42,7 +42,7 @@
 # (ALLOW_HTTP1=true) because Oathkeeper's standalone proxy is HTTP, not gRPC. The
 # RS256 signing keyset is GENERATED at up-time into a shared volume (no private
 # key in git). Config only — NOT part of the automated test run (the e2e simulates
-# the mutator with an in-process JWKS server; see tests/helpers/jwks.ts). See
+# the mutator with an in-process JWKS server from @connectum/auth/testing). See
 # ory/oathkeeper/README.md for the flow + the k8s/istio ext_authz production path.
 #
 #   docker compose --profile ory up --build
@@ -285,6 +285,11 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    # The image's HEALTHCHECK probes an HTTP /healthz this process does not
+    # serve (it polls Temporal, it runs no RPC server), so it would always
+    # report unhealthy and fail `docker compose up --wait`.
+    healthcheck:
+      disable: true
     networks:
       - car-sharing
     profiles: ["saga"]
@@ -296,6 +301,9 @@ services:
   # own durable consumer and every reactor receives every `trips.completed` =
   # fan-out. Co-hosting all three buses in one process would change the process
   # count, NOT the fan-out semantics (still three durable consumers).
+  #
+  # A reactor only consumes from NATS and serves no HTTP /healthz, so the
+  # image's HEALTHCHECK is disabled; otherwise it would always report unhealthy.
   reactor-pricing:
     build: .
     command: ["node", "src/reactor.ts"]
@@ -305,6 +313,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+    healthcheck:
+      disable: true
     networks:
       - car-sharing
     profiles: ["saga"]
@@ -318,6 +328,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+    healthcheck:
+      disable: true
     networks:
       - car-sharing
     profiles: ["saga"]
@@ -331,6 +343,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+    healthcheck:
+      disable: true
     networks:
       - car-sharing
     profiles: ["saga"]

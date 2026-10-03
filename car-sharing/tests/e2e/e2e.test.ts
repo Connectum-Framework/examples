@@ -18,7 +18,8 @@
  *    It validates an RS256 JWT (minted at the edge by Ory Oathkeeper from a Kratos
  *    session) against Oathkeeper's published JWKS. The dockerless suite does NOT
  *    run Ory; instead it simulates the mutator with a test RSA keypair + an
- *    in-process JWKS server (`tests/helpers/jwks.ts`) and exercises the SAME
+ *    in-process JWKS server (`generateRsaTestKeypair` / `startTestJwksServer` /
+ *    `createTestJwtRS256` from `@connectum/auth/testing`) and exercises the SAME
  *    production validation branch (`createJwtAuthInterceptor({ jwksUri })` →
  *    `jose.createRemoteJWKSet`). A StartTrip/GetTrip with NO / an INVALID /
  *    wrong-issuer / wrong-audience / EXPIRED token is rejected as
@@ -44,6 +45,8 @@ import { create } from "@bufbuild/protobuf";
 import type { Client } from "@connectrpc/connect";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
+import type { TestJwksServer } from "@connectum/auth/testing";
+import { createTestJwtRS256, generateRsaTestKeypair, startTestJwksServer } from "@connectum/auth/testing";
 import type { Server } from "@connectum/core";
 import { QueryNotRegisteredError } from "@temporalio/client";
 import { JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
@@ -54,7 +57,6 @@ import { buildServer } from "#server.ts";
 import type { TripWorkflowClient, TripWorkflowHandle } from "#services/tripService.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb } from "../helpers/db.ts";
-import { generateRsaTestKeypair, type JwksServer, mintOathkeeperJwt, startJwksServer } from "../helpers/jwks.ts";
 
 /** A recorded `start` call (workflow type + the workflow id used). */
 interface StartCall {
@@ -115,12 +117,12 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
 
 describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Temporal)", () => {
     let server: Server;
-    let jwks: JwksServer;
+    let jwks: TestJwksServer;
     let trips: Client<typeof TripService>;
     let userToken: string;
     // The RSA signing key behind the published JWKS — used to mint every token
     // (valid and negative) so they share the JWKS `kid` and no refetch is needed.
-    let mint: (options: { sub: string; name?: string; roles?: readonly string[]; issuer?: string; audience?: string; ttl?: string | number }) => Promise<string>;
+    let mint: (options: { sub: string; name?: string; roles?: readonly string[]; issuer?: string; audience?: string; ttl?: string }) => Promise<string>;
     const starts: StartCall[] = [];
     // Mutated per GetTrip test to drive the stub handle's query/describe answers.
     let handleBehaviour: StubHandleBehaviour = { queryStatus: "STARTED" };
@@ -138,12 +140,20 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         const db = await makeTestDb();
         const keypair = await generateRsaTestKeypair();
         // Bind the JWKS server BEFORE buildServer so the first key fetch succeeds.
-        jwks = await startJwksServer(keypair.publicJwk);
-        // Helper bound to this keypair; defaults issuer/audience to the gateway's
-        // expected values (JWT_ISSUER is the single source of truth, shared with
-        // the Oathkeeper mutator and the compose env).
-        mint = ({ sub, name, roles, issuer = JWT_ISSUER, audience = JWT_AUDIENCE, ttl }) =>
-            mintOathkeeperJwt(keypair.privateKey, { sub, name, roles, issuer, audience, ttl });
+        jwks = await startTestJwksServer(keypair.publicJwk);
+        // Mint tokens shaped like the Oathkeeper `id_token` mutator output: RS256,
+        // header `kid` equal to the published JWK's (otherwise JWKS key selection
+        // fails before any claim is checked), and `name`/`roles` as TOP-LEVEL
+        // claims because that is where the gateway's `claimsMapping` reads them.
+        // Issuer/audience default to the gateway's expected values (JWT_ISSUER is
+        // the single source of truth, shared with the Oathkeeper mutator and the
+        // compose env); the negative tests override them one at a time.
+        mint = ({ sub, name, roles, issuer = JWT_ISSUER, audience = JWT_AUDIENCE, ttl = "5m" }) =>
+            createTestJwtRS256(
+                keypair.privateKey,
+                { sub, ...(name !== undefined ? { name } : {}), ...(roles !== undefined ? { roles } : {}) },
+                { kid: keypair.kid, issuer, audience, expiresIn: ttl },
+            );
 
         server = buildServer({ port: 0, topology, jwksUri: jwks.url, db, workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour) });
         await server.start();

@@ -23,6 +23,11 @@
  *  3. NEGATIVE — an off-topic subscriber (pattern `trips.other`) receives 0,
  *     proving the broadcast is scoped to `trips.completed`, not "everything".
  *  4. IDEMPOTENCY — a redelivery of the same `tripId` does NOT double-apply.
+ *  5. GROUPS — every reactor bus subscribes to `trips.completed` under its OWN
+ *     consumer group. MemoryAdapter ignores groups, so tests 1-4 would still
+ *     pass with a shared or missing group — which on NATS silently turns the
+ *     broadcast into a load-balanced queue. This test records what the buses
+ *     actually ask the adapter for, so that regression is caught without a broker.
  *
  * @module tests/e2e/broadcast
  */
@@ -31,15 +36,22 @@ import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { MemoryAdapter, resolveTopicName } from "@connectum/events";
-import type { EventAdapter, EventSubscription } from "@connectum/events";
+import type { EventAdapter, EventSubscription, RawSubscribeOptions } from "@connectum/events";
 import { MockActivityEnvironment } from "@temporalio/testing";
 import { TripCompletedSchema, TripEventHandlers } from "#gen/trips/v1/trip_events_pb.ts";
-import { buildPublisherBus, buildReactorBus } from "#events/eventBus.ts";
-import type { ManagedBus } from "#events/eventBus.ts";
+import { buildPublisherBus, buildReactorBuses, REACTOR_GROUP } from "#events/eventBus.ts";
+import type { ManagedBus, ReactorWiring } from "#events/eventBus.ts";
 import { auditRecords, notifyReactorRoutes, auditReactorRoutes, pricingReactorRoutes, pricingRevenueCentsValue, pricingTripCountValue, resetAllReactors, sentReceipts } from "#events/reactors.ts";
 import * as activities from "#temporal/activities.ts";
 
 const env = new MockActivityEnvironment();
+
+/** All three reactors, wired exactly as the three reactor processes wire themselves. */
+const ALL_REACTORS: readonly ReactorWiring[] = [
+    { key: "pricing", route: pricingReactorRoutes },
+    { key: "audit", route: auditReactorRoutes },
+    { key: "notify", route: notifyReactorRoutes },
+];
 
 /** Run a real activity body inside a mocked Temporal Activity Context. */
 function run<A extends unknown[], R>(fn: (...args: A) => Promise<R>, ...args: A): Promise<R> {
@@ -49,21 +61,18 @@ function run<A extends unknown[], R>(fn: (...args: A) => Promise<R>, ...args: A)
 describe("Phase 3 broadcast: one TripCompleted fans out to three independent reactors (dockerless, MemoryAdapter)", () => {
     let adapter: EventAdapter;
     let publisher: ManagedBus;
-    let pricing: ManagedBus;
-    let audit: ManagedBus;
-    let notify: ManagedBus;
+    let reactorBuses: ManagedBus[];
 
     before(async () => {
-        // ONE shared in-memory adapter feeds all four buses (F8): a publish on
-        // the publisher bus reaches every reactor's subscription on the SAME
+        // ONE shared in-memory adapter feeds all four buses: a publish on the
+        // publisher bus reaches every reactor's subscription on the SAME
         // adapter. Groups are ignored in-memory but written so the wiring fans
-        // out on NATS.
+        // out on NATS (the GROUPS test below checks they are written).
         adapter = MemoryAdapter();
         publisher = buildPublisherBus({ adapter });
-        pricing = buildReactorBus({ key: "pricing", route: pricingReactorRoutes, adapter });
-        audit = buildReactorBus({ key: "audit", route: auditReactorRoutes, adapter });
-        notify = buildReactorBus({ key: "notify", route: notifyReactorRoutes, adapter });
-        await Promise.all([publisher.start(), pricing.start(), audit.start(), notify.start()]);
+        reactorBuses = buildReactorBuses({ reactors: ALL_REACTORS, adapter });
+        assert.equal(reactorBuses.length, ALL_REACTORS.length, "one bus per reactor");
+        await Promise.all([publisher.start(), ...reactorBuses.map((bus) => bus.start())]);
         // Inject the publisher bus into the activities module — the SAME seam
         // the worker uses — so the REAL activity publishes on it.
         activities.setPublisherBus(publisher);
@@ -81,7 +90,7 @@ describe("Phase 3 broadcast: one TripCompleted fans out to three independent rea
         // Stop ONLY after every assertion (the FIRST stop calls the shared
         // adapter's disconnect(), which wipes all subscriptions).
         activities.setPublisherBus(undefined);
-        await Promise.all([publisher.stop(), pricing.stop(), audit.stop(), notify.stop()]);
+        await Promise.all([publisher.stop(), ...reactorBuses.map((bus) => bus.stop())]);
     });
 
     it("PRIMARY: the terminal publishTripCompleted activity broadcasts ONCE, all three reactors react with the FULL message shape", async () => {
@@ -149,5 +158,51 @@ describe("Phase 3 broadcast: one TripCompleted fans out to three independent rea
         assert.equal(pricingRevenueCentsValue(), 150n, "revenue tallied once despite redelivery");
         assert.equal(auditRecords().length, 1, "audited once despite redelivery");
         assert.equal(sentReceipts().length, 1, "notified once despite redelivery");
+    });
+
+    it("GROUPS: each reactor bus subscribes to trips.completed under its OWN consumer group (cs-pricing / cs-audit / cs-notify)", async () => {
+        // A separate adapter so this test's buses never see the shared one's
+        // traffic. It delegates to MemoryAdapter and records every subscribe
+        // request — the topic patterns and the group a broker would receive.
+        const inner = MemoryAdapter();
+        const requested: Array<{ readonly patterns: readonly string[]; readonly group: string | undefined }> = [];
+        const recording: EventAdapter = {
+            name: inner.name,
+            connect: (context) => inner.connect(context),
+            disconnect: () => inner.disconnect(),
+            publish: (eventType, payload, options) => inner.publish(eventType, payload, options),
+            subscribe: (patterns, handler, options?: RawSubscribeOptions) => {
+                requested.push({ patterns: [...patterns], group: options?.group });
+                return inner.subscribe(patterns, handler, options);
+            },
+        };
+
+        const buses = buildReactorBuses({ reactors: ALL_REACTORS, adapter: recording });
+        await Promise.all(buses.map((bus) => bus.start()));
+        try {
+            const byGroup = [...requested].sort((a, b) => (a.group ?? "").localeCompare(b.group ?? ""));
+            assert.deepEqual(byGroup, [
+                { patterns: ["trips.completed"], group: REACTOR_GROUP.audit },
+                { patterns: ["trips.completed"], group: REACTOR_GROUP.notify },
+                { patterns: ["trips.completed"], group: REACTOR_GROUP.pricing },
+            ]);
+            assert.deepEqual([REACTOR_GROUP.audit, REACTOR_GROUP.notify, REACTOR_GROUP.pricing], ["cs-audit", "cs-notify", "cs-pricing"]);
+        } finally {
+            await Promise.all(buses.map((bus) => bus.stop()));
+        }
+    });
+
+    it("GROUPS: wiring the same reactor twice is rejected — a shared group would load-balance instead of fan out", () => {
+        assert.throws(
+            () =>
+                buildReactorBuses({
+                    reactors: [
+                        { key: "audit", route: auditReactorRoutes },
+                        { key: "audit", route: auditReactorRoutes },
+                    ],
+                    adapter: MemoryAdapter(),
+                }),
+            /duplicate consumer group "cs-audit"/,
+        );
     });
 });

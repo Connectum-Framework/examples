@@ -279,8 +279,17 @@ no-build, native-TS run model:
 The gateway's Temporal client is **lazy** (`Connection.lazy` — no socket until
 the first start/query), so the server starts and the **pre-check error paths run
 without a live Temporal server**. Internal `RecordTrip` / `EndTrip` are
-method-level `public` in proto so the worker's tokenless ConnectRPC clients pass
+method-level `public` in proto so the worker's tokenless ConnectRPC client passes
 the gateway auth chain (fleet/billing are already service-level `public`).
+
+The worker has no Connectum `Server`, so it cannot use `ctx.call`. Instead
+`src/temporal/clients.ts` builds a **catalog client** with `createCatalogClient`
+from `@connectum/core`: the activities call
+`client.call("fleet.v1.FleetService/ReserveVehicle", request)`, typed off the
+same generated `serviceCatalog` the servers use. Its resolver reads the same
+`FLEET_ADDR` / `TRIPS_ADDR` / `BILLING_ADDR` variables as the roles
+(`perServiceEnvResolver`); when one is unset or empty the worker falls back to
+the local compose port (`5001` / `5002` / `5003`).
 
 ### Run it and watch the saga
 
@@ -315,7 +324,8 @@ The saga is covered without Docker or a Temporal cluster:
   **expired** → `UNAUTHENTICATED`), and that a valid `StartTrip` returns
   `{ trip, workflow_id }` and starts exactly one workflow keyed by the trip id.
   The RS256 tokens are minted against an **in-process JWKS server**
-  (`tests/helpers/jwks.ts`) so the production `createRemoteJWKSet` validation
+  (`generateRsaTestKeypair`, `startTestJwksServer` and `createTestJwtRS256` from
+  `@connectum/auth/testing`) so the production `createRemoteJWKSet` validation
   branch is exercised — see [Phase 4](#phase-4--ory-as-the-idp).
 
 ## Phase 4 — Ory as the IdP
@@ -505,6 +515,20 @@ Two independent reasons this is **fan-out** and not load-balance:
 So the rule the example teaches: **N independent consumers ⇒ N buses, each its
 own group** — never one bus with N handlers on the same topic.
 
+The reactor buses are not hand-built: `buildReactorBuses` in
+`src/events/eventBus.ts` passes the reactors to `createBroadcastSubscribers` from
+`@connectum/events`, which creates one bus per reactor with its own group and
+throws if two reactors share a group. With NATS it receives the adapter as a
+**factory**, so every reactor bus opens its own broker connection. For the
+pricing reactor the call it makes amounts to:
+
+```ts
+createBroadcastSubscribers({
+  adapter: natsAdapter,                       // factory → one connection per bus
+  reactors: [{ group: "cs-pricing", routes: [pricingReactorRoutes] }],
+});
+```
+
 ### Topic from the proto option (no raw strings)
 
 The topic is declared **once**, on the proto method, and used end-to-end with no
@@ -604,10 +628,10 @@ reactor logs each print their independent reaction to the one `trips.completed`
 event. Stop one reactor and replay — the others still receive (broadcast, not
 steal).
 
-> **Version note.** This phase uses `createBroadcastSubscribers` and the
-> `publishes` option on `createEventBus`, both added in `@connectum/events@1.1.0`.
-> The example pins the events stack at `^1.1.0`, so the manifest itself states
-> the minimum version this phase needs: under `^1.0.0` an install that resolved
+> **Version note.** This phase uses `createBroadcastSubscribers` (reactor buses)
+> and the `publishes` option on `createEventBus` (publisher bus), both added in
+> `@connectum/events@1.1.0`. The example pins the events stack at `^1.2.0`, above
+> that minimum, so the manifest itself rules out a too-old version: under `^1.0.0` an install that resolved
 > `1.0.0` (an older lockfile, or a registry mirror that lags behind) would break
 > this phase at runtime. The committed lockfile fixes the exact versions that
 > `pnpm install --frozen-lockfile` installs.
@@ -717,10 +741,9 @@ car-sharing/
 │                               kratos/ (identity provider) + oathkeeper/ (edge proxy)
 ├── tests/
 │   ├── helpers/db.ts           PGlite test db (migrate + seed), injected via DI
-│   ├── helpers/jwks.ts         RS256 keypair + in-process JWKS server + token mint (Phase 4)
 │   ├── workflow/               TripWorkflow: forward order + reverse compensation + broadcast tail (mocked activities)
-│   ├── activity/               Activity bodies: RPC wiring + compensation idempotency (in-process monolith)
-│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth, stub workflow client) + fleet.test.ts (persistence) + broadcast.test.ts (fan-out, MemoryAdapter)
+│   ├── activity/               Activity bodies: RPC wiring + compensation idempotency (in-process monolith); clients.test.ts: worker catalog client's localhost fallback
+│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth via @connectum/auth/testing RS256+JWKS, stub workflow client) + fleet.test.ts (persistence) + broadcast.test.ts (fan-out, MemoryAdapter)
 ├── k8s/                        namespace, rbac, configmap, deployments,
 │                               services, hpa (gateway JWKS env, no signing secret)
 ├── istio/                      peer-auth, authz, destination-rule, virtual-service,
