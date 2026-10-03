@@ -19,11 +19,11 @@
  */
 
 import type { EventRoute } from "@connectum/events";
-import { buildReactorBus } from "#events/eventBus.ts";
+import { buildReactorBuses } from "#events/eventBus.ts";
 import type { ManagedBus, ReactorKey } from "#events/eventBus.ts";
 import { auditReactorRoutes, notifyReactorRoutes, pricingReactorRoutes } from "#events/reactors.ts";
 
-/** Map each reactor selector to its route. The group is fixed by the key in `buildReactorBus`. */
+/** Map each reactor selector to its route. The group is fixed by the key in `buildReactorBuses`. */
 const REACTOR_ROUTES: Readonly<Record<ReactorKey, EventRoute>> = {
     pricing: pricingReactorRoutes,
     audit: auditReactorRoutes,
@@ -41,7 +41,9 @@ function selectReactor(): ReactorKey {
 
 async function main(): Promise<void> {
     const key = selectReactor();
-    const bus: ManagedBus = buildReactorBus({ key, route: REACTOR_ROUTES[key] });
+    // This process hosts exactly one reactor, so the broadcast helper returns
+    // exactly one bus; the other reactors run as their own processes.
+    const [bus]: ManagedBus[] = buildReactorBuses({ reactors: [{ key, route: REACTOR_ROUTES[key] }] });
 
     await bus.start();
     console.log(`car-sharing reactor ready — REACTOR=${key} topic=trips.completed nats=${process.env.NATS_URL ?? "nats://localhost:4222"}`);

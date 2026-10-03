@@ -3,7 +3,9 @@
  *
  * Activities run in the worker's Node process (NOT the deterministic workflow
  * sandbox), so they may freely create ConnectRPC clients and do I/O. Each
- * activity is one RPC against a role service over the network (`*_ADDR`). The
+ * activity is one RPC against a role service over the network (`*_ADDR`), made
+ * through the catalog client as `client().call("pkg.Service/Method", request)`
+ * — the same typed call a handler makes with `ctx.call`. The
  * workflow (`workflows.ts`) only `proxyActivities` these and never touches a
  * client itself.
  *
@@ -25,6 +27,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
+import type { CatalogClient } from "@connectum/core";
 import { ApplicationFailure } from "@temporalio/activity";
 import { AddChargeRequestSchema, OpenTabRequestSchema, RefundChargeRequestSchema, SettleRequestSchema, VoidTabRequestSchema } from "#gen/billing/v1/billing_pb.ts";
 import { ReleaseVehicleRequestSchema, ReserveVehicleRequestSchema } from "#gen/fleet/v1/fleet_pb.ts";
@@ -32,8 +35,7 @@ import { TripCompletedSchema } from "#gen/trips/v1/trip_events_pb.ts";
 import { EndTripRequestSchema, RecordTripRequestSchema } from "#gen/trips/v1/trips_pb.ts";
 import type { ManagedBus } from "#events/eventBus.ts";
 import { buildPublisherBus } from "#events/eventBus.ts";
-import type { ServiceClients } from "#temporal/clients.ts";
-import { createServiceClients } from "#temporal/clients.ts";
+import { createServiceClient } from "#temporal/clients.ts";
 import { TripStatus } from "#temporal/tripStatus.ts";
 
 /**
@@ -51,22 +53,22 @@ const VEHICLE_UNAVAILABLE = "VehicleUnavailable" as const;
 /** Charge rate in minor units (cents) per second of trip — demo pricing. */
 const CENTS_PER_SECOND = 5;
 
-/** Lazily-built shared clients (one transport set per worker process). */
-let sharedClients: ServiceClients | undefined;
+/** Lazily-built shared catalog client (one transport per service per worker process). */
+let sharedClient: CatalogClient | undefined;
 
-/** Get (or build once) the worker's service clients. */
-function clients(): ServiceClients {
-    if (sharedClients === undefined) {
-        sharedClients = createServiceClients();
+/** Get (or build once) the worker's catalog client. */
+function client(): CatalogClient {
+    if (sharedClient === undefined) {
+        sharedClient = createServiceClient();
     }
-    return sharedClients;
+    return sharedClient;
 }
 
 /**
  * The publish-only EventBus used by `publishTripCompleted` to broadcast
  * `TripCompleted`. Injected once (the worker builds + STARTS it before
  * `worker.run()`; tests inject a `MemoryAdapter`-backed bus), and lazily built
- * from `NATS_URL` if never injected — the same seam as {@link clients}.
+ * from `NATS_URL` if never injected — the same seam as {@link client}.
  */
 let publisherBus: ManagedBus | undefined;
 
@@ -116,7 +118,7 @@ function chargeCents(durationMs: number): bigint {
  */
 export async function reserveVehicle(input: { vehicleId: string; holderId: string }): Promise<void> {
     try {
-        await clients().fleet.reserveVehicle(create(ReserveVehicleRequestSchema, { id: input.vehicleId, holderId: input.holderId }));
+        await client().call("fleet.v1.FleetService/ReserveVehicle", create(ReserveVehicleRequestSchema, { id: input.vehicleId, holderId: input.holderId }));
     } catch (err) {
         if (err instanceof ConnectError && (err.code === Code.FailedPrecondition || err.code === Code.NotFound)) {
             throw ApplicationFailure.create({
@@ -131,32 +133,32 @@ export async function reserveVehicle(input: { vehicleId: string; holderId: strin
 
 /** Compensation for step 1 — release the vehicle. Idempotent. */
 export async function releaseVehicle(input: { vehicleId: string }): Promise<void> {
-    await clients().fleet.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: input.vehicleId }));
+    await client().call("fleet.v1.FleetService/ReleaseVehicle", create(ReleaseVehicleRequestSchema, { id: input.vehicleId }));
 }
 
 /** Step 2 — create the trip ledger row (status STARTED). */
 export async function recordTrip(input: { userId: string; vehicleId: string; tripId: string }): Promise<void> {
-    await clients().trips.recordTrip(create(RecordTripRequestSchema, { userId: input.userId, vehicleId: input.vehicleId, tripId: input.tripId }));
+    await client().call("trips.v1.TripService/RecordTrip", create(RecordTripRequestSchema, { userId: input.userId, vehicleId: input.vehicleId, tripId: input.tripId }));
 }
 
 /** Compensation for step 2 — mark the trip CANCELLED. Idempotent. */
 export async function markTripCancelled(input: { tripId: string }): Promise<void> {
-    await clients().trips.endTrip(create(EndTripRequestSchema, { tripId: input.tripId, status: TripStatus.CANCELLED }));
+    await client().call("trips.v1.TripService/EndTrip", create(EndTripRequestSchema, { tripId: input.tripId, status: TripStatus.CANCELLED }));
 }
 
 /** Step 4 — close the trip (status ENDED). No own compensation (step 2's covers rollback). */
 export async function endTrip(input: { tripId: string }): Promise<void> {
-    await clients().trips.endTrip(create(EndTripRequestSchema, { tripId: input.tripId, status: TripStatus.ENDED }));
+    await client().call("trips.v1.TripService/EndTrip", create(EndTripRequestSchema, { tripId: input.tripId, status: TripStatus.ENDED }));
 }
 
 /** Step 5 — open the billing tab. */
 export async function openTab(input: { tripId: string }): Promise<void> {
-    await clients().billing.openTab(create(OpenTabRequestSchema, { tripId: input.tripId }));
+    await client().call("billing.v1.BillingService/OpenTab", create(OpenTabRequestSchema, { tripId: input.tripId }));
 }
 
 /** Compensation for step 5 — void the tab. Idempotent. */
 export async function voidTab(input: { tripId: string }): Promise<void> {
-    await clients().billing.voidTab(create(VoidTabRequestSchema, { tripId: input.tripId }));
+    await client().call("billing.v1.BillingService/VoidTab", create(VoidTabRequestSchema, { tripId: input.tripId }));
 }
 
 /**
@@ -166,18 +168,18 @@ export async function voidTab(input: { tripId: string }): Promise<void> {
  * @param input - `{ tripId, durationMs }`.
  */
 export async function addCharge(input: { tripId: string; durationMs: number }): Promise<string> {
-    const res = await clients().billing.addCharge(create(AddChargeRequestSchema, { tripId: input.tripId, amountCents: chargeCents(input.durationMs) }));
+    const res = await client().call("billing.v1.BillingService/AddCharge", create(AddChargeRequestSchema, { tripId: input.tripId, amountCents: chargeCents(input.durationMs) }));
     return res.chargeId;
 }
 
 /** Compensation for step 6 — refund the charge by id. Idempotent. */
 export async function refundCharge(input: { tripId: string; chargeId: string }): Promise<void> {
-    await clients().billing.refundCharge(create(RefundChargeRequestSchema, { tripId: input.tripId, chargeId: input.chargeId }));
+    await client().call("billing.v1.BillingService/RefundCharge", create(RefundChargeRequestSchema, { tripId: input.tripId, chargeId: input.chargeId }));
 }
 
 /** Step 7 — settle (finalize) the tab. The terminal happy-path step. */
 export async function settle(input: { tripId: string }): Promise<void> {
-    await clients().billing.settle(create(SettleRequestSchema, { tripId: input.tripId }));
+    await client().call("billing.v1.BillingService/Settle", create(SettleRequestSchema, { tripId: input.tripId }));
 }
 
 // ── Terminal broadcast (Phase 3) ────────────────────────────────────────────
