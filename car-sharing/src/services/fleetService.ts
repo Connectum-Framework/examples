@@ -21,8 +21,10 @@
  *  - ReleaseVehicle — returns a vehicle to the available pool; NOT_FOUND on
  *                     unknown id, FAILED_PRECONDITION when in maintenance.
  *
- * Internal-only and `public` in proto: reached by the trip handler via
- * `ctx.call`, never by external clients (see fleet.proto).
+ * `internal` in proto: reached by the trip handler's pre-check (`ctx.call` to
+ * GetVehicle) and the worker's activities (reserve/release), never by external
+ * clients. The interceptor chain verifies the caller's signed service token
+ * and the per-RPC role before any handler runs (see fleet.proto).
  *
  * @module services/fleetService
  */

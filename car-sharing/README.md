@@ -21,9 +21,9 @@ wiring.
 
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
-| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | RS256 JWT required, validated via JWKS (minted by Ory Oathkeeper; proto `default_policy: allow`); `RecordTrip`/`EndTrip` method-level `public` (internal, worker-only) |
-| `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `public` (proto `service_auth.public`) |
-| `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `public`                              |
+| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | RS256 JWT required, validated via JWKS (minted by Ory Oathkeeper; proto `default_policy: allow`); `RecordTrip`/`EndTrip` method-level `internal`, worker token only |
+| `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `internal` service token: reads (`GetVehicle`, `ListVehicles`) trips, reserve/release worker |
+| `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `internal` service token, worker only |
 
 `FleetService` is backed by a real database (Drizzle ORM + Postgres) — see
 [Persistence](#persistence-fleetservice--drizzle--postgres). The trip/billing
@@ -49,10 +49,10 @@ flowchart TB
             tripsApp[TripService<br/>JWT auth + proto authz]
         end
         subgraph fleet["fleet Deployment (internal)"]
-            fleetApp[FleetService<br/>public]
+            fleetApp[FleetService<br/>internal: service token]
         end
         subgraph billing["billing Deployment (internal)"]
-            billingApp[BillingService<br/>public]
+            billingApp[BillingService<br/>internal: service token]
         end
 
         otel[(OpenTelemetry<br/>Collector)]
@@ -60,11 +60,11 @@ flowchart TB
 
     client -->|"/trips.v1.TripService/StartTrip"| ingress
     ingress -->|"AuthorizationPolicy:<br/>ingress SA only"| tripsApp
-    tripsApp -->|"ctx.call GetVehicle<br/>(pre-check, FLEET_ADDR)"| fleetApp
+    tripsApp -->|"ctx.call GetVehicle<br/>(pre-check, FLEET_ADDR,<br/>signed as trips)"| fleetApp
     tripsApp -.->|"starts TripWorkflow<br/>(Temporal client)"| temporal[(Temporal<br/>cluster)]
-    temporal -->|"worker activities<br/>(ReserveVehicle…)"| fleetApp
-    temporal -->|"worker activities<br/>(RecordTrip, EndTrip…)"| tripsApp
-    temporal -->|"worker activities<br/>(OpenTab, AddCharge, Settle…)"| billingApp
+    temporal -->|"worker activities<br/>(ReserveVehicle…)<br/>signed as worker"| fleetApp
+    temporal -->|"worker activities<br/>(RecordTrip, EndTrip…)<br/>signed as worker"| tripsApp
+    temporal -->|"worker activities<br/>(OpenTab, AddCharge, Settle…)<br/>signed as worker"| billingApp
 
     fleetApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
     billingApp -. "AuthorizationPolicy:<br/>trips SA only" .-> tripsApp
@@ -74,19 +74,92 @@ flowchart TB
     billingApp -.->|OTLP| otel
 ```
 
-### Why `public` on the internal services
+### Service-to-service auth: per-service signed tokens
 
 A cross-service `ctx.call` re-runs the **full server interceptor chain** (in
-monolith and split mode alike) but carries **no inbound `Authorization` header** —
-Connectum does not auto-propagate request headers across `ctx.call`. If fleet and
-billing required JWT auth, the trip handler's internal calls would be rejected as
-`UNAUTHENTICATED` by the very chain that protects the edge.
+monolith and split mode alike) and carries **no inbound header** — Connectum does
+not forward the end user's `Authorization` across `ctx.call`, and the Temporal
+worker has no end user at all. So internal callers authenticate as **services**,
+each with its own key:
 
-So fleet and billing are marked `public` in proto (`service_auth { public: true }`),
-which skips authn + authz for them. The real trust boundary is the **mesh**:
-Istio `PeerAuthentication` (mTLS STRICT) + `AuthorizationPolicy` admit fleet/billing
-traffic only from the `trips` ServiceAccount. The gateway authenticates external
-clients; the mesh guarantees internal services are reachable solely by the gateway.
+- fleet, billing and the trips RPCs `RecordTrip` / `EndTrip` are `internal` in
+  proto (`service_auth { internal: true }` / `method_auth { internal: true }`).
+  The end-user JWT interceptor skips them; `createInternalAuthInterceptor` with
+  `signedTokenTrust` requires a service token in `x-internal-token` instead.
+- A calling service signs a fresh RS256 JWT per call (`iss` = its identity,
+  `aud` = `car-sharing-internal`, `roles` = `[its identity]`, 60 s expiry) with
+  its **own private key** and publishes the public key as JWKS
+  (`/.well-known/jwks.json` on `INTERNAL_JWKS_PORT`). `signedTokenTrust` picks
+  the keyset by the token's claimed `iss` and pins verification to that issuer,
+  so a leaked trips key can forge trips — never the worker. A missing, forged,
+  expired or wrong-audience token is `UNAUTHENTICATED`; an end user's JWT on an
+  internal method is too.
+- **Least privilege** comes from proto `requires { roles }` (any-of), checked by
+  `createProtoAuthzInterceptor` against the token's `roles` claim. A valid token
+  from the wrong service is `PERMISSION_DENIED`:
+
+  | RPC | allowed caller(s) | why |
+  | --- | --- | --- |
+  | `FleetService/GetVehicle` | `trips` | trips' StartTrip pre-check; no worker activity reads a single vehicle |
+  | `FleetService/ListVehicles` | `trips` | no service calls it today; granted to trips alone (the identity that already reads the fleet) instead of any internal caller |
+  | `FleetService/ReserveVehicle`, `ReleaseVehicle` | `worker` | only the saga reserves and releases (service default) |
+  | `BillingService/*` | `worker` | only the saga opens, charges, settles, voids, refunds |
+  | `TripService/RecordTrip`, `EndTrip` | `worker` | the saga's ledger steps |
+
+- **Who signs.** Only processes that call internal methods: the trips role (its
+  pre-check) and the worker (every activity). fleet and billing call nobody, so
+  they hold no key and serve no JWKS — they only verify. The trips role signs
+  on both paths: `createServer({ outgoingInterceptors })` covers the
+  in-process transport (monolith), and the remote resolver's transport
+  (`perServiceEnvResolver(…, { createTransport })`) covers the network (split),
+  because core applies `outgoingInterceptors` to the in-process transport only.
+  The in-process transport is **not** treated as proof of trust: the monolith
+  verifies its own pre-check exactly like a split deployment does.
+- **Configuration** (`src/internalAuth.ts`): `INTERNAL_JWKS_PORT` is where a
+  signing process serves its JWKS (defaults: trips `9101`, worker `9102`, so a
+  monolith and a worker can share one machine). `INTERNAL_ISSUER_TRIPS_JWKS` /
+  `INTERNAL_ISSUER_WORKER_JWKS` are the JWKS URLs a verifying role trusts:
+  unset → `http://localhost:<default port>/.well-known/jwks.json`, empty → that
+  issuer is not trusted (for deployments where it does not exist). A role that
+  trusts no issuer refuses to start. `INTERNAL_SIGNING_KEY_FILE` names the
+  signing identity's private key (see below).
+
+**One key per identity.** Each signing identity (`trips`, `worker`) has **one**
+RS256 key pair, read from a PKCS#8 PEM file named by `INTERNAL_SIGNING_KEY_FILE`.
+Every replica and every restart of the identity signs with that same key, and
+the published `kid` is the key's RFC 7638 JWK thumbprint — so the `kid` never
+changes under a verifier's cached keyset. That matters because a verifier
+(`signedTokenTrust` → `jose` `createRemoteJWKSet`) refetches a JWKS on an
+unknown `kid` at most once per 30 s, and through a load-balanced URL it only
+ever sees one replica's JWKS: per-process keys would be rejected after every
+restart and from every replica but one. A key file that is set but missing,
+unreadable, empty or not an RSA key of at least 2048 bits stops the process at
+start-up; it never falls back to a generated key.
+
+How each shape provisions the keys:
+
+| Shape | trips key | worker key |
+| --- | --- | --- |
+| compose `saga` / `ory` | `internal-keygen` writes `trips.pem` once into the `internal-key-trips` volume (0400, owned by the app user); `trips` / `trips-ory` mount it read-only at `/keys` | `worker.pem` in its own `internal-key-worker` volume, mounted only by `worker` — no container can read another identity's key |
+| compose `mono` | ephemeral (no `INTERNAL_SIGNING_KEY_FILE`): the monolith is the only verifier of its trips key, and a restart replaces the key and its own cached keyset together | — (no worker) |
+| k8s | Secret `trips-internal-signing-key`, mounted read-only into every trips pod | — (no worker deployed) |
+| tests, `pnpm start` / `pnpm worker` without the variable | ephemeral, generated in memory | ephemeral (restarting one while the other keeps running can reject its calls for up to 30 s — set `INTERNAL_SIGNING_KEY_FILE` on both to avoid it) |
+
+`node src/internalKeygen.ts <dir> trips worker` creates the PEM files (only the
+ones that do not exist yet); it is what `internal-keygen` runs, and what you can
+use to create the k8s Secret.
+
+In production, key issuance, rotation and JWKS publication belong to the
+platform — SPIRE, your IdP, or the mesh — with one stable keyset per service.
+The verifying side (`signedTokenTrust` with a JWKS URL per issuer) stays exactly
+as it is here. In a mesh, `meshIdentityTrust` (the mesh-forwarded peer
+identity) is the framework's alternative trust source.
+
+**The mesh is a second layer, not the only one.** Istio `PeerAuthentication`
+(mTLS STRICT) + `AuthorizationPolicy` still admit fleet/billing traffic only
+from the `trips` ServiceAccount, and only fleet/billing may fetch trips' JWKS
+port — but an internal method no longer depends on the network to stay closed:
+without a valid service token it rejects the call itself.
 
 ### One image, role by env
 
@@ -94,12 +167,13 @@ The same image is the monolith and every microservice role; `SERVICES` selects
 what each process mounts locally, and `*_ADDR` env vars tell `ctx.call` where the
 remote peers live:
 
-| Role     | `SERVICES`                  | Remote endpoints                |
-| -------- | --------------------------- | ------------------------------- |
-| monolith | unset / `*`                 | none (all in-process)           |
-| trips    | `trips.v1.TripService`      | `FLEET_ADDR`, `BILLING_ADDR`    |
-| fleet    | `fleet.v1.FleetService`     | none (leaf)                     |
-| billing  | `billing.v1.BillingService` | none (leaf)                     |
+| Role     | `SERVICES`                  | Remote endpoints                | Signs internal calls as |
+| -------- | --------------------------- | ------------------------------- | ----------------------- |
+| monolith | unset / `*`                 | none (all in-process)           | `trips` (JWKS `:9101`)  |
+| trips    | `trips.v1.TripService`      | `FLEET_ADDR`, `BILLING_ADDR`    | `trips` (JWKS `:9101`)  |
+| fleet    | `fleet.v1.FleetService`     | none (leaf)                     | — (verifies only)       |
+| billing  | `billing.v1.BillingService` | none (leaf)                     | — (verifies only)       |
+| worker   | (`node src/worker.ts`)      | `FLEET_ADDR`, `TRIPS_ADDR`, `BILLING_ADDR` | `worker` (JWKS `:9102`) |
 
 See `src/topology.ts` (env → `enabledServices` + `perServiceEnvResolver`).
 
@@ -122,11 +196,15 @@ The e2e suite runs the whole app in one process and asserts: the happy
 `StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
 workflow_id }`), `FAILED_PRECONDITION` for an unavailable vehicle, `NOT_FOUND`
 propagated from fleet, the gateway rejecting unauthenticated / invalid-token
-requests while the public fleet service is reachable without a token
-(`tests/e2e/e2e.test.ts`), and the full FleetService persistence surface —
-`GetVehicle`, streaming `ListVehicles` with filter + cursor pagination,
-`ReserveVehicle`/`ReleaseVehicle` — over a real gRPC client
-(`tests/e2e/fleet.test.ts`). The saga itself (orchestration order +
+requests, and service-to-service auth on the internal methods — a worker-signed
+call succeeds; no token, a token signed by an unpublished key, or an end user's
+JWT is `UNAUTHENTICATED`; a valid trips token on a worker-only method is
+`PERMISSION_DENIED` (`tests/e2e/e2e.test.ts`). `tests/e2e/split.test.ts` runs
+trips and fleet as two servers and proves the pre-check is signed over the
+network too. `tests/e2e/fleet.test.ts` covers the full FleetService persistence
+surface — `GetVehicle`, streaming `ListVehicles` with filter + cursor
+pagination, `ReserveVehicle`/`ReleaseVehicle` — over a real gRPC client, signed
+with the role each RPC requires. The saga itself (orchestration order +
 compensations) is covered by `tests/workflow/` and `tests/activity/`.
 
 ## Persistence: FleetService + Drizzle + Postgres
@@ -279,8 +357,9 @@ no-build, native-TS run model:
 The gateway's Temporal client is **lazy** (`Connection.lazy` — no socket until
 the first start/query), so the server starts and the **pre-check error paths run
 without a live Temporal server**. Internal `RecordTrip` / `EndTrip` are
-method-level `public` in proto so the worker's tokenless ConnectRPC client passes
-the gateway auth chain (fleet/billing are already service-level `public`).
+method-level `internal` (worker role only), like all of fleet/billing: the
+worker signs every activity call with its own key and serves that key's JWKS on
+`:9102` — see [Service-to-service auth](#service-to-service-auth-per-service-signed-tokens).
 
 The worker has no Connectum `Server`, so it cannot use `ctx.call`. Instead
 `src/temporal/clients.ts` builds a **catalog client** with `createCatalogClient`
@@ -289,7 +368,8 @@ from `@connectum/core`: the activities call
 same generated `serviceCatalog` the servers use. Its resolver reads the same
 `FLEET_ADDR` / `TRIPS_ADDR` / `BILLING_ADDR` variables as the roles
 (`perServiceEnvResolver`); when one is unset or empty the worker falls back to
-the local compose port (`5001` / `5002` / `5003`).
+the local compose port (`5001` / `5002` / `5003`). Both routes build their
+transport with the same signing factory, so no activity call leaves unsigned.
 
 ### Run it and watch the saga
 
@@ -305,6 +385,15 @@ Start a trip against the `trips` role (gRPC `:5002`) and watch `TripWorkflow`
 walk reserve → record → end → openTab → addCharge → settle in the Web UI. Stop
 the `billing` role mid-run to watch the compensations unwind in reverse.
 
+The internal methods stay closed to the host: a direct call without a service
+token is rejected before any handler runs, e.g.
+
+```bash
+curl -s --http2-prior-knowledge -X POST http://localhost:5003/billing.v1.BillingService/Settle \
+  -H 'Content-Type: application/json' -d '{"tripId":"t-1"}'
+# {"code":"unauthenticated","message":"Untrusted internal request"}
+```
+
 ### Tests — dockerless
 
 The saga is covered without Docker or a Temporal cluster:
@@ -317,7 +406,8 @@ The saga is covered without Docker or a Temporal cluster:
 - `tests/activity/activities.test.ts` — the **real activity bodies** (via
   `MockActivityEnvironment`) against an **in-process Connectum monolith**
   (`buildServer({ port: 0 })`, PGlite fleet), asserting the activity↔RPC wiring,
-  the moved billing side effects, and compensation **idempotency**.
+  the moved billing side effects, and compensation **idempotency** — every call
+  signed as `worker`, the identity each of those RPCs requires.
 - `tests/e2e/e2e.test.ts` — the gateway with a **stub** Temporal client: the
   pre-check `FAILED_PRECONDITION` / `NOT_FOUND` paths, the Phase-4 RS256/JWKS auth
   paths (valid, missing, malformed, **wrong-issuer**, **wrong-audience**,
@@ -326,7 +416,11 @@ The saga is covered without Docker or a Temporal cluster:
   The RS256 tokens are minted against an **in-process JWKS server**
   (`generateRsaTestKeypair`, `startTestJwksServer` and `createTestJwtRS256` from
   `@connectum/auth/testing`) so the production `createRemoteJWKSet` validation
-  branch is exercised — see [Phase 4](#phase-4--ory-as-the-idp).
+  branch is exercised — see [Phase 4](#phase-4--ory-as-the-idp). The same file
+  covers the internal service-token paths (see
+  [Service-to-service auth](#service-to-service-auth-per-service-signed-tokens)),
+  using real `trips` / `worker` signers from `src/internalAuth.ts`, each with its
+  own in-process JWKS endpoint (`tests/helpers/internalAuth.ts`).
 
 ## Phase 4 — Ory as the IdP
 
@@ -351,8 +445,8 @@ trips gateway (5000)
    │  createJwtAuthInterceptor({ jwksUri })             # createRemoteJWKSet branch
    │     verify signature (kid→JWK), iss, aud, exp
    │  createProtoAuthzInterceptor({ defaultPolicy: deny })
-   ▼  internal gRPC ctx.call (tokenless, `public`)
-fleet / billing
+   ▼  internal gRPC ctx.call (signed service token in x-internal-token)
+fleet  (`internal`: verifies the token against trips' own JWKS)
 ```
 
 ### The JWT contract
@@ -444,22 +538,23 @@ Two steps, decoupled from the offline `pnpm buf:generate`:
 2. **Authz overlay** — `scripts/openapi-authz.ts` reads the `connectum.auth.v1`
    options via **`resolveMethodAuth`** (the *same* reader the runtime
    `createProtoAuthzInterceptor` uses) and injects, per operation:
-   - a `bearerAuth` (JWT) `securityScheme`;
-   - `security: [{ bearerAuth: [] }]` on methods that require auth (e.g.
-     `StartTrip`, `GetTrip`);
-   - `security: []` + `x-connectum-public: true` on `public` methods (e.g. the
-     tokenless worker RPCs `EndTrip` / `RecordTrip`, and all of fleet/billing);
-   - `x-connectum-required-roles` / `-scopes` where the proto declares them.
+   - `security: [{ bearerAuth: [] }]` (end-user JWT) on methods that require a
+     user (`StartTrip`, `GetTrip`);
+   - `security: [{ internalToken: [] }]` + `x-connectum-internal: true` on
+     `internal` methods (all of fleet/billing, `RecordTrip` / `EndTrip`) — an
+     `apiKey` scheme on the `x-internal-token` header, because those methods
+     accept only a service token, never a user's JWT;
+   - `security: []` + `x-connectum-public: true` on `public` methods (none
+     today);
+   - `x-connectum-required-roles` / `-scopes` where the proto declares them —
+     on internal methods these name the services allowed to call;
+   - only the security schemes a spec actually uses.
 
 The committed `openapi/*.yaml` is the showcase output — regenerate with
 `pnpm openapi` after changing the proto or its auth options.
 
-> **Notes.** Streaming RPCs (`ListVehicles`) are omitted from the base spec
-> unless the plugin's `with-streaming` opt is set. The overlay targets the
-> `@connectum/auth` 1.0.0 API this example pins. `@connectum/auth` 1.1.0 adds an
-> `internal` method marker that the resolver exposes as `x-internal: true`;
-> migrating this example onto that marker is tracked in
-> [examples#36](https://github.com/Connectum-Framework/examples/issues/36).
+> **Note.** Streaming RPCs (`ListVehicles`) are omitted from the base spec
+> unless the plugin's `with-streaming` opt is set.
 
 ## Phase 3 — EventBus broadcast (fan-out)
 
@@ -659,12 +754,31 @@ dependency tree. After changing `package.json` or `pnpm-workspace.yaml`, run
 > validated against its JWKS, configured via `k8s/configmap.yaml`
 > (`OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE`); see
 > [Phase 4](#phase-4--ory-as-the-idp) and `ory/oathkeeper/README.md`.
+>
+> **Service tokens in k8s.** trips serves its service-token JWKS on the
+> `http-jwks` port (`9101`) of the `trips` Service; fleet and billing trust it
+> via `INTERNAL_ISSUER_TRIPS_JWKS`. No Temporal worker is deployed by these
+> manifests, so the worker issuer is not trusted (`INTERNAL_ISSUER_WORKER_JWKS:
+> ""`) and nothing in the cluster can call billing or `RecordTrip`/`EndTrip`.
+>
+> **The trips signing key is a Secret you create — it is not in the repo.**
+> All trips replicas mount the same `trips-internal-signing-key` Secret, so
+> fleet can verify a token from any pod. No Secret manifest is committed: a
+> manifest with a real key would leak it, and one with a placeholder would
+> only start pods that refuse to boot on an invalid key. Without the Secret
+> the trips pods do not start (the volume is not optional), which names the
+> missing step. Generate the key outside the cluster and create the Secret
+> (step 1 below); rotate by replacing the Secret and restarting the trips
+> Deployment.
 
 ```bash
 # 1. Namespace (with Istio sidecar injection) + identities + config.
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/rbac.yaml
-kubectl apply -f k8s/configmap.yaml       # incl. OATHKEEPER_JWKS_URI / JWT_ISSUER / JWT_AUDIENCE
+#    trips' service-token signing key (PKCS#8 RSA) → Secret; keep the PEM out of git.
+node src/internalKeygen.ts ./keys trips          # keys/ is git-ignored
+kubectl -n car-sharing create secret generic trips-internal-signing-key --from-file=trips.pem=./keys/trips.pem
+kubectl apply -f k8s/configmap.yaml       # incl. OATHKEEPER_JWKS_URI / JWT_* / INTERNAL_*
 
 # 2. Workloads + Services + autoscaling.
 kubectl apply -f k8s/deployment-fleet.yaml
@@ -675,7 +789,7 @@ kubectl apply -f k8s/hpa.yaml
 
 # 3. Mesh security + routing.
 kubectl apply -f istio/peer-authentication.yaml   # mTLS STRICT
-kubectl apply -f istio/authorization-policy.yaml  # fleet/billing <- trips SA only
+kubectl apply -f istio/authorization-policy.yaml  # fleet/billing <- trips SA only; trips JWKS <- fleet/billing
 kubectl apply -f istio/destination-rule.yaml      # pools, outlier detection, subsets
 kubectl apply -f istio/virtual-service.yaml       # in-mesh routing + retries
 kubectl apply -f istio/gateway.yaml               # external ingress -> trips
@@ -687,12 +801,12 @@ kubectl apply -f istio/gateway.yaml               # external ingress -> trips
 | ----------------------------------- | ----------------------------------------------------------------------- |
 | `k8s/namespace.yaml`                | namespace + `istio-injection: enabled`                                  |
 | `k8s/rbac.yaml`                     | one ServiceAccount per role (identities for AuthorizationPolicy)        |
-| `k8s/configmap.yaml`                | per-role `SERVICES`, `*_ADDR`, `OTEL_*`, and the gateway's `OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE` |
-| `k8s/deployment-*.yaml`             | Deployment per role (probes, security context, graceful shutdown)       |
-| `k8s/services.yaml`                 | ClusterIP Services; their DNS names are the `*_ADDR` targets            |
+| `k8s/configmap.yaml`                | per-role `SERVICES`, `*_ADDR`, `OTEL_*`, the gateway's `OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE`, and the service-token `INTERNAL_JWKS_PORT` / `INTERNAL_ISSUER_*_JWKS` |
+| `k8s/deployment-*.yaml`             | Deployment per role (probes, security context, graceful shutdown); trips also exposes its `jwks` port |
+| `k8s/services.yaml`                 | ClusterIP Services; their DNS names are the `*_ADDR` targets; trips adds the `http-jwks` port |
 | `k8s/hpa.yaml`                      | HorizontalPodAutoscaler per role                                        |
 | `istio/peer-authentication.yaml`    | mesh-wide mTLS STRICT                                                    |
-| `istio/authorization-policy.yaml`   | fleet/billing admit only the trips SA; trips admits only ingress        |
+| `istio/authorization-policy.yaml`   | fleet/billing admit only the trips SA; trips admits ingress, plus `GET /.well-known/jwks.json` on `9101` from the fleet/billing SAs |
 | `istio/destination-rule.yaml`       | connection pools, outlier detection, `stable`/`canary` subsets          |
 | `istio/virtual-service.yaml`        | in-mesh routing + retries for `ctx.call` traffic                        |
 | `istio/gateway.yaml`                | external ingress Gateway + VirtualService → trips                       |
@@ -729,7 +843,9 @@ car-sharing/
 │   ├── services/               fleetService (Drizzle), billingService, tripService
 │   ├── temporal/               TripWorkflow (+ broadcast tail), activities (+ publishTripCompleted), workflowClient, clients, config, tripStatus
 │   ├── topology.ts             env → mono/split (SERVICES + perServiceEnvResolver)
-│   ├── auth.ts                 RS256 JWT (JWKS) + proto authz interceptors (uniform chain)
+│   ├── auth.ts                 end-user RS256 JWT (JWKS) + internal service-token auth + proto authz (uniform chain)
+│   ├── internalAuth.ts         per-service signing identity: RS256 key from INTERNAL_SIGNING_KEY_FILE (or ephemeral), per-call token, JWKS endpoint, trusted issuers from env
+│   ├── internalKeygen.ts       writes missing PKCS#8 keys per identity (compose internal-keygen, k8s Secret)
 │   ├── observability.ts        env-gated OpenTelemetry wiring
 │   ├── server.ts               buildServer() — services + catalog + interceptors + db
 │   ├── worker.ts               Temporal worker process (bundles workflow via swc; builds the publish-only bus; `pnpm worker`)
@@ -741,9 +857,11 @@ car-sharing/
 │                               kratos/ (identity provider) + oathkeeper/ (edge proxy)
 ├── tests/
 │   ├── helpers/db.ts           PGlite test db (migrate + seed), injected via DI
+│   ├── helpers/internalAuth.ts real trips + worker signers with in-process JWKS endpoints
+│   ├── unit/internalAuth.test.ts signing-key file: stable thumbprint kid, start-up errors, keygen idempotence
 │   ├── workflow/               TripWorkflow: forward order + reverse compensation + broadcast tail (mocked activities)
 │   ├── activity/               Activity bodies: RPC wiring + compensation idempotency (in-process monolith); clients.test.ts: worker catalog client's localhost fallback
-│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth via @connectum/auth/testing RS256+JWKS, stub workflow client) + fleet.test.ts (persistence) + broadcast.test.ts (fan-out, MemoryAdapter)
+│   └── e2e/                    e2e.test.ts (gateway/pre-check/auth via @connectum/auth/testing RS256+JWKS, internal service tokens, stub workflow client) + split.test.ts (trips→fleet over gRPC, signed) + fleet.test.ts (persistence + per-RPC roles) + broadcast.test.ts (fan-out, MemoryAdapter)
 ├── k8s/                        namespace, rbac, configmap, deployments,
 │                               services, hpa (gateway JWKS env, no signing secret)
 ├── istio/                      peer-auth, authz, destination-rule, virtual-service,

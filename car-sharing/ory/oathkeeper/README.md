@@ -22,8 +22,8 @@ trips gateway (5000)
    │  createJwtAuthInterceptor({ jwksUri })          ← createRemoteJWKSet branch
    │     validates signature (kid → JWK), iss, aud, exp
    │  createProtoAuthzInterceptor({ defaultPolicy: "deny" })
-   ▼  internal gRPC ctx.call (tokenless, `public`)
-fleet / billing
+   ▼  internal gRPC ctx.call (signed service token in x-internal-token)
+fleet  (`internal`: verifies the token against trips' own JWKS)
 ```
 
 The JWKS the gateway consumes is Oathkeeper's **public** signing key, published at:

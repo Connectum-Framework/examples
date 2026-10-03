@@ -27,6 +27,8 @@ import { create } from "@bufbuild/protobuf";
 import { ConnectError } from "@connectrpc/connect";
 import { GetVehicleRequestSchema } from "#gen/fleet/v1/fleet_pb.ts";
 import { TripCompletedSchema } from "#gen/trips/v1/trip_events_pb.ts";
+import type { InternalSigner } from "#internalAuth.ts";
+import { createInternalSigner, InternalIdentity } from "#internalAuth.ts";
 import { createServiceClient } from "#temporal/clients.ts";
 
 /** The error text the catalog client produces when the resolver finds no route. */
@@ -44,9 +46,13 @@ async function outcome(promise: Promise<unknown>): Promise<unknown> {
 
 describe("Worker catalog client: endpoint resolution without *_ADDR", () => {
     const saved = process.env.FLEET_ADDR;
+    // Routing is decided before any request is signed or sent, so the signer's
+    // key is never checked here and needs no JWKS endpoint.
+    let signer: InternalSigner;
 
-    before(() => {
+    before(async () => {
         delete process.env.FLEET_ADDR;
+        signer = await createInternalSigner(InternalIdentity.worker);
     });
 
     after(() => {
@@ -58,14 +64,14 @@ describe("Worker catalog client: endpoint resolution without *_ADDR", () => {
     });
 
     it("an unset FLEET_ADDR falls back to the local compose port instead of reporting no route", async () => {
-        const client = createServiceClient();
+        const client = createServiceClient({ signer });
         const err = await outcome(client.call("fleet.v1.FleetService/GetVehicle", create(GetVehicleRequestSchema, { id: "v-001" }), { timeoutMs: 1000 }));
         const noRoute = err instanceof ConnectError && NO_ROUTE.test(err.message);
         assert.equal(noRoute, false, `expected a resolved route to the default fleet endpoint, got: ${String(err)}`);
     });
 
     it("control: a catalog service with neither an env var nor a default has no route", async () => {
-        const client = createServiceClient();
+        const client = createServiceClient({ signer });
         const err = await outcome(client.call("trips.v1.TripEventHandlers/OnTripCompleted", create(TripCompletedSchema, { tripId: "t-1" }), { timeoutMs: 1000 }));
         assert.ok(err instanceof ConnectError, `expected a ConnectError, got: ${String(err)}`);
         assert.match(err.message, NO_ROUTE);

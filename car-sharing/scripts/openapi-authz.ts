@@ -10,9 +10,12 @@
 // Run via `pnpm openapi` (generates the base from buf.gen.openapi.yaml, then this
 // overlay). NOTE: streaming RPCs (e.g. ListVehicles) are omitted from the base
 // unless the plugin's `with-streaming` opt is set, so they get no operation here.
-// `@connectum/auth` 1.1.0 adds an `internal` method marker; this example targets
-// the 1.0.0 API (no `internal` field on the resolver), so only `public` is mapped.
-// On 1.1.0 a method marked `internal` would also add `x-internal: true`.
+//
+// Three kinds of operation, mirroring the runtime chain:
+//  - `public`   → no credential at all;
+//  - `internal` → a per-service signed token in `x-internal-token` (an end-user
+//                 JWT is NOT accepted there), so it gets its own security scheme;
+//  - otherwise  → the end-user Bearer JWT.
 
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -34,7 +37,16 @@ const BEARER_AUTH = {
     type: "http",
     scheme: "bearer",
     bearerFormat: "JWT",
-    description: "Connectum JWT auth (createJwtAuthInterceptor / proto authz). Required for every non-public method.",
+    description: "End-user JWT (createJwtAuthInterceptor / proto authz). Required for every method that is neither public nor internal.",
+};
+
+/** The service-to-service token internal methods require (createInternalAuthInterceptor + signedTokenTrust). */
+const INTERNAL_TOKEN_AUTH = {
+    type: "apiKey",
+    in: "header",
+    name: "x-internal-token",
+    description:
+        "Service-to-service only. A short-lived RS256 JWT the CALLING SERVICE signs with its own key (iss = the service, aud = car-sharing-internal, roles = [the service]); verified against that service's JWKS. End-user JWTs are not accepted. x-connectum-required-roles names the services allowed to call.",
 };
 
 for (const { svc, file } of SPECS) {
@@ -45,8 +57,10 @@ for (const { svc, file } of SPECS) {
     doc.components ??= {};
     doc.components.securitySchemes ??= {};
     doc.components.securitySchemes.bearerAuth = BEARER_AUTH;
+    doc.components.securitySchemes.internalToken = INTERNAL_TOKEN_AUTH;
 
     let publicCount = 0;
+    let internalCount = 0;
     let securedCount = 0;
     for (const method of svc.methods) {
         const op = doc.paths?.[`/${svc.typeName}/${method.name}`]?.post;
@@ -58,16 +72,25 @@ for (const { svc, file } of SPECS) {
             publicCount += 1;
             continue;
         }
-        op.security = [{ bearerAuth: [] }];
+        if (auth.internal) {
+            op.security = [{ internalToken: [] }];
+            op["x-connectum-internal"] = true;
+            internalCount += 1;
+        } else {
+            op.security = [{ bearerAuth: [] }];
+            securedCount += 1;
+        }
         if (auth.requires && auth.requires.roles.length > 0) op["x-connectum-required-roles"] = [...auth.requires.roles];
         if (auth.requires && auth.requires.scopes.length > 0) op["x-connectum-required-scopes"] = [...auth.requires.scopes];
-        // On `@connectum/auth` 1.1.0, a method marked `internal` would add
-        // `op["x-internal"] = true` here (this example targets 1.0.0, so it does not).
-        securedCount += 1;
     }
 
+    // Drop a scheme no operation of this spec uses, so a reader is not told a
+    // credential exists that the service never accepts.
+    if (internalCount === 0) delete doc.components.securitySchemes.internalToken;
+    if (securedCount === 0) delete doc.components.securitySchemes.bearerAuth;
+
     writeFileSync(path, stringify(doc));
-    console.log(`overlay ${file}: ${securedCount} secured, ${publicCount} public (of ${svc.methods.length} methods)`);
+    console.log(`overlay ${file}: ${securedCount} user-JWT, ${internalCount} internal, ${publicCount} public (of ${svc.methods.length} methods)`);
 }
 
 // The base plugin also emits a schemas-only spec for the imported

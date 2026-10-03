@@ -12,8 +12,10 @@
  *  - VoidTab on a missing/already-void tab is a no-op success.
  *  - RefundCharge on a missing/already-refunded charge is a no-op success.
  *
- * Like FleetService it is internal-only and `public` in proto, so the gateway
- * auth/authz interceptors skip it on the worker's tokenless ConnectRPC calls.
+ * Like FleetService it is `internal` in proto: no handler here checks identity,
+ * because the interceptor chain admits only a request carrying the worker's
+ * signed service token (`requires { roles: ["worker"] }`) before any handler
+ * runs (see billing.proto and `#auth.ts`).
  *
  * @module services/billingService
  */

@@ -5,23 +5,30 @@
  * What stays constant across topologies:
  *  - the same three service definitions are passed to `createServer`;
  *  - the same generated `serviceCatalog` types and routes every `ctx.call`;
- *  - the same gateway interceptor chain in the recommended fixed order
- *    (errorHandler → JWT auth → proto authz → OTel → validation). The chain is uniform; per-method
- *    behaviour comes from proto annotations (fleet/billing are `public`,
- *    TripService requires auth).
+ *  - the same interceptor chain in the recommended fixed order (errorHandler →
+ *    end-user JWT auth → service-token auth → proto authz → OTel →
+ *    validation). The chain is uniform; per-method behaviour comes from proto
+ *    annotations (fleet/billing and RecordTrip/EndTrip are `internal`,
+ *    StartTrip/GetTrip require an end-user JWT).
  *
  * What env changes:
  *  - `enabledServices` — which of the three are mounted locally (undefined =
- *    monolith, all local). Unmounted services are reached via `remoteResolver`.
- *  - `remoteResolver` — maps a remote service `typeName` to its endpoint env var.
+ *    monolith, all local). Unmounted services are reached via the remote
+ *    resolver, which maps a remote service `typeName` to its endpoint env var.
+ *  - the trusted internal token issuers (`INTERNAL_ISSUER_*_JWKS`).
  *  - the OTel interceptor — present only when an OTLP endpoint is configured.
+ *
+ * A role that hosts TripService must be given the trips signer: StartTrip's
+ * pre-check calls FleetService, an internal service, and that call is signed
+ * on BOTH paths — `outgoingInterceptors` for the in-process transport
+ * (monolith) and the remote resolver's transport for the network (split).
  *
  * @module server
  */
 
 import type { Interceptor } from "@connectrpc/connect";
 import type { Server } from "@connectum/core";
-import { createServer } from "@connectum/core";
+import { createServer, perServiceEnvResolver } from "@connectum/core";
 import { Healthcheck } from "@connectum/healthcheck";
 import { createDefaultInterceptors, createErrorHandlerInterceptor } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
@@ -29,6 +36,8 @@ import { buildAuthInterceptors, JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
 import type { Db } from "#db/client.ts";
 import { createDb } from "#db/client.ts";
 import { serviceCatalog } from "#gen/catalog.gen.ts";
+import type { InternalIssuers, InternalSigner } from "#internalAuth.ts";
+import { createSignedTransport, internalIssuersFromEnv } from "#internalAuth.ts";
 import { buildOtelInterceptor } from "#observability.ts";
 import { billingService } from "#services/billingService.ts";
 import { createFleetService } from "#services/fleetService.ts";
@@ -37,7 +46,7 @@ import { createTripService } from "#services/tripService.ts";
 import { TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
 import { createWorkflowClient } from "#temporal/workflowClient.ts";
 import type { Topology } from "#topology.ts";
-import { resolveTopology, TYPE_NAMES } from "#topology.ts";
+import { ENDPOINT_ENV, resolveTopology, TYPE_NAMES } from "#topology.ts";
 
 /**
  * Default JWKS endpoint when none is configured: Ory Oathkeeper's PUBLIC
@@ -98,6 +107,20 @@ export interface BuildServerOptions {
      *    "Temporal not configured" path even when TripService is mounted).
      */
     readonly workflowClient?: TripWorkflowClient | null;
+    /**
+     * The trips service identity, used to sign this role's outgoing internal
+     * calls (StartTrip's pre-check to FleetService). REQUIRED when the role
+     * hosts TripService — without it every StartTrip would fail its pre-check
+     * as Unauthenticated, so {@link buildServer} refuses to build instead.
+     * The caller owns the signer's JWKS endpoint (see `src/index.ts`).
+     */
+    readonly internalSigner?: InternalSigner;
+    /**
+     * Services whose tokens this role accepts on internal methods. Defaults to
+     * `internalIssuersFromEnv()` (`INTERNAL_ISSUER_*_JWKS`); tests inject the
+     * JWKS URLs of their in-process signers.
+     */
+    readonly internalIssuers?: InternalIssuers;
 }
 
 /**
@@ -110,6 +133,23 @@ export interface BuildServerOptions {
 export function buildServer(options: BuildServerOptions = {}): Server {
     const topology = options.topology ?? resolveTopology();
     const port = options.port ?? Number(process.env.PORT ?? 5000);
+    const hostsTrips = topology.localTypeNames.includes(TYPE_NAMES.trips);
+
+    // Service-to-service identity. The trips handler's pre-check is the only
+    // ctx.call in the app, so only a role hosting TripService signs. Checked
+    // first: a missing signer is a wiring mistake in the caller, and reporting
+    // it beats failing on some unrelated setting further down.
+    const signer = options.internalSigner;
+    if (hostsTrips && signer === undefined) {
+        throw new Error(
+            'buildServer: this role hosts trips.v1.TripService, whose StartTrip calls the internal FleetService — pass `internalSigner` (createInternalSigner("trips")) so that call carries a service token.',
+        );
+    }
+    const internalIssuers = options.internalIssuers ?? internalIssuersFromEnv();
+    // Remote peers are dialled with a transport that signs every request; the
+    // in-process transport gets the same interceptor via outgoingInterceptors.
+    // Roles without a signer make no internal calls, so plain gRPC is enough.
+    const remoteResolver = perServiceEnvResolver(ENDPOINT_ENV, signer ? { createTransport: (baseUrl) => createSignedTransport(baseUrl, signer) } : undefined);
 
     // Phase 4 IdP-consumer identity inputs. The trips gateway never holds a
     // signing secret; it validates RS256 tokens against Oathkeeper's published
@@ -135,7 +175,6 @@ export function buildServer(options: BuildServerOptions = {}): Server {
     // pre-check e2e runs without a live Temporal server. An explicit `null`
     // forces the "Temporal not configured" path; an explicit value (a test
     // stub) is used verbatim.
-    const hostsTrips = topology.localTypeNames.includes(TYPE_NAMES.trips);
     let workflowClient: TripWorkflowClient | undefined;
     if (options.workflowClient !== undefined) {
         workflowClient = options.workflowClient ?? undefined;
@@ -149,12 +188,13 @@ export function buildServer(options: BuildServerOptions = {}): Server {
 
     const otelInterceptor = buildOtelInterceptor();
     const interceptors: Interceptor[] = [
-        // Fixed chain order: errorHandler first, then auth/authz immediately
-        // after it (so unauthenticated requests are rejected before validation),
-        // then OTel — placed after authz so getAuthContext() is populated for
-        // enduser span attributes — then the default validation chain.
+        // Fixed chain order: errorHandler first, then authn (end-user JWT and
+        // service token) and authz immediately after it (so unauthenticated
+        // requests are rejected before validation), then OTel — placed after
+        // authz so getAuthContext() is populated for enduser span attributes —
+        // then the default validation chain.
         createErrorHandlerInterceptor(),
-        ...buildAuthInterceptors({ jwksUri, issuer, audience }),
+        ...buildAuthInterceptors({ jwksUri, issuer, audience, internalIssuers }),
         ...(otelInterceptor ? [otelInterceptor] : []),
         ...createDefaultInterceptors({ errorHandler: false }),
     ];
@@ -163,7 +203,10 @@ export function buildServer(options: BuildServerOptions = {}): Server {
         services: [fleetService, tripService, billingService],
         catalog: serviceCatalog,
         enabledServices: topology.enabledServices,
-        remoteResolver: topology.remoteResolver,
+        remoteResolver,
+        // Applies only to the in-process transport (a local ctx.call in the
+        // monolith); network calls are signed by the resolver's transport.
+        outgoingInterceptors: signer ? [signer.interceptor] : [],
         port,
         host: "0.0.0.0",
         // Phase 4 edge posture, env-gated (default h2c/gRPC). On a plaintext

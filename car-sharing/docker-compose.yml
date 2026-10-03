@@ -33,6 +33,14 @@
 #   # TripWorkflow reserve → record → end → openTab → addCharge → settle. Stop the
 #   # billing role mid-run to watch the compensations unwind in reverse.
 #
+# Service-to-service calls (the trips pre-check, every worker activity) carry a
+# per-service signed token: trips and the worker each sign with their own key
+# from its own `internal-key-*` volume (written once by `internal-keygen`, so it
+# survives restarts) and serve its JWKS on INTERNAL_JWKS_PORT (9101 / 9102,
+# network-only, not published to the host); fleet, trips and billing verify against those
+# URLs (INTERNAL_ISSUER_*_JWKS). A direct call from the host to an internal
+# method, e.g. billing Settle on :5003, is therefore UNAUTHENTICATED.
+#
 # ── Phase 4 (ory) ───────────────────────────────────────────────────────────
 # Ory as the IdP, Connectum as a thin consumer. Kratos owns users/sessions (its
 # OWN Postgres — a THIRD independent store next to the app + Temporal dbs);
@@ -88,6 +96,18 @@ services:
       PORT: "5000"
       # Monolith: SERVICES unset → every service mounted in-process.
       DATABASE_URL: postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      # Service-to-service auth. The monolith hosts TripService, so it signs
+      # its in-process pre-check (ctx.call → FleetService/GetVehicle) as
+      # `trips` and serves that key's JWKS on INTERNAL_JWKS_PORT; its own fleet
+      # verifies the token against that same endpoint over loopback. There is
+      # no worker in this profile, so the worker issuer is not trusted.
+      # No INTERNAL_SIGNING_KEY_FILE here on purpose: the only verifier of the
+      # trips key is this same process, so a restart replaces the key AND the
+      # verifier's cached keyset together — an ephemeral key cannot go stale.
+      # (Signers verified by OTHER processes — saga, ory — use the keygen file.)
+      INTERNAL_JWKS_PORT: "9101"
+      INTERNAL_ISSUER_TRIPS_JWKS: http://localhost:9101/.well-known/jwks.json
+      INTERNAL_ISSUER_WORKER_JWKS: ""
     ports:
       - "5000:5000"
     networks:
@@ -175,6 +195,39 @@ services:
       - car-sharing
     profiles: ["saga"]
 
+  # ── Service-token keys — one RS256 key per signing identity ────────────────
+  #
+  # One-shot: writes trips.pem and worker.pem (PKCS#8), each into ITS OWN volume,
+  # only if absent — so the keys, and the `kid` every verifier caches, survive
+  # restarts and `up` re-runs. No private key is committed to git; it is
+  # materialized at up-time (the same pattern as oathkeeper-keygen below).
+  # One volume per identity, because each signer may read only its own key:
+  # a trips container that could read the worker's key could forge the worker.
+  # Runs as root only to take ownership of the fresh volumes, then hands the
+  # files to the `node` user the app runs as: directory 0700, key 0400. Each
+  # signer mounts its own volume read-only.
+  internal-keygen:
+    build: .
+    image: car-sharing:local
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        node src/internalKeygen.ts /keys/trips trips &&
+        node src/internalKeygen.ts /keys/worker worker &&
+        chown -R node:node /keys/trips /keys/worker &&
+        chmod 700 /keys/trips /keys/worker
+    volumes:
+      - internal-key-trips:/keys/trips
+      - internal-key-worker:/keys/worker
+    # A one-shot that serves nothing — the image's HTTP /healthz probe does
+    # not apply.
+    healthcheck:
+      disable: true
+    networks:
+      - car-sharing
+    profiles: ["saga", "ory"]
+
   # ── FLEET role — the persistent leaf (Drizzle + app Postgres) ──────────────
   fleet:
     build: .
@@ -185,6 +238,12 @@ services:
       - PORT=5001
       - SERVICES=fleet.v1.FleetService
       - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      # Every fleet RPC is `internal`: fleet verifies the caller's service token
+      # against the JWKS of the issuer the token names. Its callers are trips
+      # (the StartTrip pre-check) and the worker (reserve/release). fleet calls
+      # no one, so it holds no key of its own.
+      - INTERNAL_ISSUER_TRIPS_JWKS=http://trips:9101/.well-known/jwks.json
+      - INTERNAL_ISSUER_WORKER_JWKS=http://worker:9102/.well-known/jwks.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -217,7 +276,19 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_NAMESPACE=default
       - TEMPORAL_TASK_QUEUE=car-sharing-trips
+      # trips signs its pre-check to fleet as `trips` with the key from the
+      # keygen volume and publishes the public half here (fleet fetches it from
+      # http://trips:9101/.well-known/jwks.json). It verifies the worker's
+      # token on RecordTrip / EndTrip.
+      - INTERNAL_SIGNING_KEY_FILE=/keys/trips.pem
+      - INTERNAL_JWKS_PORT=9101
+      - INTERNAL_ISSUER_TRIPS_JWKS=http://trips:9101/.well-known/jwks.json
+      - INTERNAL_ISSUER_WORKER_JWKS=http://worker:9102/.well-known/jwks.json
+    volumes:
+      - internal-key-trips:/keys:ro
     depends_on:
+      internal-keygen:
+        condition: service_completed_successfully
       fleet:
         condition: service_healthy
       temporal:
@@ -242,6 +313,10 @@ services:
       - PORT=5003
       - SERVICES=billing.v1.BillingService
       - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      # Every billing RPC is `internal` and worker-only; billing verifies the
+      # caller's service token (a valid trips token is PERMISSION_DENIED).
+      - INTERNAL_ISSUER_TRIPS_JWKS=http://trips:9101/.well-known/jwks.json
+      - INTERNAL_ISSUER_WORKER_JWKS=http://worker:9102/.well-known/jwks.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -274,7 +349,17 @@ services:
       # The worker hosts the publish-only EventBus: on settle it broadcasts ONE
       # `trips.completed` event here (the reactors below consume it).
       - NATS_URL=nats://nats:4222
+      # Every activity call is `internal`: the worker signs it as `worker` with
+      # the key from the keygen volume and publishes the public half here
+      # (fleet, trips and billing fetch it from
+      # http://worker:9102/.well-known/jwks.json).
+      - INTERNAL_SIGNING_KEY_FILE=/keys/worker.pem
+      - INTERNAL_JWKS_PORT=9102
+    volumes:
+      - internal-key-worker:/keys:ro
     depends_on:
+      internal-keygen:
+        condition: service_completed_successfully
       temporal:
         condition: service_healthy
       fleet:
@@ -493,7 +578,19 @@ services:
       - JWT_AUDIENCE=car-sharing-trips
       # Serve the edge over Connect/HTTP1 so Oathkeeper's HTTP proxy can front it.
       - ALLOW_HTTP1=true
+      # Service-to-service auth: the pre-check to fleet-ory is signed as
+      # `trips` with the keygen volume's key; fleet-ory fetches the public key
+      # from http://trips-ory:9101. No worker runs in this profile, so the
+      # worker issuer is not trusted.
+      - INTERNAL_SIGNING_KEY_FILE=/keys/trips.pem
+      - INTERNAL_JWKS_PORT=9101
+      - INTERNAL_ISSUER_TRIPS_JWKS=http://localhost:9101/.well-known/jwks.json
+      - INTERNAL_ISSUER_WORKER_JWKS=
+    volumes:
+      - internal-key-trips:/keys:ro
     depends_on:
+      internal-keygen:
+        condition: service_completed_successfully
       oathkeeper:
         condition: service_healthy
       fleet-ory:
@@ -508,8 +605,9 @@ services:
       - car-sharing
     profiles: ["ory"]
 
-  # The fleet leaf for the ory profile (the pre-check ctx.call target). Public,
-  # keeps the gRPC/h2c default.
+  # The fleet leaf for the ory profile (the pre-check ctx.call target). Internal
+  # (it accepts only trips-ory's signed service token), keeps the gRPC/h2c
+  # default.
   fleet-ory:
     build: .
     image: car-sharing:local
@@ -518,6 +616,8 @@ services:
       - PORT=5000
       - SERVICES=fleet.v1.FleetService
       - DATABASE_URL=postgresql://car_sharing:car_sharing@postgres:5432/car_sharing
+      - INTERNAL_ISSUER_TRIPS_JWKS=http://trips-ory:9101/.well-known/jwks.json
+      - INTERNAL_ISSUER_WORKER_JWKS=
     depends_on:
       postgres:
         condition: service_healthy
@@ -540,3 +640,5 @@ volumes:
   temporal-pgdata:
   kratos-pgdata:
   oathkeeper-keys:
+  internal-key-trips:
+  internal-key-worker:

@@ -16,7 +16,14 @@
  *    (`handle.query(getTripStatusQuery)`), falling back to a terminal status
  *    derived from `handle.describe()` once the workflow has closed.
  *  - `RecordTrip` / `EndTrip` are the INTERNAL RPCs the worker's activities call
- *    (method-level `public` in proto). They own the in-memory trip ledger.
+ *    (method-level `internal`, worker role only, in proto). They own the
+ *    in-memory trip ledger.
+ *
+ * The pre-check's `ctx.call` targets an `internal` service, so it must carry a
+ * service token. The handler does not attach one itself: the server signs
+ * every outgoing call of this role as `trips` (see `buildServer`'s
+ * `internalSigner`), on the in-process transport and the network alike, so the
+ * call site stays the same in every topology.
  *
  * The Temporal client is INJECTED via the {@link createTripService} factory
  * (mirroring `createFleetService(db)`), so the server can supply a lazy

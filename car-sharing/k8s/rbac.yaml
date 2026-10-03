@@ -1,8 +1,8 @@
 # One ServiceAccount per role. These identities are the basis for Istio's
 # AuthorizationPolicy: in istio/authorization-policy.yaml, fleet and billing only
-# admit traffic from the `trips` ServiceAccount principal, so the internal
-# `public` services are reachable solely by the gateway — the mesh enforces the
-# trust boundary that the application-level `public` annotation assumes.
+# admit traffic from the `trips` ServiceAccount principal, and only fleet and
+# billing may fetch trips' JWKS. That is the network layer; the application
+# layer is the per-service signed token every internal method requires.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
