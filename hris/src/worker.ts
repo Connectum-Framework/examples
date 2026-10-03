@@ -13,17 +13,28 @@
  * resolved with `fileURLToPath(new URL(...))`. The activities run here in full
  * Node and drive the role services over ConnectRPC (`temporal/clients.ts`).
  *
+ * The worker also owns the publish-only EventBus the final `announceOnboarded`
+ * activity broadcasts `EmployeeOnboarded` on (`NATS_URL`): it is started before
+ * polling begins, so the activity never sees an unstarted bus, and stopped on
+ * the way out.
+ *
  * @module worker
  */
 
 import { fileURLToPath } from "node:url";
 import { NativeConnection, Worker } from "@temporalio/worker";
+import { buildOnboardedPublisherBus } from "#broadcast/buses.ts";
 import * as activities from "#temporal/activities.ts";
 import { TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
+import { setOnboardedPublisher } from "#temporal/publisher.ts";
 
 async function main(): Promise<void> {
     const connection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS });
+    const publisherBus = buildOnboardedPublisherBus();
     try {
+        await publisherBus.start();
+        setOnboardedPublisher(publisherBus);
+
         const worker = await Worker.create({
             connection,
             namespace: TEMPORAL_NAMESPACE,
@@ -36,7 +47,9 @@ async function main(): Promise<void> {
         console.log(`hris temporal worker ready — taskQueue=${TEMPORAL_TASK_QUEUE} namespace=${TEMPORAL_NAMESPACE} temporal=${TEMPORAL_ADDRESS}`);
         await worker.run();
     } finally {
-        await connection.close();
+        setOnboardedPublisher(undefined);
+        // Close both even if one of them fails, so neither connection leaks.
+        await Promise.allSettled([publisherBus.stop(), connection.close()]);
     }
 }
 

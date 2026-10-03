@@ -23,7 +23,9 @@
  *
  * activateEmployee (step 5) pushes NO compensation: it is the terminal
  * happy-path step, so a success is final and there is nothing after it to roll
- * back.
+ * back. Only after it succeeds does the workflow announce `EmployeeOnboarded`
+ * (the `announceOnboarded` activity) — outside the compensation scope, and a
+ * failed announcement does not fail the workflow.
  *
  * Live status is exposed via `getOnboardingStatusQuery` so the gateway's
  * GetOnboarding can read it with `handle.query(getOnboardingStatusQuery)`.
@@ -31,7 +33,7 @@
  * @module temporal/workflows
  */
 
-import { ApplicationFailure, defineQuery, log, proxyActivities, setHandler } from "@temporalio/workflow";
+import { ApplicationFailure, defineQuery, log, patched, proxyActivities, setHandler } from "@temporalio/workflow";
 import type * as activities from "#temporal/activities.ts";
 import type { OnboardingStatus as OnboardingStatusT } from "#temporal/onboardingStatus.ts";
 import { OnboardingStatus } from "#temporal/onboardingStatus.ts";
@@ -120,8 +122,6 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
         // compensation.
         await acts.activateEmployee({ employeeId });
         status = OnboardingStatus.COMPLETED;
-
-        return status;
     } catch (err) {
         // Unwind in LIFO order; each compensation is isolated so the unwind
         // never throws. Temporal already retried each forward+comp activity.
@@ -138,4 +138,25 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
         if (err instanceof ApplicationFailure) throw err;
         throw ApplicationFailure.create({ message: String(err), type: "OnboardingWorkflowFailed" });
     }
+
+    // Reached only on success (the catch above always rethrows). Announce the
+    // completed onboarding to the EventBus reactors. This sits OUTSIDE the
+    // compensation scope on purpose: the employee is already active, and losing
+    // the announcement must never undo that, so a failure (after Temporal's
+    // retries) is logged and the workflow still completes.
+    //
+    // `patched` keeps replay deterministic for runs that completed before this
+    // step existed: GetOnboarding queries a closed run by replaying its history,
+    // and that history has no record of this activity. For those runs `patched`
+    // is false and the step is skipped; every new run records the marker and
+    // announces.
+    if (patched("announce-employee-onboarded")) {
+        try {
+            await acts.announceOnboarded({ employeeId, name, email, title, department, managerId });
+        } catch (err) {
+            log.warn("EmployeeOnboarded broadcast failed; the onboarding stays completed", { employeeId, error: String(err) });
+        }
+    }
+
+    return status;
 }

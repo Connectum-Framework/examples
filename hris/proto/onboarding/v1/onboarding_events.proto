@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package onboarding.v1;
+
+import "connectum/events/v1/options.proto";
+import "google/protobuf/empty.proto";
+
+// EmployeeOnboarded is the integration event broadcast once the onboarding saga
+// has COMPLETED (the new hire is active). Several independent reactors consume
+// it — each on its own consumer group, so every one of them receives every
+// event.
+//
+// The broadcast only announces a fact that is already durable: the saga, not
+// the event, owns the onboarding. Losing the broadcast must never roll back a
+// completed onboarding.
+message EmployeeOnboarded {
+  // The onboarded employee's id (also the reactors' idempotency key).
+  string employee_id = 1;
+  string name = 2;
+  // Work email — where the welcome reactor sends its greeting.
+  string email = 3;
+  // Department — the headcount reactor tallies per department.
+  string department = 4;
+  // The new hire's manager id (empty for the top of the org chart).
+  string manager_id = 5;
+}
+
+// OnboardingEventHandlers is an event-handler service: each RPC is a
+// subscription. The (connectum.events.v1.event).topic option pins the topic, so
+// the publisher (which lists this service in `publishes`) and every reactor
+// (which registers it via `routes` on its own bus) agree on the topic from the
+// proto alone — no raw topic string is passed to publish().
+service OnboardingEventHandlers {
+  // OnEmployeeOnboarded reacts to a completed onboarding. Each reactor binds its
+  // own handler to this RPC on its own bus.
+  rpc OnEmployeeOnboarded(EmployeeOnboarded) returns (google.protobuf.Empty) {
+    option (connectum.events.v1.event).topic = "onboarding.employee-onboarded";
+  }
+}

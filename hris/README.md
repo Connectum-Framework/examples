@@ -11,10 +11,10 @@ the right tool for a different job:
 | Mechanism | Used for | In this example |
 |---|---|---|
 | **`ctx.call`** (synchronous) | a reply you need now | `RequestLeave` validates the employee against the directory |
-| **EventBus** (fire-and-forget) | broadcast a fact | `LeaveApproved` → payroll decrements the balance |
+| **EventBus** (fire-and-forget) | announce a fact to one or many consumers | `LeaveApproved` → payroll decrements the balance (one subscriber); `EmployeeOnboarded` → welcome + audit + headcount ([broadcast](#broadcast-employeeonboarded)) |
 | **Temporal saga** (durable) | a long multi-step transaction with rollback | onboarding a new hire across four services |
 
-Five services, one integration event, and a durable saga:
+Five services, two integration events, and a durable saga:
 
 - **`directory.v1.DirectoryService`** — `GetEmployee(id)` → `Employee` and
   `ListEmployees(filter)` → stream of `Employee` (the employee **system of
@@ -34,14 +34,18 @@ Five services, one integration event, and a durable saga:
 - **`onboarding.v1.OnboardingService`** — `OnboardEmployee` / `GetOnboarding`
   (the saga **gateway**: a synchronous pre-check, then it starts the durable
   `OnboardingWorkflow`). See [The onboarding saga](#the-onboarding-saga-temporal).
+  When the saga completes, the worker broadcasts **`EmployeeOnboarded`** to three
+  independent reactors. See [Broadcast](#broadcast-employeeonboarded).
 
 The product is deliberately thin — the point is the framework wiring.
 
-> **Note:** this example uses the service-catalog API (`defineService`,
-> `ctx.call`, `catalog`) and the EventBus, shipped in **1.0.0** (published on
-> npm). The onboarding saga uses [Temporal](https://temporal.io) (an external
-> dependency) — no Connectum API beyond 1.0.0, so it runs on the published
-> packages.
+> **Note:** this example runs on the published `@connectum/*` packages and
+> requires **1.2.0 or later** (`^1.2.0` in `package.json`). Besides the
+> service-catalog API (`defineService`, `ctx.call`, `catalog`) and the EventBus,
+> it uses APIs that are not in 1.0.0: `createCatalogClient` (the worker's
+> client), the EventBus `publishes` / `strictTopics` options, and
+> `createBroadcastSubscribers`. The onboarding saga uses
+> [Temporal](https://temporal.io), an external dependency.
 
 ## The headline: one codebase, two topologies
 
@@ -88,6 +92,23 @@ NATS broker when started via `pnpm start` / Docker. Only the e2e test swaps in a
 in-memory adapter so the full flow runs broker-free (see
 [Testing note](#testing-note)).
 
+### Where the event topic comes from
+
+`LeaveApproved`'s topic is declared once, in `payroll.proto`:
+`option (connectum.events.v1.event).topic = "timeoff.leave-approved"`. TimeOffService
+publishes without naming a topic, so each process's bus has to know it
+(`src/eventBus.ts`):
+
+- a process that hosts PayrollService learns it from the subscriber route;
+- a process that hosts TimeOffService lists `PayrollEventHandlers` in
+  **`publishes`**. In the split topology the timeoff role has no payroll route,
+  and without this declaration its bus would publish to the message typeName
+  (`payroll.v1.LeaveApproved`), where the payroll role is not listening;
+- every bus `buildEventBus` creates — like the `EmployeeOnboarded` publisher bus
+  below — sets **`strictTopics: true`**, so a publish whose topic the bus cannot
+  resolve throws at the call site rather than going out under the typeName and
+  getting lost.
+
 ## The onboarding saga (Temporal)
 
 Onboarding a new hire is a **long, multi-step transaction**: create the directory
@@ -129,6 +150,13 @@ createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provision
   partially-applied step is safe.
 - **`activateEmployee`** (onboarding → active) is terminal: a success is final, so
   it pushes no compensation.
+- After it, and outside the compensation scope, **`announceOnboarded`**
+  broadcasts `EmployeeOnboarded` (see [Broadcast](#broadcast-employeeonboarded)).
+  If that activity still fails after Temporal's retries, the workflow logs a
+  warning and stays `COMPLETED`: the employee is already active, and a lost
+  announcement must not undo that. The step is guarded with Temporal's
+  `patched()`, so runs that completed before it existed still replay
+  deterministically when `GetOnboarding` queries them.
 
 ### The worker — a separate process
 
@@ -136,13 +164,25 @@ The durable code runs in a dedicated **worker** (`src/worker.ts`), the **only**
 process that imports `@temporalio/worker` (the native core-bridge + the swc
 workflow bundler). The RPC roles import only the pure-JS `@temporalio/client`, so
 they keep their **no-build, native-TS** run model — `node src/index.ts`, no
-compile step. The worker's activities drive the role services over ConnectRPC
-(`*_ADDR`), exactly like any other cross-pod call.
+compile step.
+
+The worker has no Connectum `Server`, so there is no `ctx.call` there. Its
+activities use **`createCatalogClient`** instead (`src/temporal/clients.ts`): the
+same typed `client.call("directory.v1.DirectoryService/CreateEmployee", req)`
+surface, built from the generated `serviceCatalog`, with every call routed over
+the network. The resolver reads the same `*_ADDR` variables as the RPC roles
+(`perServiceEnvResolver` over the map exported by `src/topology.ts`) and falls
+back to `http://localhost:5001`–`5004` when a variable is unset or empty.
+
+The worker also owns the publish-only EventBus the `announceOnboarded` activity
+uses (`NATS_URL`): it starts the bus before polling Temporal and stops it on
+shutdown.
 
 ### Run the saga
 
-The `saga` compose profile adds Temporal, the onboarding gateway, and the worker;
-it pairs with `split` (the worker targets the per-role services):
+The `saga` compose profile adds Temporal, the onboarding gateway, the worker, and
+the three `EmployeeOnboarded` reactors; it pairs with `split` (the worker targets
+the per-role services, and the worker and reactors use its NATS):
 
 ```bash
 docker compose --profile split --profile saga up
@@ -153,6 +193,42 @@ grpcurl -plaintext -d '{"employee_id":"e-100","name":"New Hire","email":"newhire
 open http://localhost:8088
 ```
 
+## Broadcast: EmployeeOnboarded
+
+`LeaveApproved` has exactly one consumer (payroll). `EmployeeOnboarded` is the
+other face of the EventBus: **one** announcement, **many** independent consumers.
+When the saga completes, the worker publishes it once, and three reactors
+(`src/broadcast/reactors.ts`) each react on their own:
+
+- **welcome** — "sends" a welcome email to the new hire;
+- **audit** — appends one record per onboarded employee;
+- **headcount** — tallies the headcount per department.
+
+The event and its topic live in `proto/onboarding/v1/onboarding_events.proto`
+(`EmployeeOnboarded`, `OnboardingEventHandlers.OnEmployeeOnboarded` with
+`topic = "onboarding.employee-onboarded"`). The wiring is in
+`src/broadcast/buses.ts`:
+
+- The **publisher** bus is publish-only: no routes,
+  `publishes: [OnboardingEventHandlers]` and `strictTopics: true`. The topic is
+  taken from the proto option; nothing passes a raw topic string.
+- The **reactor** buses come from **`createBroadcastSubscribers`**: one bus per
+  reactor, each with its own consumer group (`hris-welcome`, `hris-audit`,
+  `hris-headcount`). Both parts matter. One bus cannot carry two handlers for
+  the same topic, and on a broker reactors sharing a group would split the
+  events between them, whereas distinct groups give each reactor its own durable
+  consumer, so each one receives every event.
+
+The reactors are **idempotent** (they dedupe by `employeeId`): delivery is
+at-least-once, and a retried `announceOnboarded` may publish the same hire twice.
+
+The reactors run as their own process, `node src/reactors.ts` (`pnpm reactors`).
+Like `SERVICES` for the RPC roles, `REACTORS` picks what runs there: a
+comma-separated list of `welcome`, `audit`, `headcount`; unset or `*` hosts all
+three in one process. The compose `saga` profile runs one container per reactor.
+Either way, each reactor keeps its own bus and group, so the delivery is the
+same — only the number of processes changes.
+
 ## Layout
 
 ```
@@ -162,6 +238,7 @@ proto/
   payroll/v1/payroll.proto           # GetBalance + LeaveApproved + SetupPayroll/TeardownPayroll (saga)
   access/v1/access.proto             # AccessService.ProvisionAccess/RevokeAccess (saga leaf)
   onboarding/v1/onboarding.proto     # OnboardingService.OnboardEmployee/GetOnboarding (saga gateway)
+  onboarding/v1/onboarding_events.proto # EmployeeOnboarded + OnboardingEventHandlers (broadcast topic)
   connectum/events/v1/options.proto  # (connectum.events.v1.event).topic option
 buf.gen.yaml                         # protoc-gen-es + protoc-gen-connectum-catalog (strategy: all)
 src/
@@ -176,13 +253,16 @@ src/
   temporal/onboardingStatus.ts       # OnboardingStatus const (side-effect-free, sandbox-safe)
   temporal/config.ts                 # TEMPORAL_ADDRESS / NAMESPACE / TASK_QUEUE (env)
   temporal/workflowClient.ts         # lazy @temporalio/client WorkflowClient (gateway side)
-  temporal/clients.ts                # ConnectRPC clients the activities drive (*_ADDR)
-  temporal/activities.ts             # saga side effects (each one RPC) + compensations
+  temporal/clients.ts                # createCatalogClient for the activities (*_ADDR, local defaults)
+  temporal/activities.ts             # saga side effects (each one client.call) + compensations + announceOnboarded
+  temporal/publisher.ts              # holds the worker's EmployeeOnboarded publisher bus
   temporal/workflows.ts              # OnboardingWorkflow — the durable saga (deterministic sandbox)
-  worker.ts                          # @temporalio/worker host (the ONLY native-addon process)
+  worker.ts                          # @temporalio/worker host (the ONLY native-addon process); owns the publisher bus
+  broadcast/buses.ts                 # publish-only bus (publishes + strictTopics) + createBroadcastSubscribers
+  broadcast/reactors.ts              # welcome / audit / headcount reactors (idempotent) + their groups
+  reactors.ts                        # reactor entry point (REACTORS env)
   topology.ts                        # env → enabledServices + remoteResolver
-  events.ts                          # LEAVE_APPROVED_TOPIC constant (publisher/subscriber match)
-  eventBus.ts                        # one bus per process; payroll subscribes only when local
+  eventBus.ts                        # one bus per process; payroll subscribes / timeoff declares publishes
   server.ts                          # buildServer() — same code, both topologies + db + Temporal DI
   index.ts                           # env-driven entry point
 drizzle/                             # generated SQL migrations (single source of truth)
@@ -190,13 +270,16 @@ drizzle.config.ts                    # drizzle-kit config (schema → migrations
 gen/                                 # generated (buf): *_pb.ts + catalog.gen.ts
 tests/
   helpers/db.ts                      # PGlite test db (migrate + seed), injected via DI
+  helpers/recordingAdapter.ts        # MemoryAdapter that records published topics
   e2e/e2e.test.ts                    # monolith e2e — in-process, no broker (PGlite db)
+  e2e/eventTopics.test.ts            # LeaveApproved topic in a timeoff-only role + strictTopics rejection
+  e2e/broadcast.test.ts              # EmployeeOnboarded reaches every reactor (MemoryAdapter)
   e2e/directory.test.ts              # DirectoryService persistence e2e (real gRPC client)
   e2e/onboarding.test.ts             # onboarding edge — pre-check + start (stub Temporal)
   activity/activities.test.ts        # real activities ↔ RPC wiring + compensation idempotency
   workflow/onboardingWorkflow.test.ts# saga orchestration + LIFO compensation (time-skipping)
-docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal)
-Dockerfile                           # one image, role chosen by SERVICES env (worker = node src/worker.ts)
+docker-compose.yml                   # mono + split + saga profiles (NATS + Postgres + Temporal + reactors)
+Dockerfile                           # one image, role chosen by SERVICES env (worker / reactors = their own command)
 ```
 
 ## The generated catalog
@@ -209,6 +292,7 @@ export const serviceCatalog = {
   "access.v1.AccessService": AccessService,
   "directory.v1.DirectoryService": DirectoryService,
   "onboarding.v1.OnboardingService": OnboardingService,
+  "onboarding.v1.OnboardingEventHandlers": OnboardingEventHandlers,
   "payroll.v1.PayrollService": PayrollService,
   "payroll.v1.PayrollEventHandlers": PayrollEventHandlers,
   "timeoff.v1.TimeOffService": TimeOffService,
@@ -224,6 +308,7 @@ declare module "@connectum/core" {
     "directory.v1.DirectoryService/OffboardEmployee": { request: OffboardEmployeeRequest; response: OffboardEmployeeResponse };
     "onboarding.v1.OnboardingService/OnboardEmployee": { request: OnboardEmployeeRequest; response: OnboardEmployeeResponse };
     "onboarding.v1.OnboardingService/GetOnboarding": { request: GetOnboardingRequest; response: GetOnboardingResponse };
+    "onboarding.v1.OnboardingEventHandlers/OnEmployeeOnboarded": { request: EmployeeOnboarded; response: Empty };
     "payroll.v1.PayrollService/GetBalance": { request: GetBalanceRequest; response: GetBalanceResponse };
     "payroll.v1.PayrollService/SetupPayroll": { request: SetupPayrollRequest; response: SetupPayrollResponse };
     "payroll.v1.PayrollService/TeardownPayroll": { request: TeardownPayrollRequest; response: Empty };
@@ -239,9 +324,11 @@ declare module "@connectum/core" {
 ```
 
 The runtime `serviceCatalog` is passed to `createServer({ catalog })`; the
-`declare module` augmentation types every `ctx.call` key. The event-handler entry
-(`PayrollEventHandlers`) is mounted via the EventBus, never as an RPC service, so
-it is simply never resolved through `ctx.call`.
+`declare module` augmentation types every `ctx.call` key — and every
+`client.call` key of the worker's `createCatalogClient`, which is built from the
+same `serviceCatalog`. The event-handler entries (`PayrollEventHandlers`,
+`OnboardingEventHandlers`) are mounted via the EventBus, never as RPC services,
+so they are simply never resolved through `ctx.call`.
 
 ## Persistence: DirectoryService + Drizzle + Postgres
 
@@ -387,13 +474,25 @@ The e2e files share the same PGlite setup (`tests/helpers/db.ts`, which migrates
   inverted pre-check and starts the saga (stub Temporal client); an already-taken
   id is rejected with `AlreadyExists` **before** Temporal; with no client the
   pre-check still runs and a free id then raises `Unavailable`.
+- `tests/e2e/eventTopics.test.ts` — a TimeOff + Directory role **without**
+  payroll: `RequestLeave` publishes `LeaveApproved` to `timeoff.leave-approved`
+  (the proto option), not to the typeName; and a directory-only bus, which never
+  declared `LeaveApproved`, throws on publishing it (`strictTopics`).
+- `tests/e2e/broadcast.test.ts` — the real `announceOnboarded` activity publishes
+  `EmployeeOnboarded` once and **every** reactor handles the full event; a
+  redelivery is applied once; the publisher refuses an undeclared event. The
+  in-memory adapter ignores consumer groups, so this suite proves every reactor
+  is subscribed — not the broker-side fan-out, which the distinct groups provide
+  on NATS.
 
 The **saga itself** is verified without Docker or a Temporal cluster:
 
 - `tests/workflow/onboardingWorkflow.test.ts` — the real `OnboardingWorkflow`
   with **mocked activities** under Temporal's **time-skipping** test environment:
-  the forward order, and the **LIFO compensation** unwind on each failing step
-  (incl. the non-retryable first step that compensates nothing).
+  the forward order ending in `announceOnboarded`, a failed announcement that
+  still completes with no compensation, and the **LIFO compensation** unwind on
+  each failing step (incl. the non-retryable first step that compensates
+  nothing).
 - `tests/activity/activities.test.ts` — the **real activity bodies** against an
   in-process Connectum monolith (PGlite): each step mutates real service state,
   the duplicate-id failure is non-retryable, and every compensation is idempotent.
@@ -411,7 +510,12 @@ via `docker-compose.yml` (the `split` and `saga` profiles).
 - **Event-driven across topologies** — TimeOff publishes `LeaveApproved`, Payroll
   subscribes. One bus instance in the monolith, one bus per process in the split
   deployment; both use the NATS adapter at runtime. The e2e swaps in an in-memory
-  adapter to run the flow broker-free.
+  adapter to run the flow broker-free. The topic always comes from the proto
+  option (`publishes` on the publisher side), and `strictTopics` rejects an
+  undeclared publish instead of letting it go out under the typeName.
+- **Broadcast** — `EmployeeOnboarded` goes out once and reaches three
+  independent reactors, each on its own bus and consumer group
+  (`createBroadcastSubscribers`).
 - **Persistence via DI** — DirectoryService is backed by Drizzle + Postgres,
   injected through `buildServer({ db })`. Production uses postgres.js over
   `DATABASE_URL`; tests inject PGlite so the persistence e2e runs without Docker.

@@ -25,7 +25,6 @@ import type { EventBus } from "@connectum/events";
 import { GetEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
 import { LeaveApprovedSchema } from "#gen/payroll/v1/payroll_pb.ts";
 import { GrantTimeOffResponseSchema, LeaveRequestSchema, RequestLeaveResponseSchema, TimeOffGrantSchema, TimeOffService } from "#gen/timeoff/v1/timeoff_pb.ts";
-import { LEAVE_APPROVED_TOPIC } from "#events.ts";
 import { empty } from "#empty.ts";
 
 /**
@@ -61,12 +60,12 @@ export function makeTimeOffService(eventBus: EventBus): ServiceDefinition {
 
             const leaveRequestId = `lr-${randomUUID()}`;
 
-            // Approved — publish the integration event. The topic is passed
-            // explicitly so the publisher needs no subscriber routes of its own
-            // (it has none in split mode).
-            await eventBus.publish(LeaveApprovedSchema, create(LeaveApprovedSchema, { leaveRequestId, employeeId: req.employeeId, days: req.days }), {
-                topic: LEAVE_APPROVED_TOPIC,
-            });
+            // Approved — publish the integration event. No topic is passed: the
+            // bus of every process that hosts this service lists
+            // PayrollEventHandlers in `publishes`, so the topic comes from the
+            // proto `(connectum.events.v1.event).topic` option even in a split
+            // timeoff process that has no payroll subscriber route of its own.
+            await eventBus.publish(LeaveApprovedSchema, create(LeaveApprovedSchema, { leaveRequestId, employeeId: req.employeeId, days: req.days }));
 
             return create(RequestLeaveResponseSchema, {
                 leaveRequest: create(LeaveRequestSchema, { id: leaveRequestId, status: "APPROVED" }),

@@ -31,8 +31,12 @@ export const TYPE_NAMES = {
 /** All RPC service typeNames (the monolith set). */
 const ALL_TYPE_NAMES: readonly string[] = [TYPE_NAMES.directory, TYPE_NAMES.timeoff, TYPE_NAMES.payroll, TYPE_NAMES.access, TYPE_NAMES.onboarding];
 
-/** Per-service endpoint env var, consumed by the remote resolver. */
-const ENDPOINT_ENV: Readonly<Record<string, string>> = {
+/**
+ * Per-service endpoint env var, consumed by the remote resolver. Exported so the
+ * Temporal worker's catalog client reads the very same variables as `ctx.call`
+ * does in the RPC roles — one map, no second list to drift.
+ */
+export const ENDPOINT_ENV: Readonly<Record<string, string>> = {
     [TYPE_NAMES.directory]: "DIRECTORY_ADDR",
     [TYPE_NAMES.timeoff]: "TIMEOFF_ADDR",
     [TYPE_NAMES.payroll]: "PAYROLL_ADDR",
