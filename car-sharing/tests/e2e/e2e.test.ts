@@ -428,15 +428,29 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         );
     });
 
-    it("internal auth: a trusted issuer's token passes, but the same token EXPIRED or for another AUDIENCE is Unauthenticated", async () => {
+    it("internal auth: a token claiming roles its issuer does not have is PermissionDenied", async () => {
+        // A trusted issuer that is NOT the worker signs a valid token asserting
+        // `roles: ["worker"]`. The token authenticates (its key is trusted), but
+        // the role is taken from the verified issuer, not from the claim, so a
+        // worker-only method stays closed. If roles were read from the token,
+        // any trusted service key could impersonate the worker this way.
+        const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
+        await assert.rejects(
+            billing.openTab(create(OpenTabRequestSchema, { tripId: "trip-claims" }), { headers: { [INTERNAL_TOKEN_HEADER]: await mintServiceToken({}) } }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
+        );
+    });
+
+    it("internal auth: a trusted issuer's token authenticates, but the same token EXPIRED or for another AUDIENCE is Unauthenticated", async () => {
         const billing = createClient(BillingService, createGrpcTransport({ baseUrl }));
         const openTabWith = (token: string) =>
             billing.openTab(create(OpenTabRequestSchema, { tripId: "trip-claims" }), { headers: { [INTERNAL_TOKEN_HEADER]: token } });
 
-        // Control: with correct claims this key IS accepted, so the two
-        // rejections below can only come from the `exp` and `aud` checks.
-        const ok = await openTabWith(await mintServiceToken({}));
-        assert.equal(ok.tab?.open, true);
+        // Control: with correct claims this key IS authenticated — the call gets
+        // past authentication and stops at authorization (the test issuer is not
+        // the worker) — so the two Unauthenticated results below can only come
+        // from the `exp` and `aud` checks.
+        await assert.rejects(openTabWith(await mintServiceToken({})), (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied);
 
         await assert.rejects(openTabWith(await mintServiceToken({ ttl: "-1m" })), (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated);
         await assert.rejects(

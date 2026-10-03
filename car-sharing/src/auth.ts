@@ -26,8 +26,9 @@
  * `createProtoAuthzInterceptor({ defaultPolicy: "deny" })` then reads the proto
  * `method_auth` / `service_auth` options: TripService's `default_policy:
  * "allow"` admits any authenticated user to StartTrip/GetTrip, and the internal
- * methods' `requires { roles }` admits only the service whose token carries the
- * listed role (another service's valid token is PERMISSION_DENIED).
+ * methods' `requires { roles }` admits only the listed service: the caller's
+ * role is the issuer its key proved, never a claim inside the token (another
+ * service's valid token is PERMISSION_DENIED).
  *
  * WHY internal callers need a token at all: a cross-service `ctx.call` (and the
  * worker's client) runs the full server interceptor chain, in-process and over
@@ -40,13 +41,13 @@
  */
 
 import type { Interceptor } from "@connectrpc/connect";
-import { createInternalAuthInterceptor, createJwtAuthInterceptor, signedTokenTrust } from "@connectum/auth";
+import { createInternalAuthInterceptor, createJwtAuthInterceptor } from "@connectum/auth";
 import { createProtoAuthzInterceptor, getInternalMethods, getPublicMethods } from "@connectum/auth/proto";
 import { BillingService } from "#gen/billing/v1/billing_pb.ts";
 import { FleetService } from "#gen/fleet/v1/fleet_pb.ts";
 import { TripService } from "#gen/trips/v1/trips_pb.ts";
 import type { InternalIssuers } from "#internalAuth.ts";
-import { INTERNAL_TOKEN_HEADER } from "#internalAuth.ts";
+import { issuerBoundTrust } from "#internalAuth.ts";
 
 /**
  * JWT issuer this deployment trusts — the SINGLE SOURCE OF TRUTH for the `iss`
@@ -122,11 +123,12 @@ export function buildAuthInterceptors(options: BuildAuthOptions): Interceptor[] 
     });
 
     // Per-service signed tokens: the keyset is chosen by the token's claimed
-    // issuer and verification is pinned to that issuer, so one service's key
-    // can never vouch for another service. Non-internal methods pass through.
+    // issuer and verification is pinned to that issuer, and the caller's role is
+    // that verified issuer, so one service's key can never vouch for another
+    // service. Non-internal methods pass through.
     const internalAuth = createInternalAuthInterceptor({
         internalMethods,
-        trustSource: signedTokenTrust({ issuers: options.internalIssuers, header: INTERNAL_TOKEN_HEADER }),
+        trustSource: issuerBoundTrust(options.internalIssuers),
     });
 
     const authz = createProtoAuthzInterceptor({ defaultPolicy: "deny" });

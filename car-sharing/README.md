@@ -87,7 +87,7 @@ each with its own key:
   The end-user JWT interceptor skips them; `createInternalAuthInterceptor` with
   `signedTokenTrust` requires a service token in `x-internal-token` instead.
 - A calling service signs a fresh RS256 JWT per call (`iss` = its identity,
-  `aud` = `car-sharing-internal`, `roles` = `[its identity]`, 60 s expiry) with
+  `aud` = `car-sharing-internal`, 60 s expiry) with
   its **own private key** and publishes the public key as JWKS
   (`/.well-known/jwks.json` on `INTERNAL_JWKS_PORT`). `signedTokenTrust` picks
   the keyset by the token's claimed `iss` and pins verification to that issuer,
@@ -95,8 +95,11 @@ each with its own key:
   expired or wrong-audience token is `UNAUTHENTICATED`; an end user's JWT on an
   internal method is too.
 - **Least privilege** comes from proto `requires { roles }` (any-of), checked by
-  `createProtoAuthzInterceptor` against the token's `roles` claim. A valid token
-  from the wrong service is `PERMISSION_DENIED`:
+  `createProtoAuthzInterceptor` against the caller's role. That role is the
+  **verified issuer** (`issuerBoundTrust` in `src/internalAuth.ts`), never a
+  claim inside the token: otherwise the trips key could sign
+  `roles: ["worker"]` and reach worker-only methods. A valid token from the
+  wrong service is `PERMISSION_DENIED`:
 
   | RPC | allowed caller(s) | why |
   | --- | --- | --- |
@@ -160,6 +163,14 @@ identity) is the framework's alternative trust source.
 from the `trips` ServiceAccount, and only fleet/billing may fetch trips' JWKS
 port — but an internal method no longer depends on the network to stay closed:
 without a valid service token it rejects the call itself.
+
+**The tokens do not protect the transport.** A service token is a bearer
+credential for 60 seconds, and a verifier trusts whatever key its JWKS URL
+returns. Both therefore need an authenticated, encrypted channel: in k8s that is
+the mesh (mTLS STRICT for the RPCs and for the JWKS fetches alike). The compose
+stacks run plaintext HTTP on a private bridge network — fine for a local demo,
+not for anything shared: there, anyone who can watch or rewrite that traffic
+could replay a captured token or substitute a JWKS key.
 
 ### One image, role by env
 

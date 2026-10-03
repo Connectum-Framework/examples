@@ -6,7 +6,7 @@
  * calling service proves who it is with its OWN key pair:
  *
  *  - the caller signs a short-lived RS256 JWT per call (`iss` = its identity,
- *    `aud` = {@link INTERNAL_AUDIENCE}, `roles` = [its identity], 60 s expiry)
+ *    `aud` = {@link INTERNAL_AUDIENCE}, 60 s expiry)
  *    and attaches it with a client interceptor;
  *  - the caller publishes the matching PUBLIC key as a JWKS document over a tiny
  *    HTTP endpoint ({@link startJwksServer});
@@ -54,7 +54,8 @@ import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Interceptor, Transport } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import type { SignedTokenTrustOptions } from "@connectum/auth";
+import type { InternalTrustSource, SignedTokenTrustOptions } from "@connectum/auth";
+import { signedTokenTrust } from "@connectum/auth";
 import type { JWK } from "jose";
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from "jose";
 
@@ -217,8 +218,10 @@ export async function createInternalSigner(identity: InternalIdentity, options: 
     const kid = await calculateJwkThumbprint({ kty: publicBase.kty, n: publicBase.n, e: publicBase.e });
     const publicJwk: JWK = { kty: publicBase.kty, n: publicBase.n, e: publicBase.e, kid, alg: SIGNING_ALG, use: "sig" };
 
+    // No `roles` claim: the receiver derives the caller's role from the verified
+    // issuer, so a token can never claim more than its signing key proves.
     const sign = (): Promise<string> =>
-        new SignJWT({ roles: [identity] })
+        new SignJWT({})
             .setProtectedHeader({ alg: SIGNING_ALG, kid, typ: "JWT" })
             .setIssuer(identity)
             .setSubject(identity)
@@ -343,8 +346,8 @@ export function internalJwksPort(identity: InternalIdentity, env: NodeJS.Process
 
 /**
  * Verification settings for one trusted issuer: its JWKS URL, this app's
- * internal audience, RS256 only, and the `roles` claim mapped onto the auth
- * context so proto `requires { roles }` can check it.
+ * internal audience and RS256 only. No claims are mapped to roles — see
+ * {@link issuerBoundTrust}.
  *
  * @param jwksUri - The issuer's JWKS URL (its own keys only).
  */
@@ -353,7 +356,30 @@ export function internalIssuer(jwksUri: string): InternalIssuers[string] {
         jwksUri,
         audience: INTERNAL_AUDIENCE,
         algorithms: [SIGNING_ALG],
-        claimsMapping: { roles: "roles" },
+    };
+}
+
+/**
+ * The trust source for internal methods: `signedTokenTrust`, with the caller's
+ * role taken from the VERIFIED issuer instead of from any claim in the token.
+ *
+ * `signedTokenTrust` checks the signature against the claimed issuer's own
+ * keyset and pins `iss` to that issuer, but it would copy a `roles` claim
+ * verbatim. If roles came from the token, the holder of the `trips` key could
+ * sign `roles: ["worker"]` and call worker-only methods — the very forgery that
+ * one key per service is meant to rule out. The verified `iss` is the identity
+ * the key proves, so it becomes the only role.
+ *
+ * @param issuers - Trusted issuers, keyed by identity (see {@link internalIssuersFromEnv}).
+ */
+export function issuerBoundTrust(issuers: InternalIssuers): InternalTrustSource {
+    const verify = signedTokenTrust({ issuers, header: INTERNAL_TOKEN_HEADER });
+    return async (req) => {
+        const context = await verify(req);
+        if (context === null) return null;
+        const issuer = context.claims.iss;
+        if (typeof issuer !== "string") return null;
+        return { ...context, subject: issuer, roles: [issuer] };
     };
 }
 

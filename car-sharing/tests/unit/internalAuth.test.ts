@@ -76,7 +76,10 @@ describe("Internal signing key: file-backed identity", () => {
                 algorithms: ["RS256"],
             });
             assert.equal(protectedHeader.kid, first.kid);
-            assert.deepEqual(payload.roles, [InternalIdentity.trips]);
+            assert.equal(payload.sub, InternalIdentity.trips);
+            // No roles claim: the receiver derives the role from the verified
+            // issuer, so the token must not carry one that could be trusted.
+            assert.equal(payload.roles, undefined);
         } finally {
             await jwks.close();
         }
