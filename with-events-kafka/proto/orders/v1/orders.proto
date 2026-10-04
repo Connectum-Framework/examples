@@ -68,6 +68,9 @@ message ReservationInfo {
   string product = 2;
   int32 quantity = 3;
   string status = 4;
+  // How many times the handler ran for this order's OrderCreated event,
+  // failed runs included.
+  int32 deliveries = 5;
 }
 
 service InventoryService {

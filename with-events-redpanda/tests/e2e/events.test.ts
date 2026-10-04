@@ -1,71 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-const ORDER_URL = process.env.ORDER_URL ?? "http://localhost:5001";
-const INVENTORY_URL = process.env.INVENTORY_URL ?? "http://localhost:5002";
-
-async function connectPost(baseUrl: string, method: string, body: Record<string, unknown> = {}): Promise<unknown> {
-    const res = await fetch(`${baseUrl}/${method}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`${res.status} ${method}: ${text}`);
-    }
-    return res.json();
-}
-
-/**
- * POST a Connect unary call and return the raw outcome, errors included. The
- * Connect protocol maps a failed call to an HTTP status and a JSON body
- * `{ "code": "<lower_snake_case code>", "message": ... }`, which the error
- * tests below check against the protocol rather than against this example.
- */
-async function connectRaw(baseUrl: string, method: string, body: Record<string, unknown> = {}): Promise<{ status: number; contentType: string | null; json: unknown }> {
-    const res = await fetch(`${baseUrl}/${method}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
-    return { status: res.status, contentType: res.headers.get("content-type"), json: await res.json() };
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
-}
-
-/**
- * Poll `read` until `done` holds. The saga runs through the broker
- * asynchronously, so a fixed pause is either too short on a slow machine (a
- * false failure) or longer than needed. The deadline is generous; when it
- * passes, the error shows the last value read.
- */
-async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, what: string, timeoutMs = 30_000): Promise<T> {
-    const deadline = Date.now() + timeoutMs;
-    let last = await read();
-    while (!done(last)) {
-        if (Date.now() > deadline) {
-            throw new Error(`timed out after ${timeoutMs} ms waiting for ${what}; last value: ${JSON.stringify(last)}`);
-        }
-        await sleep(200);
-        last = await read();
-    }
-    return last;
-}
-
-type Order = { orderId: string; status: string; product: string; quantity: number; customer: string };
-type Reservation = { orderId: string; status: string; product: string; quantity: number };
-
-// JSON omits an empty repeated field, so an empty list arrives as an absent key.
-const getOrders = async (): Promise<Order[]> =>
-    ((await connectPost(ORDER_URL, "orders.v1.OrderService/GetOrders", {})) as { orders?: Order[] }).orders ?? [];
-const getReservations = async (): Promise<Reservation[]> =>
-    ((await connectPost(INVENTORY_URL, "orders.v1.InventoryService/GetInventory", {})) as { reservations?: Reservation[] }).reservations ?? [];
-
-const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
-const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
+import {
+    INVENTORY_URL,
+    ORDER_URL,
+    connectPost,
+    connectRaw,
+    eventually,
+    getOrders,
+    getReservations,
+    reservationOf,
+    statusOf,
+} from "./support.ts";
 
 describe("EventBus with Redpanda — 2 Microservices + Saga", () => {
     // /healthz answers 200 with the overall status in the body only while the
