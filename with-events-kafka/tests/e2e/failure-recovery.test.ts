@@ -53,15 +53,17 @@ describe("EventBus with Kafka — failure and restart", () => {
         await eventually(getOrders, (orders) => statusOf(orders, flaky) === "confirmed", `order ${flaky} to be confirmed`, REDELIVERY_DEADLINE_MS);
 
         const log = await compose("logs", "--no-color", "--no-log-prefix", "inventory-service");
+        // Only the failure that the retry middleware could not absorb reaches the
+        // adapter, so the logged run is the last of the first delivery. The
+        // adapter's prefix and this test's own order must sit on one line: the
+        // log spans the container's whole life, so a line of an earlier test
+        // must not satisfy this one.
+        const failedRun = `Simulated failure for product FLAKY (order ${flaky}, run ${MAX_RETRIES + 1})`;
         const reported = log.split("\n").filter((line) => line.includes("handler error for"));
         assert.ok(
-            reported.some((line) => /handler error for orders\.v1\.OrderCreated\[\d+\]@\d+:/.test(line)),
-            `the log has no "handler error for <topic>[<partition>]@<offset>" line; got ${reported.length} lines mentioning "handler error for"`,
+            reported.some((line) => /handler error for orders\.v1\.OrderCreated\[\d+\]@\d+:/.test(line) && line.includes(failedRun)),
+            `no "handler error for <topic>[<partition>]@<offset>" line carries "${failedRun}"; got ${reported.length} lines mentioning "handler error for"`,
         );
-        // Only the failure that the retry middleware could not absorb reaches the
-        // adapter, so the logged run is the last of the first delivery.
-        const failedRun = `Simulated failure for product FLAKY (order ${flaky}, run ${MAX_RETRIES + 1})`;
-        assert.ok(log.includes(failedRun), `the log does not show "${failedRun}"`);
     });
 
     it("a consumer restarted after downtime gets what was published meanwhile, once, and nothing it already acknowledged", async () => {
