@@ -33,8 +33,8 @@ graph LR
 
     OS -->|OTLP/HTTP| OTLP
     IS -->|OTLP/HTTP| OTLP
-    OTLP -->|traces, logs| UI
-    OTLP -->|metrics| PM
+    OTLP -->|traces, logs, metrics (OTLP/HTTP)| UI
+    OTLP -->|metrics (Prometheus remote write)| PM
     UI --> CH
     UI --> PM
 ```

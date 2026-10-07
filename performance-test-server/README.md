@@ -53,7 +53,7 @@ Expected output:
 ```
 Starting Performance Test Server...
 
-Starting 5 server configurations (the default; port 8085 is opt-in):
+Starting 5 server configurations:
 
 All servers started successfully!
 
@@ -117,10 +117,11 @@ it too and run the interceptor benchmark concurrently, stealing CPU from and
 contaminating the OTLP-export measurement. Listing only the services this
 scenario needs keeps the run isolated.
 
-The `OTEL_EXPORT_ENABLED=1` env and the `--profile otel-export` flag are a
-**pair** — the env makes the server bind port 8085 with a real OTLP provider,
-the profile starts the collector and the k6 runner. Setting only one of them
-fails fast: the k6 setup health check aborts the run if 8085 is not serving.
+`OTEL_EXPORT_ENABLED=1` makes the server bind port 8085 with a real OTLP
+provider. The `--profile otel-export` flag is redundant when the command
+explicitly names `otel-collector` and `k6-otel-export`; Compose starts targeted
+profile-gated services without enabling their profile. If `OTEL_EXPORT_ENABLED`
+is omitted, port 8085 stays disabled and the k6 setup health check aborts the run.
 
 What this measures that the `k6-interceptor-overhead` scenario does *not*:
 

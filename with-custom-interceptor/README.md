@@ -53,9 +53,11 @@ grpcurl -plaintext -H 'x-api-key: test-api-key-123' -d '{"message": "Secret"}' l
 grpcurl -plaintext -d '{"message": "Test"}' localhost:5000 echo.v1.EchoService/RateLimitedEcho
 ```
 
-`RateLimitedEcho` allows five requests per client in each 60-second fixed
-window. The sample identifies clients from `x-forwarded-for` or `x-real-ip`; if
-neither header is present, requests share one global counter.
+`RateLimitedEcho` allows five requests per client, per server process, in each
+60-second fixed window. The sample identifies clients from `x-forwarded-for` or
+`x-real-ip`; if neither header is present, requests share one global counter.
+Use these headers only when a trusted proxy sets or overwrites them. Otherwise,
+identify clients with a value they cannot choose themselves.
 
 ## Resources
 
