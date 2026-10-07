@@ -111,8 +111,17 @@ command, not only for the install: before `pnpm run` and `pnpm exec`, pnpm 12
 checks the dependencies and reinstalls the published versions when the hook is
 not named. pnpm 12 reads only the uppercase `PNPM_CONFIG_PNPMFILE`.
 
+The local install can rewrite the example's lockfile. Before starting, make sure
+the target lockfile has no existing staged or unstaged changes; stop and preserve
+them if it is already modified. The restore command below is safe only after
+that check.
+
 ```bash
 cd with-custom-interceptor
+git diff --quiet -- pnpm-lock.yaml && git diff --cached --quiet -- pnpm-lock.yaml || {
+  echo "Stop: preserve the existing pnpm-lock.yaml changes before continuing." >&2
+  exit 1
+}
 export CONNECTUM_LOCAL=1 PNPM_CONFIG_PNPMFILE=../.pnpmfile.cjs
 pnpm install
 readlink -f node_modules/@connectum/core   # must name a .tgz, see below
@@ -120,7 +129,7 @@ pnpm build:proto && pnpm test
 readlink -f node_modules/@connectum/core   # still the .tgz
 # back to the published packages pinned by the committed lockfile:
 unset CONNECTUM_LOCAL PNPM_CONFIG_PNPMFILE
-git checkout -- pnpm-lock.yaml
+git restore --source=HEAD --worktree -- pnpm-lock.yaml
 pnpm install --frozen-lockfile
 ```
 
@@ -130,7 +139,10 @@ version, which is why the `readlink` check matters. Restore the lockfile from gi
 local install pnpm re-resolves the ranges in `package.json` and can move
 `@connectum/*` to newer published versions than the committed lockfile pins.
 In getting-started, which has no committed lockfile, delete the generated
-`pnpm-lock.yaml` and run `pnpm install` instead. Never commit a lockfile produced in this mode: it points at the local tarballs.
+`pnpm-lock.yaml` and run `pnpm install` instead. Remove it only if it did not
+exist before the local-mode install; otherwise restore the original file you
+preserved first. Never commit a lockfile produced in this mode: it points at the
+local tarballs.
 
 `extensions/redact` uses temporary protobuf extension stubs; it does not ship a
 generated contract. See that example's README for the limitation.

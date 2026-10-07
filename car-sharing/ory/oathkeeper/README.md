@@ -8,22 +8,24 @@ JWT. No identity logic enters `@connectum/*`.
 
 ## Request flow (compose `ory` profile)
 
-```
-Browser ──login──▶ Kratos (4433)              # owns users + sessions
-   │  ory_kratos_session cookie
-   │
-   ▼  POST /trips.v1.TripService/StartTrip (cookie)
-Oathkeeper proxy (4455)
-   │  1. cookie_session  → Kratos /sessions/whoami   (validate the session)
-   │  2. authorizer allow                            (any authenticated caller)
-   │  3. id_token mutator → MINTS an RS256 JWT       (iss = issuer_url)
-   ▼  Authorization: Bearer <RS256 JWT>   (Connect over HTTP/1.1)
-trips gateway (5000)
-   │  createJwtAuthInterceptor({ jwksUri })          ← createRemoteJWKSet branch
-   │     validates signature (kid → JWK), iss, aud, exp
-   │  createProtoAuthzInterceptor({ defaultPolicy: "deny" })
-   ▼  internal gRPC ctx.call (signed service token in x-internal-token)
-fleet  (`internal`: verifies the token against trips' own JWKS)
+```mermaid
+sequenceDiagram
+    actor Browser
+    participant Kratos
+    participant Oathkeeper as Oathkeeper proxy :4455
+    participant Trips as trips gateway :5000
+    participant Fleet as fleet service
+
+    Browser->>Kratos: Login through self-service
+    Kratos-->>Browser: ory_kratos_session cookie
+    Browser->>Oathkeeper: POST StartTrip or GetTrip with cookie
+    Oathkeeper->>Kratos: cookie_session checks /sessions/whoami
+    Kratos-->>Oathkeeper: Authenticated session and identity
+    Note over Oathkeeper: allow authorizer; id_token mutator mints RS256 JWT
+    Oathkeeper->>Trips: Connect over HTTP/1.1 with Authorization: Bearer JWT
+    Note over Trips: Verify signature via remote JWKS, iss, aud, exp; enforce proto authz
+    Trips->>Fleet: Internal gRPC ctx.call with signed x-internal-token
+    Fleet-->>Trips: Internal RPC response
 ```
 
 The JWKS the gateway consumes is Oathkeeper's **public** signing key, published at:
