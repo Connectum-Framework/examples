@@ -1,10 +1,13 @@
 # JWT Token Interceptor Example
 
-Demonstrates how to automatically add JWT tokens to the Authorization header for RPC requests.
+Shows a client interceptor that adds a supplied JWT to outgoing RPC requests.
 
 ## Overview
 
-This client-side interceptor adds a Bearer token to every outgoing request's Authorization header.
+By default, the interceptor sets `Authorization: Bearer <token>` only when the
+request does not already have an `Authorization` header. It does not obtain,
+refresh or validate tokens; provide a token from your application's identity
+provider.
 
 ## Usage
 

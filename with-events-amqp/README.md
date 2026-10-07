@@ -279,7 +279,17 @@ export const orderEventBus = createEventBus({
 
 ## External AMQP Contract
 
-This example uses the default Connectum conventions (topic exchange, `${exchange}.${group}` queues, protobuf payloads). When you need to integrate with an **externally defined AMQP contract** -- a partner's direct exchange, named durable queues with DLQ arguments, JSON bodies -- `AmqpAdapter` supports explicit topology, queue overrides, and serialization control:
+The runnable quick start uses the default Connectum conventions (topic exchange,
+`${exchange}.${group}` queues and protobuf payloads). The code below demonstrates
+the newer external-contract options in the current Connectum source. The
+committed lockfile resolves `@connectum/events-amqp@1.0.0`, which does not include
+these options; run this section only against a local build that exports them. See
+"Testing against unreleased framework builds" in the repository README for the
+local-package setup.
+
+When the installed adapter supports these options, they can connect to an
+externally defined AMQP contract such as a partner's direct exchange, named
+durable queues with DLQ arguments, or JSON payloads:
 
 ```typescript
 const adapter = AmqpAdapter({
@@ -320,7 +330,11 @@ const adapter = AmqpAdapter({
 });
 ```
 
-Note: with `mandatory: true` (default `correlationHeader: true`) the adapter stamps a private `x-connectum-publish-id` header on mandatory publishes -- visible to external consumers. Set `publisherOptions.correlationHeader: false` for a clean wire (mandatory publishes are then serialized one at a time). See the [@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp) for topology modes, recovery options, and the full error taxonomy.
+The header-correlation behavior described here is also part of the newer adapter
+API, not the committed 1.0.0 lockfile. See the
+[@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp)
+for topology modes, recovery options and the error taxonomy supported by that
+documentation's release line.
 
 ## Docker Compose
 

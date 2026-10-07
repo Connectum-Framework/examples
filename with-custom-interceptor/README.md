@@ -24,6 +24,8 @@ tests/e2e/e2e.test.ts                 # End-to-end tests
 
 ## Running
 
+Requires Node.js >= 22.13.0 and pnpm.
+
 ```bash
 pnpm install
 pnpm build:proto
@@ -31,6 +33,8 @@ pnpm start
 ```
 
 ## Testing
+
+Run this command in another terminal while the server is running.
 
 ```bash
 pnpm test
@@ -48,6 +52,10 @@ grpcurl -plaintext -H 'x-api-key: test-api-key-123' -d '{"message": "Secret"}' l
 # Rate-limited echo
 grpcurl -plaintext -d '{"message": "Test"}' localhost:5000 echo.v1.EchoService/RateLimitedEcho
 ```
+
+`RateLimitedEcho` allows five requests per client in each 60-second fixed
+window. The sample identifies clients from `x-forwarded-for` or `x-real-ip`; if
+neither header is present, requests share one global counter.
 
 ## Resources
 

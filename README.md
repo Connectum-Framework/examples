@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D25.2-brightgreen" alt="Node.js"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-Compiled-blue" alt="TypeScript"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
 </p>
@@ -26,30 +26,31 @@
 
 ---
 
-Ready-to-run examples demonstrating Connectum features — from a one-service [quickstart](getting-started/) to a monolith-or-microservices [HR system](hris/) and an enterprise [car-sharing](car-sharing/) deployment on Kubernetes + Istio.
+Runnable examples demonstrating Connectum features — from a one-service [quickstart](getting-started/) to a monolith-or-microservices [HR system](hris/) and a [car-sharing](car-sharing/) deployment example with Kubernetes and Istio manifests.
 
 ## Examples
 
-| Example | Description | Highlights | Status |
-|---------|-------------|------------|--------|
-| [getting-started](getting-started/) | Quickstart — one service | `defineService`, health, reflection, default interceptors, graceful shutdown; Node/Bun/tsx | Ready |
-| [performance-test-server](performance-test-server/) | k6 benchmarking server | 5 parallel servers, interceptor overhead measurement, ports 8080-8084 | Ready |
-| [extensions/redact](extensions/redact/) | Sensitive data redaction | Proto custom field options, `createRedactInterceptor()` | Ready |
-| [interceptors/jwt](interceptors/jwt/) | Client-side JWT interceptor | Bearer token injection, `createAddTokenInterceptor()` | Ready |
-| [with-custom-interceptor](with-custom-interceptor/) | Echo service with custom interceptors | API key auth, rate limiting | Ready |
-| [hris](hris/) | Monolith **or** microservices — one codebase | `defineService` + catalog + `ctx.call` (in-process vs remote by env) + EventBus + durable onboarding saga with Temporal | Ready |
-| [car-sharing](car-sharing/) | Enterprise deploy — Kubernetes + Istio | Split microservices + JWT/proto authz gateway + OpenTelemetry; durable trip saga with Temporal; k8s/Istio manifests (mTLS, canary) | Ready |
-| [with-events-kafka](with-events-kafka/) | EventBus with Kafka | Event-driven microservices, consumer groups | Ready |
-| [with-events-redpanda](with-events-redpanda/) | EventBus with Redpanda | Saga choreography, custom topics, Redpanda Console | Ready |
-| [with-events-valkey](with-events-valkey/) | EventBus with Valkey (Redis) | Redis Streams adapter, lightweight event bus | Ready |
-| [with-events-amqp](with-events-amqp/) | EventBus with RabbitMQ | AMQP adapter, topic exchange, Management UI | Ready |
-| [with-events-dlq](with-events-dlq/) | EventBus Dead Letter Queue | DLQ service, retry policies, failed event inspection | Ready |
-| [o11y-coroot](o11y-coroot/) | Observability with Coroot | Distributed tracing, custom metrics, structured logs, service map | Ready |
+| Example | What it demonstrates |
+|---------|----------------------|
+| [getting-started](getting-started/) | One service with `defineService`, health checks, reflection, default interceptors and graceful shutdown; Node.js, Bun and tsx run scripts |
+| [performance-test-server](performance-test-server/) | k6 benchmarking across six server configurations on ports 8080–8085; the OTLP export server on 8085 is opt-in |
+| [extensions/redact](extensions/redact/) | Example interceptor that redacts fields marked with custom protobuf option stubs |
+| [interceptors/jwt](interceptors/jwt/) | Client interceptor that adds a Bearer token to outgoing RPCs |
+| [with-custom-interceptor](with-custom-interceptor/) | Echo service with API-key authentication and per-client rate limiting |
+| [hris](hris/) | One codebase for a monolith or split services, with `ctx.call`, EventBus and a durable onboarding workflow |
+| [car-sharing](car-sharing/) | Kubernetes and Istio manifests, service authentication, a Temporal trip workflow and a Compose Ory identity demo |
+| [with-events-kafka](with-events-kafka/) | Event-driven microservices using Kafka and consumer groups |
+| [with-events-redpanda](with-events-redpanda/) | Event-driven microservices using Redpanda, custom topics and Redpanda Console |
+| [with-events-valkey](with-events-valkey/) | Event-driven microservices using Redis Streams on Valkey |
+| [with-events-amqp](with-events-amqp/) | Event-driven microservices using RabbitMQ topic exchanges |
+| [with-events-dlq](with-events-dlq/) | NATS JetStream retries and dead-letter event inspection |
+| [o11y-coroot](o11y-coroot/) | Docker Compose demo for distributed traces, metrics, logs and a Coroot service map |
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 22.13.0, or [Bun](https://bun.sh/) >= 1.3.6, or [tsx](https://tsx.is/) >= 4.21 (for TypeScript source in your project)
-- [pnpm](https://pnpm.io/) >= 10
+- [Node.js](https://nodejs.org/) >= 25.2.0 for examples that run TypeScript directly. Published Connectum packages support Node.js >= 22.13.0; see [Runtime Compatibility](https://connectum.dev/en/guide/runtime-compatibility).
+- [pnpm](https://pnpm.io/); the Dockerfiles and CI lockfile checks use pnpm 12.4.1.
+- Docker Engine and Docker Compose for examples with broker or observability stacks.
 
 ## Quick Start
 
@@ -57,10 +58,10 @@ Ready-to-run examples demonstrating Connectum features — from a one-service [q
 git clone https://github.com/Connectum-Framework/examples.git
 cd examples/getting-started
 pnpm install
-pnpm dev
+pnpm start
 ```
 
-The greeter service starts on port `5000` with gRPC Health Check, Server Reflection, and default interceptors enabled.
+`pnpm start` generates the protobuf code and starts the greeter on port `5000` with gRPC Health Check, Server Reflection, and default interceptors enabled. Keep it running, then open another terminal in `examples/getting-started` for the grpcurl command below.
 
 Test with grpcurl:
 
@@ -68,7 +69,7 @@ Test with grpcurl:
 grpcurl -plaintext -d '{"name": "World"}' localhost:5000 greeter.v1.GreeterService/SayHello
 ```
 
-## Enterprise deployment
+## Car-sharing deployment example
 
 The [car-sharing](car-sharing/) example demonstrates a split-microservices
 deployment with a JWT/proto-authz gateway, a durable trip saga with
@@ -88,14 +89,15 @@ See [car-sharing/README.md](car-sharing/README.md) for details.
 
 ## Dependencies
 
-The catalog examples (getting-started, hris, car-sharing) use the 1.0.0
-service-catalog API, which is published on npm — install them with `pnpm install`
-like the other examples. Every example uses published `@connectum/*` packages
-from npm, so `pnpm install` is all you need.
+Installable examples declare their `@connectum/*` dependencies in their
+`package.json`; `pnpm install` resolves the versions allowed by each manifest.
+The `getting-started` example intentionally has no committed lockfile because it
+is also the base copied by `connectum init`.
 
 Every installable example except getting-started commits its `pnpm-lock.yaml`
-(extensions/redact and interceptors/jwt are code snippets with no `package.json`), and the
-Docker images install from it with `pnpm install --frozen-lockfile`. After
+(`extensions/redact` and `interceptors/jwt` are source examples without a
+`package.json`). Docker images install from their lockfile with
+`pnpm install --frozen-lockfile`. After
 changing an example's `package.json` or `pnpm-workspace.yaml`, run `pnpm install`
 in that example and commit the updated lockfile. getting-started ships without
 one because it is the base `connectum init` copies into new projects.
@@ -129,6 +131,9 @@ local install pnpm re-resolves the ranges in `package.json` and can move
 `@connectum/*` to newer published versions than the committed lockfile pins.
 In getting-started, which has no committed lockfile, delete the generated
 `pnpm-lock.yaml` and run `pnpm install` instead. Never commit a lockfile produced in this mode: it points at the local tarballs.
+
+`extensions/redact` uses temporary protobuf extension stubs; it does not ship a
+generated contract. See that example's README for the limitation.
 
 ## License
 

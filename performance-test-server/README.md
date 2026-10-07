@@ -20,7 +20,7 @@ This allows k6 benchmarks to accurately measure the overhead introduced by each 
 ## Requirements
 
 - **Node.js**: >=25.2.0 — required because this example runs its TypeScript sources directly via native type stripping (`node src/index.ts`). Consuming the framework as compiled packages needs only Node.js >=22.13.0.
-- **pnpm**: >=10
+- **pnpm**: 10 or newer
 
 ## Installation
 
@@ -53,7 +53,7 @@ Expected output:
 ```
 Starting Performance Test Server...
 
-Starting 5 server configurations:
+Starting 5 server configurations (the default; port 8085 is opt-in):
 
 All servers started successfully!
 
@@ -73,6 +73,10 @@ Run benchmarks with:
 
 Press Ctrl+C to shutdown all servers
 ```
+
+With `OTEL_EXPORT_ENABLED=1`, the server also starts port 8085 and reports six
+configurations. The Docker OTLP-export benchmark sets this variable and starts an
+OpenTelemetry Collector; a standalone run must provide a reachable collector.
 
 ## Docker Benchmarks
 
@@ -128,15 +132,10 @@ The collector runs locally in Docker and drops all telemetry via a `debug` expor
 
 k6 writes a machine-readable JSON summary to `k6/results/otel-export-overhead.json` (gitignored) for CI / bench-tracking tooling.
 
-**Expected overhead range** (informational — actual numbers depend on the installed `@opentelemetry/otlp-transformer` version):
-
-| Metric | Baseline (8081) | OTel export (8085) | Overhead | Relative |
-|--------|-----------------|--------------------|----------|----------|
-| p50 latency | ~1–3 ms | ~1.5–4 ms | +0.5–1 ms | 1.2×–1.5× |
-| p95 latency | ~2–5 ms | ~3–8 ms | +1–3 ms | 1.3×–2× |
-| p99 latency | ~5–10 ms | ~8–20 ms | +3–10 ms | 1.5×–2.5× |
-
-A **relative overhead >1.5×** on p95 — or any sudden jump from a previous run — is a signal to investigate the `@opentelemetry/otlp-transformer` version, which has a history of serialization-performance regressions: see upstream issues [#6221](https://github.com/open-telemetry/opentelemetry-js/issues/6221), PR [#6225](https://github.com/open-telemetry/opentelemetry-js/pull/6225), PR [#6390](https://github.com/open-telemetry/opentelemetry-js/pull/6390), issue [#6570](https://github.com/open-telemetry/opentelemetry-js/issues/6570).
+Compare repeated runs on the same host with the same Node.js, dependency lockfile,
+collector, and k6 settings. These results measure the example's current setup;
+they are not portable latency targets. Investigate a change only after confirming
+that repeated runs under identical conditions reproduce it.
 
 ### Cleanup
 

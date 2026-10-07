@@ -2,7 +2,7 @@
 
 Full observability stack for Connectum microservices using [Coroot](https://coroot.com/) — an open-source observability platform with automatic service maps, distributed tracing, metrics, and log analysis.
 
-This example demonstrates how `@connectum/otel` telemetry flows from microservices through OpenTelemetry Collector into Coroot dashboards: distributed traces, structured logs, custom business metrics, and automatic service map discovery.
+This example demonstrates how `@connectum/otel` telemetry flows from microservices through the OpenTelemetry Collector to Coroot and Prometheus: traces and logs go to Coroot's OTLP/HTTP receiver and ClickHouse storage, while metrics go to Coroot and Prometheus remote write.
 
 ## Demo
 
@@ -43,14 +43,13 @@ graph LR
 
 | Signal  | Path                                                        |
 |---------|-------------------------------------------------------------|
-| Traces  | Microservices → OTel Collector → Coroot (OTLP) → ClickHouse |
-| Metrics | Microservices → OTel Collector → Prometheus (remote write)  |
-| Logs    | Microservices → OTel Collector → Coroot (OTLP) → ClickHouse |
+| Traces  | Microservices → OTel Collector → Coroot OTLP/HTTP → ClickHouse |
+| Metrics | Microservices → OTel Collector → Coroot OTLP/HTTP and Prometheus remote write |
+| Logs    | Microservices → OTel Collector → Coroot OTLP/HTTP → ClickHouse |
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** v2+
-- **~2-4 GB RAM** available (ClickHouse + Coroot + Prometheus)
+- **Docker Engine** and **Docker Compose** v2
 - **curl** (for traffic generation)
 
 ## Quick Start
@@ -60,9 +59,10 @@ graph LR
 cd examples/o11y-coroot
 docker compose up --build -d
 
-# Wait ~30 seconds for ClickHouse and Coroot to initialize
-# Open Coroot UI
-open http://localhost:8080
+# Compose waits for ClickHouse, Prometheus, and Coroot healthchecks before
+# starting the collector and application services. First image builds take longer.
+# Open this URL in a browser:
+# http://localhost:8080
 ```
 
 ## Generating Traffic
@@ -200,8 +200,8 @@ See [coroot/coroot-node-agent#54](https://github.com/coroot/coroot-node-agent/is
 | Problem                            | Solution                                                      |
 |------------------------------------|---------------------------------------------------------------|
 | Coroot shows no services           | Wait 30-60s after startup; verify OTel Collector is healthy: `docker compose logs otel-collector` |
-| Traces not appearing               | Check OTel config routes traces to Coroot: `docker compose logs otel-collector \| grep -i error` |
-| ClickHouse won't start             | Check available disk space; ClickHouse needs at least 1 GB free |
+| Traces not appearing               | Check the collector logs: `docker compose logs otel-collector \| grep -i error` |
+| ClickHouse won't start             | Check available disk space and inspect `docker compose logs clickhouse` |
 | Node agent not working             | Only works on Linux hosts with eBPF; not supported on Docker Desktop |
 | Services unhealthy                 | Check service logs: `docker compose logs order-service` |
 | Port conflicts                     | Ensure ports 5000, 5001, 8080, 4317, 4318 are available      |
@@ -209,7 +209,7 @@ See [coroot/coroot-node-agent#54](https://github.com/coroot/coroot-node-agent/is
 ## Cleanup
 
 ```bash
-# Stop all services and remove volumes
+# Stop services and delete their persisted ClickHouse and Prometheus data
 docker compose down -v
 ```
 

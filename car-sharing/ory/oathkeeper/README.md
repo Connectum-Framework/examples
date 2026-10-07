@@ -73,21 +73,16 @@ committed. The dockerless e2e generates its own keypair in-memory
 (`generateRsaTestKeypair` from `@connectum/auth/testing`), so no key is needed in
 git there either.
 
-## Production (k8s / istio): Oathkeeper as an Istio ext_authz decision service
+## Kubernetes integration status
 
-The `k8s/` + `istio/` manifests are **unchanged** by Phase 4. In the mesh the
-ingress already speaks gRPC (HTTP/2) to trips, and a standalone HTTP reverse
-proxy would break that. The production evolution is **Oathkeeper's Decision API
-(`:4456/decisions`) as an Istio `ext_authz` provider**: Envoy keeps terminating
-gRPC, calls Oathkeeper to validate the session, and injects the minted JWT as an
-upstream header that trips still JWKS-validates. Same trust split, different
-placement — the proxy becomes a decision service. Because Envoy terminates gRPC,
-the trips role keeps `allowHTTP1: false` (the default) in k8s; `ALLOW_HTTP1=true`
-is a compose-only edge concern.
-
-Consequently the prod JWT comes from Oathkeeper (ext_authz), so trips needs **no
-signing secret** — only `OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE`.
-That is why `k8s/secret-jwt.yaml` (the old HS256 shared secret) was removed.
+The Compose `ory` profile is the runnable Oathkeeper integration in this
+repository. The `k8s/` and `istio/` manifests configure trips to validate JWTs
+from an external JWKS issuer, but they do not deploy Oathkeeper or configure
+Istio `ext_authz`; that edge integration remains to be implemented. A future
+integration could use Oathkeeper's Decision API (`:4456/decisions`) as an
+`ext_authz` provider while Envoy terminates gRPC, but the example does not
+currently wire that flow. The Kubernetes gateway keeps its default h2c listener;
+`ALLOW_HTTP1=true` is only used by the Compose standalone-proxy demo.
 
 ## Role-gating extension point
 
@@ -102,6 +97,6 @@ rpc AdminRecallVehicle(...) returns (...) {
 }
 ```
 
-The `roles` claim already flows from the Kratos identity trait through the
-mutator and `claimsMapping` into `AuthContext.roles`, which `createProtoAuthzInterceptor`
-reads.
+In the Compose demo, the `roles` claim flows from the Kratos identity trait
+through the Oathkeeper mutator and `claimsMapping` into `AuthContext.roles`,
+which `createProtoAuthzInterceptor` reads.
