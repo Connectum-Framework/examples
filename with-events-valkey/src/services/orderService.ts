@@ -18,6 +18,12 @@ import { orderEventBus } from "../orderEventBus.ts";
 
 export const orders = new Map<string, { orderId: string; product: string; quantity: number; customer: string; status: string }>();
 
+// Orders whose OrderCreated publish has not settled yet. They stay in `orders`
+// so a fast InventoryReserved reply can still find them, but the RPCs hide
+// them: a client must not see, or cancel, an order that createOrder may still
+// withdraw when the publish fails.
+const unconfirmedOrderIds = new Set<string>();
+
 export const orderServiceRoutes = defineService(OrderService, {
     async createOrder(request: CreateOrderRequest) {
         if (request.quantity <= 0) {
@@ -33,6 +39,7 @@ export const orderServiceRoutes = defineService(OrderService, {
         // A handler that looks up an order which is not stored yet would drop
         // the confirmation and leave the order pending forever.
         orders.set(orderId, order);
+        unconfirmedOrderIds.add(orderId);
         try {
             await orderEventBus.publish(OrderCreatedSchema, create(OrderCreatedSchema, {
                 orderId, product: request.product, quantity: request.quantity, customer: request.customer,
@@ -40,13 +47,15 @@ export const orderServiceRoutes = defineService(OrderService, {
         } catch (err) {
             orders.delete(orderId);
             throw err;
+        } finally {
+            unconfirmedOrderIds.delete(orderId);
         }
         console.log(`[OrderService] OrderCreated event published for ${orderId}`);
         return create(CreateOrderResponseSchema, { orderId, status: "pending" });
     },
     async cancelOrder(request: CancelOrderRequest) {
         const order = orders.get(request.orderId);
-        if (!order) {
+        if (!order || unconfirmedOrderIds.has(request.orderId)) {
             throw new ConnectError(`Order ${request.orderId} not found`, Code.NotFound);
         }
         console.log(`[OrderService] Cancelling order ${request.orderId}: ${request.reason}`);
@@ -59,7 +68,7 @@ export const orderServiceRoutes = defineService(OrderService, {
     },
     async getOrders(_request: GetOrdersRequest) {
         return create(GetOrdersResponseSchema, {
-            orders: [...orders.values()].map((o) => create(OrderInfoSchema, o)),
+            orders: [...orders.values()].filter((o) => !unconfirmedOrderIds.has(o.orderId)).map((o) => create(OrderInfoSchema, o)),
         });
     },
 });
