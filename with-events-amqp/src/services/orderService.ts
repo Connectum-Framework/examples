@@ -23,10 +23,21 @@ export const orderServiceRoutes = defineService(OrderService, {
         const orderId = randomUUID();
         const order = { orderId, product: request.product, quantity: request.quantity, customer: request.customer, status: "pending" };
         console.log(`[OrderService] Creating order ${orderId}: ${request.quantity}x ${request.product} for ${request.customer}`);
-        await orderEventBus.publish(OrderCreatedSchema, create(OrderCreatedSchema, {
-            orderId, product: request.product, quantity: request.quantity, customer: request.customer,
-        }));
+        // The order is stored before its event goes out: the inventory service
+        // answers with InventoryReserved, and that reply can reach this process
+        // before the publish settles (the broker confirms a publish only after
+        // it has accepted the message, while consumers receive it at once).
+        // A handler that looks up an order which is not stored yet would drop
+        // the confirmation and leave the order pending forever.
         orders.set(orderId, order);
+        try {
+            await orderEventBus.publish(OrderCreatedSchema, create(OrderCreatedSchema, {
+                orderId, product: request.product, quantity: request.quantity, customer: request.customer,
+            }));
+        } catch (err) {
+            orders.delete(orderId);
+            throw err;
+        }
         console.log(`[OrderService] OrderCreated event published for ${orderId}`);
         return create(CreateOrderResponseSchema, { orderId, status: "pending" });
     },
