@@ -33,8 +33,8 @@ graph LR
 
     OS -->|OTLP/HTTP| OTLP
     IS -->|OTLP/HTTP| OTLP
-    OTLP -->|traces, logs, metrics (OTLP/HTTP)| UI
-    OTLP -->|metrics (Prometheus remote write)| PM
+    OTLP -->|"traces, logs, metrics (OTLP/HTTP)"| UI
+    OTLP -->|"metrics (Prometheus remote write)"| PM
     UI --> CH
     UI --> PM
 ```
@@ -50,13 +50,19 @@ graph LR
 ## Prerequisites
 
 - **Docker Engine** and **Docker Compose** v2
+- **Node.js** >= 22.13 and **pnpm**, to generate the protobuf code that the service image copies in
 - **curl** (for traffic generation)
 
 ## Quick Start
 
 ```bash
-# Start the full stack
 cd examples/o11y-coroot
+
+# The service image copies the generated protobuf code (gen/, not committed)
+# from the build context, so generate it first
+(cd service && pnpm install --frozen-lockfile && pnpm run buf:generate)
+
+# Start the full stack
 docker compose up --build -d
 
 # Compose waits for ClickHouse, Prometheus, and Coroot healthchecks before

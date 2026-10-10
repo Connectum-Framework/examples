@@ -51,7 +51,8 @@
 # RS256 signing keyset is GENERATED at up-time into a shared volume (no private
 # key in git). Config only — NOT part of the automated test run (the e2e simulates
 # the mutator with an in-process JWKS server from @connectum/auth/testing). See
-# ory/oathkeeper/README.md for the flow + the k8s/istio ext_authz production path.
+# ory/oathkeeper/README.md for the flow. The k8s/istio manifests do not deploy
+# Oathkeeper or configure ext_authz.
 #
 #   docker compose --profile ory up --build
 #   open http://localhost:4458            # Kratos self-service UI — register/login
@@ -519,6 +520,11 @@ services:
   # volume. No private key is committed to git — it is materialized at up-time.
   oathkeeper-keygen:
     image: oryd/oathkeeper:v0.40.9
+    # The image runs as the unprivileged `ory` user and has no /etc/keys, so a
+    # fresh named volume is created root-owned and `ory` cannot write into it
+    # ("Permission denied"). Root writes the keyset (mode 0644); the oathkeeper
+    # service then reads it read-only as `ory`.
+    user: "0:0"
     volumes:
       - oathkeeper-keys:/etc/keys
     # `credentials generate` prints the JWKS to stdout; redirect into the volume.

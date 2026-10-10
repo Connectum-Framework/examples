@@ -21,9 +21,9 @@ sequenceDiagram
     Browser->>Oathkeeper: POST StartTrip or GetTrip with cookie
     Oathkeeper->>Kratos: cookie_session checks /sessions/whoami
     Kratos-->>Oathkeeper: Authenticated session and identity
-    Note over Oathkeeper: allow authorizer; id_token mutator mints RS256 JWT
+    Note over Oathkeeper: allow authorizer, then the id_token mutator mints an RS256 JWT
     Oathkeeper->>Trips: Connect over HTTP/1.1 with Authorization: Bearer JWT
-    Note over Trips: Verify signature via remote JWKS, iss, aud, exp; enforce proto authz
+    Note over Trips: Verify signature via remote JWKS plus iss, aud and exp, then enforce proto authz
     Trips->>Fleet: Internal gRPC ctx.call with signed x-internal-token
     Fleet-->>Trips: Internal RPC response
 ```

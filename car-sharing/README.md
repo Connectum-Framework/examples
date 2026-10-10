@@ -199,8 +199,21 @@ pnpm install
 pnpm buf:generate     # gen/ — message types + catalog.gen.ts (ctx.call typing)
 pnpm typecheck
 pnpm test             # in-process e2e: gateway auth, ctx.call, error paths
-pnpm start            # monolith on :5000 (SERVICES unset)
 ```
+
+`pnpm test` needs no Docker. To serve the monolith on `:5000` (`SERVICES` unset),
+start Postgres, migrate and seed it, then export `DATABASE_URL`; without it
+`pnpm start` exits at boot with `DATABASE_URL is not set`:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing
+pnpm db:migrate && pnpm db:seed
+pnpm start            # monolith on :5000
+```
+
+`StartTrip` and `GetTrip` additionally need a Temporal server (the `saga`
+Compose profile); the monolith itself starts and reports healthy without one.
 
 The e2e suite runs the whole app in one process and asserts: the happy
 `StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
@@ -482,7 +495,8 @@ consumes the public JWKS at `OATHKEEPER_JWKS_URI`
 
 ```bash
 docker compose --profile ory up --build
-open http://localhost:4458        # Kratos self-service UI — register a rider, log in
+# Open http://localhost:4458 in a browser: the Kratos self-service UI,
+# where you register a rider and log in
 ```
 
 Registering produces an `ory_kratos_session` cookie; call the edge through
@@ -497,6 +511,12 @@ curl -i http://localhost:4455/trips.v1.TripService/GetTrip \
   -b 'ory_kratos_session=<cookie>' \
   -d '{"tripId":"trip-demo"}'
 ```
+
+Without the cookie Oathkeeper answers `401`. With a valid session the request
+passes authentication and reaches the trips handler; because this profile has no
+Temporal server, the handler then answers
+`{"code":"unavailable","message":"Could not read status for trip \"trip-demo\"."}`
+(HTTP 503), which still demonstrates the full edge path.
 
 The one runtime change this requires is the env-gated `ALLOW_HTTP1=true` on the
 trips role (the compose `ory` profile sets it). On a plaintext listener

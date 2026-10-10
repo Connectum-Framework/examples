@@ -24,29 +24,28 @@ This allows k6 benchmarks to accurately measure the overhead introduced by each 
 
 ## Installation
 
-From project root:
+From the `performance-test-server` directory of this repository:
 
 ```bash
-# Install dependencies
-pnpm install
+# Install dependencies from the committed lockfile
+pnpm install --frozen-lockfile
 
 # Generate proto files
-cd examples/performance-test-server
 pnpm build:proto
 ```
 
 ## Running the Server
 
+From the same directory:
+
 ```bash
-# From project root
-node examples/performance-test-server/src/index.ts
+pnpm start
 
 # Or with auto-reload during development
-node --watch examples/performance-test-server/src/index.ts
+pnpm dev
 ```
 
-> From within `examples/performance-test-server`, the equivalent package.json
-> scripts are available: `pnpm start` and `pnpm dev` (auto-reload).
+The scripts run `node src/index.ts` and `node --watch src/index.ts`.
 
 Expected output:
 
@@ -55,6 +54,12 @@ Starting Performance Test Server...
 
 Starting 5 server configurations:
 
+Server listening 0.0.0.0:8081
+Server listening 0.0.0.0:8082
+Server listening 0.0.0.0:8083
+Server listening 0.0.0.0:8084
+Server listening 0.0.0.0:8080
+
 All servers started successfully!
 
 Port | Configuration
@@ -62,8 +67,8 @@ Port | Configuration
 8081 | Baseline (no interceptors)
 8082 | Validation only
 8083 | Logger only
-8084 | OTel (tracing + metrics) only
-8080 | Full chain (all interceptors)
+8084 | OTel (tracing + metrics) only (no-op exporter)
+8080 | Full chain (all interceptors, no-op exporter)
 
 Ready for k6 benchmarks!
 
@@ -74,9 +79,12 @@ Run benchmarks with:
 Press Ctrl+C to shutdown all servers
 ```
 
-With `OTEL_EXPORT_ENABLED=1`, the server also starts port 8085 and reports six
-configurations. The Docker OTLP-export benchmark sets this variable and starts an
-OpenTelemetry Collector; a standalone run must provide a reachable collector.
+With `OTEL_EXPORT_ENABLED=1`, the server also starts port 8085, reports six
+configurations, prints its `OTEL_*` settings first, and adds an `8085 | OTel
+export` row and a third `k6 run k6/otel-export-overhead.js` line to this output.
+The Docker OTLP-export benchmark sets this variable and starts an OpenTelemetry
+Collector. A standalone run starts without a collector; set
+`OTEL_EXPORTER_OTLP_ENDPOINT` to one if the exported spans must be received.
 
 ## Docker Benchmarks
 
