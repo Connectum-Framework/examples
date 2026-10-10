@@ -279,7 +279,14 @@ export const orderEventBus = createEventBus({
 
 ## External AMQP Contract
 
-This example uses the default Connectum conventions (topic exchange, `${exchange}.${group}` queues, protobuf payloads). When you need to integrate with an **externally defined AMQP contract** -- a partner's direct exchange, named durable queues with DLQ arguments, JSON bodies -- `AmqpAdapter` supports explicit topology, queue overrides, and serialization control:
+The runnable quick start uses the default Connectum conventions (topic exchange,
+`${exchange}.${group}` queues and protobuf payloads). The snippet below is not
+part of the quick start; it shows how to connect to an **externally defined AMQP
+contract** such as a partner's direct exchange, named durable queues with DLQ
+arguments or JSON payloads. Every option it uses (`topology`, `topologyMode`,
+`queueOverrides`, `serialization`, `publisherOptions`) is available in
+`@connectum/events-amqp@1.0.0`, the version the committed lockfile installs; it
+type-checks against that version.
 
 ```typescript
 const adapter = AmqpAdapter({
@@ -320,7 +327,15 @@ const adapter = AmqpAdapter({
 });
 ```
 
-Note: with `mandatory: true` (default `correlationHeader: true`) the adapter stamps a private `x-connectum-publish-id` header on mandatory publishes -- visible to external consumers. Set `publisherOptions.correlationHeader: false` for a clean wire (mandatory publishes are then serialized one at a time). See the [@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp) for topology modes, recovery options, and the full error taxonomy.
+With `mandatory: true` (default `correlationHeader: true`) the adapter stamps a
+private `x-connectum-publish-id` header on mandatory publishes, visible to
+external consumers. Set `publisherOptions.correlationHeader: false` to omit it;
+mandatory publishes are then serialized one at a time. This option exists in 1.0.0.
+The `x-event-id` and `x-published-at` envelope headers are removed only by
+`publisherOptions.externalContract`, which requires `@connectum/events-amqp`
+1.1.0 or newer (the lockfile pins 1.0.0). See the
+[@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp)
+for topology modes, recovery options and the error taxonomy.
 
 ## Docker Compose
 

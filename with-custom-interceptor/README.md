@@ -24,6 +24,10 @@ tests/e2e/e2e.test.ts                 # End-to-end tests
 
 ## Running
 
+Requires Node.js >= 25.2.0 and pnpm because `start` runs TypeScript directly
+with Node's native type stripping. The package manifest still declares
+`engines.node >=22.13.0`; use the higher runtime requirement for this command.
+
 ```bash
 pnpm install
 pnpm build:proto
@@ -31,6 +35,8 @@ pnpm start
 ```
 
 ## Testing
+
+The test starts its own server on an ephemeral port and stops it when the run ends.
 
 ```bash
 pnpm test
@@ -48,6 +54,13 @@ grpcurl -plaintext -H 'x-api-key: test-api-key-123' -d '{"message": "Secret"}' l
 # Rate-limited echo
 grpcurl -plaintext -d '{"message": "Test"}' localhost:5000 echo.v1.EchoService/RateLimitedEcho
 ```
+
+`RateLimitedEcho` allows five requests per client, per server process, in each
+60-second fixed window. The sample identifies clients from `x-forwarded-for` or
+`x-real-ip`; if neither header is present, requests share one global counter.
+Direct callers can choose these headers and change the counter key. Use them
+only behind a trusted proxy that overwrites them. Requests without either header
+share the global counter.
 
 ## Resources
 
