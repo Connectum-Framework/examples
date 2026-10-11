@@ -72,7 +72,10 @@ services:
       POSTGRES_PASSWORD: car_sharing
       POSTGRES_DB: car_sharing
     ports:
-      - "5432:5432"
+      # Loopback only: the database has throwaway demo credentials and is
+      # reached from the host through 127.0.0.1; the other services reach it
+      # through the Compose network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
