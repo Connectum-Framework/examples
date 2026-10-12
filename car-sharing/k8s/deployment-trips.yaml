@@ -70,11 +70,11 @@ spec:
             - configMapRef:
                 name: trips-config
           # Phase 4: the gateway is a thin IdP CONSUMER — it holds NO signing
-          # secret. Identity is an RS256 JWT minted by Ory Oathkeeper (acting as
-          # an Istio ext_authz decision service in the mesh) and validated here
-          # against Oathkeeper's published JWKS. The OATHKEEPER_JWKS_URI /
-          # JWT_ISSUER / JWT_AUDIENCE inputs live in trips-config (no Secret).
-          # See ory/oathkeeper/README.md for the ext_authz production path.
+          # secret. Identity is an RS256 JWT minted by an external issuer (Ory
+          # Oathkeeper in the Compose demo) and validated here against the
+          # issuer's published JWKS. The OATHKEEPER_JWKS_URI / JWT_ISSUER /
+          # JWT_AUDIENCE inputs live in trips-config (no Secret). These
+          # manifests do not deploy that issuer; see ory/oathkeeper/README.md.
           #
           # The one secret trips does hold is its SERVICE identity: the key it
           # signs internal calls with (INTERNAL_SIGNING_KEY_FILE in trips-config

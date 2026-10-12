@@ -20,33 +20,32 @@ This allows k6 benchmarks to accurately measure the overhead introduced by each 
 ## Requirements
 
 - **Node.js**: >=25.2.0 — required because this example runs its TypeScript sources directly via native type stripping (`node src/index.ts`). Consuming the framework as compiled packages needs only Node.js >=22.13.0.
-- **pnpm**: >=10
+- **pnpm**: 10 or newer
 
 ## Installation
 
-From project root:
+From the `performance-test-server` directory of this repository:
 
 ```bash
-# Install dependencies
-pnpm install
+# Install dependencies from the committed lockfile
+pnpm install --frozen-lockfile
 
 # Generate proto files
-cd examples/performance-test-server
 pnpm build:proto
 ```
 
 ## Running the Server
 
+From the same directory:
+
 ```bash
-# From project root
-node examples/performance-test-server/src/index.ts
+pnpm start
 
 # Or with auto-reload during development
-node --watch examples/performance-test-server/src/index.ts
+pnpm dev
 ```
 
-> From within `examples/performance-test-server`, the equivalent package.json
-> scripts are available: `pnpm start` and `pnpm dev` (auto-reload).
+The scripts run `node src/index.ts` and `node --watch src/index.ts`.
 
 Expected output:
 
@@ -55,6 +54,12 @@ Starting Performance Test Server...
 
 Starting 5 server configurations:
 
+Server listening 0.0.0.0:8081
+Server listening 0.0.0.0:8082
+Server listening 0.0.0.0:8083
+Server listening 0.0.0.0:8084
+Server listening 0.0.0.0:8080
+
 All servers started successfully!
 
 Port | Configuration
@@ -62,8 +67,8 @@ Port | Configuration
 8081 | Baseline (no interceptors)
 8082 | Validation only
 8083 | Logger only
-8084 | OTel (tracing + metrics) only
-8080 | Full chain (all interceptors)
+8084 | OTel (tracing + metrics) only (no-op exporter)
+8080 | Full chain (all interceptors, no-op exporter)
 
 Ready for k6 benchmarks!
 
@@ -73,6 +78,13 @@ Run benchmarks with:
 
 Press Ctrl+C to shutdown all servers
 ```
+
+With `OTEL_EXPORT_ENABLED=1`, the server also starts port 8085, reports six
+configurations, prints its `OTEL_*` settings first, and adds an `8085 | OTel
+export` row and a third `k6 run k6/otel-export-overhead.js` line to this output.
+The Docker OTLP-export benchmark sets this variable and starts an OpenTelemetry
+Collector. A standalone run starts without a collector; set
+`OTEL_EXPORTER_OTLP_ENDPOINT` to one if the exported spans must be received.
 
 ## Docker Benchmarks
 
@@ -113,10 +125,11 @@ it too and run the interceptor benchmark concurrently, stealing CPU from and
 contaminating the OTLP-export measurement. Listing only the services this
 scenario needs keeps the run isolated.
 
-The `OTEL_EXPORT_ENABLED=1` env and the `--profile otel-export` flag are a
-**pair** — the env makes the server bind port 8085 with a real OTLP provider,
-the profile starts the collector and the k6 runner. Setting only one of them
-fails fast: the k6 setup health check aborts the run if 8085 is not serving.
+`OTEL_EXPORT_ENABLED=1` makes the server bind port 8085 with a real OTLP
+provider. The `--profile otel-export` flag is redundant when the command
+explicitly names `otel-collector` and `k6-otel-export`; Compose starts targeted
+profile-gated services without enabling their profile. If `OTEL_EXPORT_ENABLED`
+is omitted, port 8085 stays disabled and the k6 setup health check aborts the run.
 
 What this measures that the `k6-interceptor-overhead` scenario does *not*:
 
@@ -128,15 +141,10 @@ The collector runs locally in Docker and drops all telemetry via a `debug` expor
 
 k6 writes a machine-readable JSON summary to `k6/results/otel-export-overhead.json` (gitignored) for CI / bench-tracking tooling.
 
-**Expected overhead range** (informational — actual numbers depend on the installed `@opentelemetry/otlp-transformer` version):
-
-| Metric | Baseline (8081) | OTel export (8085) | Overhead | Relative |
-|--------|-----------------|--------------------|----------|----------|
-| p50 latency | ~1–3 ms | ~1.5–4 ms | +0.5–1 ms | 1.2×–1.5× |
-| p95 latency | ~2–5 ms | ~3–8 ms | +1–3 ms | 1.3×–2× |
-| p99 latency | ~5–10 ms | ~8–20 ms | +3–10 ms | 1.5×–2.5× |
-
-A **relative overhead >1.5×** on p95 — or any sudden jump from a previous run — is a signal to investigate the `@opentelemetry/otlp-transformer` version, which has a history of serialization-performance regressions: see upstream issues [#6221](https://github.com/open-telemetry/opentelemetry-js/issues/6221), PR [#6225](https://github.com/open-telemetry/opentelemetry-js/pull/6225), PR [#6390](https://github.com/open-telemetry/opentelemetry-js/pull/6390), issue [#6570](https://github.com/open-telemetry/opentelemetry-js/issues/6570).
+Compare repeated runs on the same host with the same Node.js, dependency lockfile,
+collector, and k6 settings. These results measure the example's current setup;
+they are not portable latency targets. Investigate a change only after confirming
+that repeated runs under identical conditions reproduce it.
 
 ### Cleanup
 

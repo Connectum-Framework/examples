@@ -4,8 +4,8 @@ The Connectum quickstart. One service, and almost no wiring — health checks,
 reflection, the default interceptor chain and graceful shutdown all come from a
 single `createServer` call.
 
-> Uses the 1.0.0 API (`defineService`). The published packages install with a
-> plain `pnpm install`. To test against locally packed framework tarballs instead, see
+> Uses `defineService`. `pnpm install` resolves the published package versions
+> allowed by `package.json`. To test against locally packed framework tarballs, see
 > "Testing against unreleased framework builds" in the repository README.
 
 ## What it shows
@@ -22,13 +22,20 @@ single `createServer` call.
 
 ## Run it
 
-Requires Node.js >= 25.2.0 (or Bun, or tsx) and pnpm >= 10.
+Requires Node.js >= 25.2.0 and pnpm. The optional `start:bun` and `start:tsx`
+scripts require Bun or `tsx` to be installed separately.
 
 ```bash
-pnpm install                     # @connectum/*@^1.0.0 from npm
+pnpm install                     # install the @connectum/* ranges in package.json
 pnpm build:proto                 # buf generate → gen/
-pnpm start                       # http://localhost:5000
-pnpm test                        # e2e over a real gRPC client
+pnpm typecheck
+pnpm test                        # in-process test using a real gRPC client
+```
+
+Start the server in one terminal:
+
+```bash
+pnpm start                       # generates proto code, then serves :5000
 ```
 
 Call it:
@@ -40,12 +47,12 @@ grpcurl -plaintext -d '{"name":"world"}' localhost:5000 greeter.v1.GreeterServic
 
 ## Same code, three runtimes
 
-The service is plain TypeScript — it runs unchanged on Node.js, Bun and tsx:
+The same source can run through the provided Node.js, Bun and tsx scripts:
 
 ```bash
-pnpm start          # Node.js (native type stripping)
-pnpm start:bun      # Bun
-pnpm start:tsx      # tsx
+pnpm start           # Node.js (native type stripping; Node.js >=25.2.0)
+pnpm start:bun       # Bun (installed separately)
+pnpm start:tsx       # tsx (installed separately)
 ```
 
 ## Enums in your protos
@@ -73,13 +80,16 @@ is not committed and `buf` is a devDependency), then ship production dependencie
 docker build -t quickstart .                      # Node.js
 docker build -f Dockerfile.bun -t quickstart .    # Bun
 
-docker run --rm -p 5000:5000 quickstart
+docker run --rm -d --name quickstart -p 5000:5000 quickstart
 curl -fsS --http2-prior-knowledge http://localhost:5000/healthz
+docker stop quickstart
 ```
 
+The container runs in the background for the probe; `docker stop` removes it
+because it was started with `--rm`.
+
 The probe needs `--http2-prior-knowledge` because the service is plaintext h2c
-(`allowHTTP1: false`); `wget` cannot see it at all and would report a dead service as
-healthy.
+(`allowHTTP1: false`). The successful h2c response is what the probe checks.
 
 `scripts/container-e2e.sh` runs the full scenario against a built image — healthcheck,
 `/healthz`, reflection, a real RPC, gRPC health and SIGTERM as PID 1 — and CI runs it for

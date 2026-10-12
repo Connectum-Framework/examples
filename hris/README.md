@@ -73,13 +73,16 @@ flowchart TB
     M_BUS -- "deliver" --> M_PAY["PayrollService<br/>subscriber"]
   end
 
-  subgraph SPLIT["Microservices — SERVICES per role (three processes + NATS)"]
+  subgraph SPLIT["Split event path — three shown service roles + NATS"]
     direction LR
     S_TO["timeoff process<br/>TimeOffService"] -- "ctx.call → DIRECTORY_ADDR<br/>(gRPC over network)" --> S_DIR["directory process<br/>DirectoryService"]
     S_TO -- "publish LeaveApproved" --> NATS(("NATS"))
     NATS -- "deliver" --> S_PAY["payroll process<br/>PayrollService subscriber"]
   end
 ```
+
+The split diagram focuses on the `timeoff`, `directory` and `payroll` event path;
+the `access` and `onboarding` roles are described in the saga section below.
 
 In the **monolith** the `ctx.call` dispatches in-process and the publisher and
 subscriber share **one bus instance** (TimeOff publishes, Payroll subscribes,

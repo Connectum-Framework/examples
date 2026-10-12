@@ -1,13 +1,13 @@
-# car-sharing — enterprise deployment on Kubernetes + Istio
+# car-sharing — Kubernetes and Istio deployment example
 
-A surface-level car-sharing app whose headline is **production deployment**: one
-Connectum image runs as three microservices on Kubernetes behind an Istio mesh,
-showing three things that are normally hard, wired straight from the framework:
+A small car-sharing app with Kubernetes and Istio manifests for three service
+roles. It demonstrates:
 
-- **Gateway auth at the edge** — RS256 JWT authentication (validated via JWKS) +
-  proto-driven authorization (`@connectum/auth`) on the public-facing `trips`
-  service. The token is minted by **Ory** (Kratos + Oathkeeper); Connectum is a
-  thin identity CONSUMER, not an IdP — see [Phase 4](#phase-4--ory-as-the-idp).
+- **Gateway auth** — RS256 JWT authentication (validated through JWKS) and
+  proto-driven authorization (`@connectum/auth`) on the public `trips` service.
+  The Compose `ory` profile demonstrates token issuance with Kratos and
+  Oathkeeper. Kubernetes manifests expect a configured JWKS issuer; they do not
+  deploy Oathkeeper or wire Istio `ext_authz`.
 - **Cross-service `ctx.call` across split pods** — the trip handler calls fleet
   through the typed service catalog (availability pre-check); the framework picks
   in-process or network transport from env, no handler changes.
@@ -21,7 +21,7 @@ wiring.
 
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
-| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | RS256 JWT required, validated via JWKS (minted by Ory Oathkeeper; proto `default_policy: allow`); `RecordTrip`/`EndTrip` method-level `internal`, worker token only |
+| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | RS256 JWT required and validated via JWKS (Compose `ory` profile uses Oathkeeper); proto `default_policy: allow`; `RecordTrip`/`EndTrip` are internal worker methods |
 | `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `internal` service token: reads (`GetVehicle`, `ListVehicles`) trips, reserve/release worker |
 | `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `internal` service token, worker only |
 
@@ -190,18 +190,30 @@ See `src/topology.ts` (env → `enabledServices` + `perServiceEnvResolver`).
 
 ## Run locally (monolith)
 
-This example uses the 1.0.0 service-catalog API (`defineService`, `ctx.call`).
-Install with a plain `pnpm install` — the `@connectum/*` packages are published
-on npm (this example's `package.json` pins `^1.0.0`, except the events stack at
-`^1.1.0` for the Phase 3 broadcast API).
+Install the published framework packages with `pnpm install`. The current
+`package.json` ranges and lockfile resolve the `@connectum/*` dependencies to
+the 1.2.x line; this README describes the APIs used by those pinned packages.
 
 ```bash
 pnpm install
 pnpm buf:generate     # gen/ — message types + catalog.gen.ts (ctx.call typing)
 pnpm typecheck
 pnpm test             # in-process e2e: gateway auth, ctx.call, error paths
-pnpm start            # monolith on :5000 (SERVICES unset)
 ```
+
+`pnpm test` needs no Docker. To serve the monolith on `:5000` (`SERVICES` unset),
+start Postgres, migrate and seed it, then export `DATABASE_URL`; without it
+`pnpm start` exits at boot with `DATABASE_URL is not set`:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing
+pnpm db:migrate && pnpm db:seed
+pnpm start            # monolith on :5000
+```
+
+`StartTrip` and `GetTrip` additionally need a Temporal server (the `saga`
+Compose profile); the monolith itself starts and reports healthy without one.
 
 The e2e suite runs the whole app in one process and asserts: the happy
 `StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
@@ -483,7 +495,8 @@ consumes the public JWKS at `OATHKEEPER_JWKS_URI`
 
 ```bash
 docker compose --profile ory up --build
-open http://localhost:4458        # Kratos self-service UI — register a rider, log in
+# Open http://localhost:4458 in a browser: the Kratos self-service UI,
+# where you register a rider and log in
 ```
 
 Registering produces an `ory_kratos_session` cookie; call the edge through
@@ -498,6 +511,12 @@ curl -i http://localhost:4455/trips.v1.TripService/GetTrip \
   -b 'ory_kratos_session=<cookie>' \
   -d '{"tripId":"trip-demo"}'
 ```
+
+Without the cookie Oathkeeper answers `401`. With a valid session the request
+passes authentication and reaches the trips handler; because this profile has no
+Temporal server, the handler then answers
+`{"code":"unavailable","message":"Could not read status for trip \"trip-demo\"."}`
+(HTTP 503), which still demonstrates the full edge path.
 
 The one runtime change this requires is the env-gated `ALLOW_HTTP1=true` on the
 trips role (the compose `ory` profile sets it). On a plaintext listener
@@ -520,18 +539,17 @@ rpc AdminRecallVehicle(...) returns (...) {
 The `roles` claim already reaches `AuthContext.roles`, which the proto authz
 interceptor reads.
 
-### Production (k8s / istio): Oathkeeper as ext_authz
+### Kubernetes identity integration status
 
-The `k8s/` + `istio/` manifests are **unchanged**. In the mesh, Envoy terminates
-gRPC and Oathkeeper runs as an Istio **`ext_authz` decision service**: it
-validates the session and the minted JWT is injected upstream, which trips still
-JWKS-validates. Because Envoy handles gRPC, trips keeps `allowHTTP1: false` (h2c)
-there — `ALLOW_HTTP1=true` is a compose-edge concern only. The gateway therefore
-needs **no signing secret** (the old `k8s/secret-jwt.yaml` was removed); only
-`OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE` in `k8s/configmap.yaml`. See
-`ory/oathkeeper/README.md` for the full edge + ext_authz details.
+The `k8s/` and `istio/` manifests configure the service roles, mesh policies and
+the gateway's JWKS issuer settings. They do **not** deploy Oathkeeper or configure
+an Istio `ext_authz` provider. To use these manifests, provide an identity system
+that issues JWTs matching `OATHKEEPER_JWKS_URI`, `JWT_ISSUER` and `JWT_AUDIENCE`
+in `k8s/configmap.yaml`, or add the missing edge integration. The Compose `ory`
+profile is the runnable Kratos/Oathkeeper demonstration; its standalone HTTP
+proxy uses `ALLOW_HTTP1=true`, while the Kubernetes service continues to use h2c.
 
-## OpenAPI — the published contract reflects the authz
+## Generate OpenAPI with authz metadata
 
 The proto is the single source of truth: the same `connectum.auth.v1` options that
 the gateway **enforces** at runtime also drive the **published** OpenAPI contract,
@@ -561,8 +579,9 @@ Two steps, decoupled from the offline `pnpm buf:generate`:
      on internal methods these name the services allowed to call;
    - only the security schemes a spec actually uses.
 
-The committed `openapi/*.yaml` is the showcase output — regenerate with
-`pnpm openapi` after changing the proto or its auth options.
+The committed `openapi/*.yaml` files are generated examples and can become stale
+after proto or auth-option changes. Regenerate them with `pnpm openapi` after
+changing either source.
 
 > **Note.** Streaming RPCs (`ListVehicles`) are omitted from the base spec
 > unless the plugin's `with-streaming` opt is set.
@@ -579,7 +598,7 @@ fact "this trip completed" is published **once** as `TripCompleted` and consumed
 | Mechanism            | Shape                              | Guarantee                                          |
 | -------------------- | ---------------------------------- | -------------------------------------------------- |
 | `ctx.call` (Phase 1) | synchronous typed RPC              | request/response                                   |
-| Temporal saga (Phase 2) | durable orchestration + compensation | exactly-once, retried, **durable**              |
+| Temporal saga (Phase 2) | durable orchestration + compensation | durable workflow history; activities may retry and must be idempotent |
 | **EventBus broadcast (Phase 3)** | **fire-and-forget 1→N**  | at-least-once per subscriber, **non-durable**, order-agnostic |
 
 ### Broadcast, not orchestration
@@ -760,11 +779,11 @@ dependency tree. After changing `package.json` or `pnpm-workspace.yaml`, run
 
 > Config only — these manifests are not exercised by the automated test run; the
 > e2e verifies the service code in-process. Adjust the image reference and the TLS
-> `credentialName` before applying. Since Phase 4 the gateway holds **no signing
-> secret** — identity is an RS256 JWT minted by Ory Oathkeeper (ext_authz) and
-> validated against its JWKS, configured via `k8s/configmap.yaml`
+> `credentialName` before applying. The gateway holds **no signing secret** — it
+> validates RS256 JWTs against the external JWKS issuer configured in `k8s/configmap.yaml`
 > (`OATHKEEPER_JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE`); see
-> [Phase 4](#phase-4--ory-as-the-idp) and `ory/oathkeeper/README.md`.
+> [Phase 4](#phase-4--ory-as-the-idp) and `ory/oathkeeper/README.md`. These
+> manifests do not set up Oathkeeper or Istio `ext_authz`.
 >
 > **Service tokens in k8s.** trips serves its service-token JWKS on the
 > `http-jwks` port (`9101`) of the `trips` Service; fleet and billing trust it
