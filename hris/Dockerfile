@@ -1,7 +1,7 @@
 # One image, every role. The RPC role is chosen at runtime by the SERVICES env
 # (see docker-compose.yml); the default entrypoint is src/index.ts. The Temporal
 # worker reuses this same image with `command: ["node", "src/worker.ts"]`.
-FROM node:25-slim AS deps
+FROM node:26-slim AS deps
 # pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
 # frozen install below reads the lockfile exactly as it was produced.
 RUN npm install -g pnpm@12.4.1
@@ -16,7 +16,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # reviewed lockfile change instead of an invisible drift inside the image.
 RUN pnpm install --frozen-lockfile --prod
 
-FROM node:25-slim AS runtime
+FROM node:26-slim AS runtime
 # curl, not wget: these services run plaintext h2c (`allowHTTP1: false`), and
 # wget speaks HTTP/1.1 only. Against an h2c listener `wget --spider` gets an
 # empty status line yet still exits 0 -- it would report a dead or NOT_SERVING
