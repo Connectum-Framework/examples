@@ -9,7 +9,7 @@
 # `example-e2e` workflow in the connectum repository.
 
 # ── build: full dependencies, then generate the proto code ──────────────────
-FROM node:25-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY package.json ./
 # No lockfile is committed for this example: deps resolve from the caret (^) ranges in
@@ -23,13 +23,13 @@ COPY proto/ ./proto/
 RUN npx buf generate
 
 # ── deps: production dependencies only ──────────────────────────────────────
-FROM node:25-slim AS deps
+FROM node:26-slim AS deps
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 # ── runtime ─────────────────────────────────────────────────────────────────
-FROM node:25-slim AS runtime
+FROM node:26-slim AS runtime
 # curl, not wget: this service serves plaintext h2c (`allowHTTP1: false`), and wget
 # speaks HTTP/1.1 only. Against an h2c listener `wget --spider` gets an empty status
 # line yet still exits 0, so it would report a dead or NOT_SERVING service as healthy.

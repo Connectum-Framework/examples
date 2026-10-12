@@ -4,7 +4,7 @@
 # — no build step, no --experimental flags.
 
 # ── deps: install production node_modules ───────────────────────────────────
-FROM node:25-slim AS deps
+FROM node:26-slim AS deps
 # pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
 # frozen install below reads the lockfile exactly as it was produced.
 RUN npm install -g pnpm@12.4.1
@@ -19,7 +19,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 # ── runtime: copy deps + source + generated proto code ──────────────────────
-FROM node:25-slim AS runtime
+FROM node:26-slim AS runtime
 # curl, not wget: the default posture is plaintext h2c (`allowHTTP1: false`),
 # and wget speaks HTTP/1.1 only. Against an h2c listener `wget --spider` gets an
 # empty status line yet still exits 0 -- it would report a dead or NOT_SERVING

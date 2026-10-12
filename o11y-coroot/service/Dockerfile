@@ -1,11 +1,11 @@
 # =============================================================================
 # Stage 1: Install dependencies
 # =============================================================================
-FROM node:22-slim AS deps
+FROM node:26-slim AS deps
 
 # pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
 # frozen install below reads the lockfile exactly as it was produced. npm rather
-# than corepack, like every other example image: the node:25 images no longer ship
+# than corepack, like every other example image: the node:25 and later images no longer ship
 # corepack, and an unpinned `pnpm@latest` would let the lockfile reader drift
 # between builds.
 RUN npm install -g pnpm@12.4.1
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile --prod
 # =============================================================================
 # Stage 2: Production runtime
 # =============================================================================
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 
 # Install curl for HEALTHCHECK (minimal addition)
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
