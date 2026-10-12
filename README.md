@@ -50,6 +50,7 @@ Runnable examples demonstrating Connectum features — from a one-service [quick
 
 - [Node.js](https://nodejs.org/) >= 25.2.0 for examples that run TypeScript directly. Published Connectum packages support Node.js >= 22.13.0; see [Runtime Compatibility](https://connectum.dev/en/guide/runtime-compatibility). Node.js 25 reached end of life on 2026-06-01 ([release schedule](https://github.com/nodejs/Release/blob/main/schedule.json)); use Node.js 26 on the host (the example tests were run on 26.8.2). The example Dockerfiles still build on `node:25-slim` (`o11y-coroot` on `node:22-slim`).
 - [pnpm](https://pnpm.io/); the Dockerfiles and CI lockfile checks use pnpm 12.4.1.
+- Optional: [Bun](https://bun.sh/) and [`tsx`](https://tsx.is/), installed separately, only for the `start:bun` and `start:tsx` scripts of `getting-started`.
 - Docker Engine and Docker Compose for examples with broker or observability stacks.
 
 ## Quick Start
