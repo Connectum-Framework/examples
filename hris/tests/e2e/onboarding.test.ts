@@ -47,17 +47,27 @@ interface StubHandleBehaviour {
     readonly queryError?: "closed" | "transient";
 }
 
+/** What the handler asked the workflow client for while reading a status. */
+interface ObservedReads {
+    /** Workflow ids passed to `getHandle`, in call order. */
+    readonly handleIds: string[];
+    /** Query names passed to `handle.query`, in call order. */
+    readonly queryNames: string[];
+}
+
 /** A stub workflow client recording started ids and answering from `handleBehaviour`. */
-function makeStubClient(started: string[], handleBehaviour: () => StubHandleBehaviour): OnboardingWorkflowClient {
+function makeStubClient(started: string[], handleBehaviour: () => StubHandleBehaviour, observed: ObservedReads): OnboardingWorkflowClient {
     return {
         async start(_type, opts) {
             started.push(opts.workflowId);
             return { workflowId: opts.workflowId };
         },
-        getHandle() {
+        getHandle(workflowId) {
+            observed.handleIds.push(workflowId);
             const behaviour = handleBehaviour();
             return {
-                async query<Ret>(): Promise<Ret> {
+                async query<Ret>(queryName: string): Promise<Ret> {
+                    observed.queryNames.push(queryName);
                     if (behaviour.queryStatus === undefined) {
                         if (behaviour.queryError === "transient") {
                             // A generic/infra failure — NOT a closed-run signal.
@@ -82,12 +92,13 @@ describe("E2E: onboarding edge (pre-check + start, stub Temporal)", () => {
     const started: string[] = [];
     // Mutated per GetOnboarding test to drive the stub handle's query/describe.
     let handleBehaviour: StubHandleBehaviour = { queryStatus: "STARTED" };
+    const observed: ObservedReads = { handleIds: [], queryNames: [] };
 
     before(async () => {
         const topology = resolveTopology("*");
         const eventBus = buildEventBus({ localTypeNames: topology.localTypeNames, adapter: MemoryAdapter() });
         const db = await makeTestDb();
-        server = buildServer({ port: 0, topology, eventBus, db, workflowClient: makeStubClient(started, () => handleBehaviour) });
+        server = buildServer({ port: 0, topology, eventBus, db, workflowClient: makeStubClient(started, () => handleBehaviour, observed) });
         await server.start();
     });
 
@@ -130,11 +141,31 @@ describe("E2E: onboarding edge (pre-check + start, stub Temporal)", () => {
         assert.equal(started.length, before);
     });
 
-    it("GetOnboarding reads the live status via the workflow query", async () => {
-        handleBehaviour = { queryStatus: "STARTED" };
+    it("GetOnboarding returns the status the workflow query reports, for the requested employee's workflow", async () => {
+        // The proto documents GetOnboarding as reading the new hire's live status
+        // from the running workflow through a Temporal query (the workflow id is
+        // the employee id), and falling back to a terminal status only once the
+        // saga has closed. So the answer must come from the query, not from
+        // describe(): describe() is rigged to report the OPPOSITE outcome, which
+        // makes a handler that reads describe() (or hard-codes a status) fail.
+        // Two different query answers and two different employee ids prove the
+        // status and the id are not constants.
         const onboarding = server.localClient(OnboardingService);
-        const res = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-300" }));
-        assert.equal(res.onboarding?.status, "STARTED");
+        observed.handleIds.length = 0;
+        observed.queryNames.length = 0;
+
+        handleBehaviour = { queryStatus: "STARTED", describeStatusName: "COMPLETED" };
+        const running = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-300" }));
+        assert.equal(running.onboarding?.status, "STARTED");
+        assert.equal(running.onboarding?.employeeId, "e-300");
+
+        handleBehaviour = { queryStatus: "COMPLETED", describeStatusName: "FAILED" };
+        const done = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-301" }));
+        assert.equal(done.onboarding?.status, "COMPLETED");
+        assert.equal(done.onboarding?.employeeId, "e-301");
+
+        assert.deepEqual(observed.handleIds, ["e-300", "e-301"]);
+        assert.deepEqual(observed.queryNames, ["getOnboardingStatus", "getOnboardingStatus"]);
     });
 
     it("GetOnboarding falls back to a terminal status via describe() when the workflow has CLOSED", async () => {
