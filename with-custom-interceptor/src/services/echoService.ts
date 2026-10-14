@@ -15,14 +15,15 @@ import { EchoService } from "#gen/echo/v1/echo_pb.ts";
 import { type EchoRequest, EchoResponseSchema } from "#gen/echo/v1/echo_pb.ts";
 
 /**
- * Build an echo response from the given request.
+ * Build an echo response from the given request: the message is returned
+ * unchanged (an empty message yields an empty message), with the server timestamp.
  *
  * @param request - Incoming echo request
  * @returns EchoResponse with message and timestamp
  */
 function buildEchoResponse(request: EchoRequest) {
     return create(EchoResponseSchema, {
-        message: request.message || "Echo!",
+        message: request.message,
         timestamp: BigInt(Date.now()),
     });
 }

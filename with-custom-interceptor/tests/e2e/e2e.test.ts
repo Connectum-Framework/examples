@@ -69,15 +69,11 @@ describe("E2E: Custom Interceptors", () => {
             assert.equal(typeof response.timestamp, "bigint");
         });
 
-        it("Echo with an empty message still answers with a non-empty message and a timestamp", async () => {
-            // The proto only says Echo "returns the same message it receives"; it
-            // does not say what an empty message yields. The example answers with
-            // a placeholder word, which is its own undocumented choice, so the test
-            // pins only the observable property (a non-empty message, a timestamp)
-            // and not the placeholder text.
+        it("Echo with an empty message returns an empty message and a timestamp", async () => {
+            // The proto says Echo "returns the same message it receives": an empty
+            // message comes back empty, not replaced by a placeholder.
             const response = await client.echo({ message: "" });
-            assert.ok(response.message.length > 0, "an empty request must not produce an empty echo");
-            assert.doesNotMatch(response.message, /undefined|null/);
+            assert.equal(response.message, "");
             assert.equal(typeof response.timestamp, "bigint");
         });
     });
