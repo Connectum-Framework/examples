@@ -79,6 +79,14 @@ interface StartCall {
     workflowId: string;
 }
 
+/** What the handler asked the workflow client for while reading a status. */
+interface ObservedReads {
+    /** Workflow ids passed to `getHandle`, in call order. */
+    readonly handleIds: string[];
+    /** Query names passed to `handle.query`, in call order. */
+    readonly queryNames: string[];
+}
+
 /** How a stub handle answers GetTrip: a live query result, or a closed describe(). */
 interface StubHandleBehaviour {
     /** Status the live Query returns; if `undefined`, the Query throws. */
@@ -101,16 +109,18 @@ interface StubHandleBehaviour {
  * so the handler's mapping (live Query → status, rejected Query → describe()
  * fallback) is validated at the RPC boundary.
  */
-function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => StubHandleBehaviour): TripWorkflowClient {
+function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => StubHandleBehaviour, observed: ObservedReads): TripWorkflowClient {
     return {
         async start(workflowType, options) {
             starts.push({ workflowType, workflowId: options.workflowId });
             return { workflowId: options.workflowId };
         },
-        getHandle(): TripWorkflowHandle {
+        getHandle(workflowId): TripWorkflowHandle {
+            observed.handleIds.push(workflowId);
             const behaviour = handleBehaviour();
             return {
-                async query<Ret>(): Promise<Ret> {
+                async query<Ret>(queryName: string): Promise<Ret> {
+                    observed.queryNames.push(queryName);
                     if (behaviour.queryStatus === undefined) {
                         if (behaviour.queryError === "transient") {
                             // A generic/infra failure — NOT a closed-run signal.
@@ -148,6 +158,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     const starts: StartCall[] = [];
     // Mutated per GetTrip test to drive the stub handle's query/describe answers.
     let handleBehaviour: StubHandleBehaviour = { queryStatus: "STARTED" };
+    const observed: ObservedReads = { handleIds: [], queryNames: [] };
 
     before(async () => {
         // Force monolith topology so fleet, trips and billing are all mounted
@@ -190,7 +201,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
             topology,
             jwksUri: jwks.url,
             db,
-            workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour),
+            workflowClient: makeStubWorkflowClient(starts, () => handleBehaviour, observed),
             internalSigner: internalAuth.trips,
             internalIssuers: { ...internalAuth.issuers, [CLAIMS_ISSUER]: internalIssuer(claimsJwks.url) },
         });
@@ -239,14 +250,30 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         assert.equal(started?.workflowId, res.trip?.id);
     });
 
-    it("GetTrip (authenticated): reads LIVE status from the workflow Query", async () => {
-        handleBehaviour = { queryStatus: "ENDED" };
-        const res = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-live" }), {
-            headers: { Authorization: `Bearer ${userToken}` },
-        });
-        assert.equal(res.trip?.id, "trip-live");
-        // The handler maps the live Query result straight through.
-        assert.equal(res.trip?.status, "ENDED");
+    it("GetTrip (authenticated): returns the status the workflow Query reports, for the requested trip's workflow", async () => {
+        // The README and proto document GetTrip as issuing a Workflow Query
+        // (`getTripStatus`) against the running workflow, with a terminal status
+        // from describe() only once the workflow has closed. So the answer must
+        // come from the Query: describe() is rigged to report an outcome that
+        // would map to a DIFFERENT status, which makes a handler that reads
+        // describe() (or hard-codes a status) fail. Two different Query answers
+        // and two trip ids prove the status and the workflow id are not constants.
+        const headers = { Authorization: `Bearer ${userToken}` };
+        observed.handleIds.length = 0;
+        observed.queryNames.length = 0;
+
+        handleBehaviour = { queryStatus: "ENDED", describeStatusName: "COMPLETED" };
+        const ended = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-live" }), { headers });
+        assert.equal(ended.trip?.id, "trip-live");
+        assert.equal(ended.trip?.status, "ENDED");
+
+        handleBehaviour = { queryStatus: "STARTED", describeStatusName: "FAILED" };
+        const started = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-other" }), { headers });
+        assert.equal(started.trip?.id, "trip-other");
+        assert.equal(started.trip?.status, "STARTED");
+
+        assert.deepEqual(observed.handleIds, ["trip-live", "trip-other"]);
+        assert.deepEqual(observed.queryNames, ["getTripStatus", "getTripStatus"]);
     });
 
     it("GetTrip falls back to a terminal status via describe() when the workflow has CLOSED", async () => {
