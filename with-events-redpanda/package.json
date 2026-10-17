@@ -17,8 +17,8 @@
     "buf:generate": "buf generate",
     "buf:lint": "buf lint",
     "build:proto": "pnpm run buf:generate",
-    "test": "node --test tests/e2e/**/*.test.ts",
-    "test:e2e": "node --test tests/e2e/**/*.test.ts",
+    "test": "node --test --test-concurrency=1 tests/e2e/**/*.test.ts",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/**/*.test.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },
