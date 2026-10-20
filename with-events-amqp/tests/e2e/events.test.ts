@@ -17,6 +17,21 @@ async function connectPost(baseUrl: string, method: string, body: Record<string,
     return res.json();
 }
 
+/**
+ * POST a Connect unary call and return the raw outcome, errors included. The
+ * Connect protocol maps a failed call to an HTTP status and a JSON body
+ * `{ "code": "<lower_snake_case code>", "message": ... }`, which the error
+ * tests below check against the protocol rather than against this example.
+ */
+async function connectRaw(baseUrl: string, method: string, body: Record<string, unknown> = {}): Promise<{ status: number; contentType: string | null; json: unknown }> {
+    const res = await fetch(`${baseUrl}/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+    return { status: res.status, contentType: res.headers.get("content-type"), json: await res.json() };
+}
+
 function sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
 }
@@ -40,8 +55,8 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
     return last;
 }
 
-type Order = { orderId: string; status: string };
-type Reservation = { orderId: string; status: string; product: string };
+type Order = { orderId: string; status: string; product: string; quantity: number; customer: string };
+type Reservation = { orderId: string; status: string; product: string; quantity: number };
 
 // JSON omits an empty repeated field, so an empty list arrives as an absent key.
 const getOrders = async (): Promise<Order[]> =>
@@ -53,15 +68,18 @@ const statusOf = (orders: Order[], orderId: string): string | undefined => order
 const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
 
 describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
-    it("health check — order service", async () => {
-        const res = await fetch(`${ORDER_URL}/healthz`);
-        assert.equal(res.status, 200);
-    });
-
-    it("health check — inventory service", async () => {
-        const res = await fetch(`${INVENTORY_URL}/healthz`);
-        assert.equal(res.status, 200);
-    });
+    // /healthz answers 200 with the overall status in the body only while the
+    // service reports SERVING (any other status is a 503), so the body is what
+    // tells a ready service from a started-but-not-ready one.
+    for (const [name, url] of [["order", ORDER_URL], ["inventory", INVENTORY_URL]] as const) {
+        it(`health check — ${name} service reports SERVING`, async () => {
+            const res = await fetch(`${url}/healthz`);
+            assert.equal(res.status, 200);
+            const body = (await res.json()) as { status: string; service: string };
+            assert.equal(body.status, "SERVING");
+            assert.equal(body.service, "overall");
+        });
+    }
 
     it("saga: CreateOrder → InventoryReserved → order confirmed", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
@@ -71,10 +89,33 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
         assert.equal(result.status, "pending");
         const orders = await eventually(getOrders, (o) => statusOf(o, result.orderId) === "confirmed", `order ${result.orderId} to be confirmed`);
         assert.equal(statusOf(orders, result.orderId), "confirmed", "Order should be confirmed after saga");
+        // The order keeps everything the client sent.
+        const order = orders.find((o) => o.orderId === result.orderId);
+        assert.equal(order?.product, "Widget");
+        assert.equal(order?.quantity, 5);
+        assert.equal(order?.customer, "Alice");
+        // The inventory side reserved exactly what was ordered: it learned the
+        // product AND the quantity from the event that crossed the broker.
         const reservation = reservationOf(await getReservations(), result.orderId);
         assert.ok(reservation);
         assert.equal(reservation.status, "reserved");
         assert.equal(reservation.product, "Widget");
+        assert.equal(reservation.quantity, 5);
+    });
+
+    it("every CreateOrder gets its own id", async () => {
+        const first = (await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", { product: "Twin", quantity: 1, customer: "Eve" })) as { orderId: string };
+        const second = (await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", { product: "Twin", quantity: 1, customer: "Eve" })) as { orderId: string };
+        assert.ok(first.orderId);
+        assert.ok(second.orderId);
+        assert.notEqual(first.orderId, second.orderId);
+    });
+
+    it("CancelOrder for an unknown order is the Connect not_found error (HTTP 404)", async () => {
+        const res = await connectRaw(ORDER_URL, "orders.v1.OrderService/CancelOrder", { orderId: "no-such-order", reason: "n/a" });
+        assert.equal(res.status, 404);
+        assert.match(res.contentType ?? "", /^application\/json/);
+        assert.equal((res.json as { code: string }).code, "not_found");
     });
 
     it("cancel order → inventory released", async () => {
@@ -90,6 +131,9 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
         const reservation = reservationOf(reservations, result.orderId);
         assert.ok(reservation);
         assert.equal(reservation.status, "released");
+        // Releasing flips the status of THIS reservation only; what it held stays on record.
+        assert.equal(reservation.product, "Gadget");
+        assert.equal(reservation.quantity, 2);
     });
 
     it("multiple orders processed correctly", async () => {
@@ -101,9 +145,21 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
             orderIds.push(result.orderId);
         }
         const orders = await eventually(getOrders, (o) => orderIds.every((id) => statusOf(o, id) === "confirmed"), `orders ${orderIds.join(", ")} to be confirmed`);
-        for (const orderId of orderIds) {
-            assert.ok(orders.find((o) => o.orderId === orderId), `Should find order ${orderId}`);
-            assert.equal(statusOf(orders, orderId), "confirmed");
+        const reservations = await eventually(getReservations, (r) => orderIds.every((id) => reservationOf(r, id) !== undefined), `reservations for ${orderIds.join(", ")}`);
+        // Each order is reserved with its OWN product and quantity: events of
+        // different orders must not be mixed up on their way through the broker.
+        for (const [i, orderId] of orderIds.entries()) {
+            const order = orders.find((o) => o.orderId === orderId);
+            assert.ok(order, `Should find order ${orderId}`);
+            assert.equal(order.status, "confirmed");
+            assert.equal(order.product, `Product-${i}`);
+            assert.equal(order.quantity, i + 1);
+            assert.equal(order.customer, `Customer-${i}`);
+            const reservation = reservationOf(reservations, orderId);
+            assert.equal(reservation?.product, `Product-${i}`);
+            assert.equal(reservation?.quantity, i + 1);
+            assert.equal(reservation?.status, "reserved");
         }
+        assert.equal(new Set(orderIds).size, orderIds.length);
     });
 });
