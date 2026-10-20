@@ -9,18 +9,12 @@
 
 import { describe, it, before, after, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "@connectum/core";
 import type { Server } from "@connectum/core";
-import { createDefaultInterceptors } from "@connectum/interceptors";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { EchoService } from "#gen/echo/v1/echo_pb.ts";
-import { echoServiceRoutes } from "#services/echoService.ts";
-import { apiKeyInterceptor } from "#interceptors/apiKeyInterceptor.ts";
-import {
-    rateLimitInterceptor,
-    resetRateLimits,
-} from "#interceptors/rateLimitInterceptor.ts";
+import { resetRateLimits } from "#interceptors/rateLimitInterceptor.ts";
+import { buildServer } from "#server.ts";
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -32,16 +26,8 @@ describe("E2E: Custom Interceptors", () => {
     let client: ReturnType<typeof createClient<typeof EchoService>>;
 
     before(async () => {
-        server = createServer({
-            services: [echoServiceRoutes],
-            port: 0,
-            interceptors: [
-                ...createDefaultInterceptors(),
-                apiKeyInterceptor,
-                rateLimitInterceptor,
-            ],
-            allowHTTP1: false,
-        });
+        // The same composition root `src/index.ts` starts, on an ephemeral port.
+        server = buildServer(0);
 
         await server.start();
         port = server.address!.port;

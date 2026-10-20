@@ -7,35 +7,12 @@
  * - Default interceptor chain from @connectum/interceptors
  */
 
-import { createServer } from "@connectum/core";
-import { createDefaultInterceptors } from "@connectum/interceptors";
-import { apiKeyInterceptor } from "./interceptors/apiKeyInterceptor.ts";
-import { rateLimitInterceptor } from "./interceptors/rateLimitInterceptor.ts";
-import { echoServiceRoutes } from "./services/echoService.ts";
+import { buildServer } from "./server.ts";
 
 console.log("Starting Custom Interceptor Example...\n");
 
-/**
- * Create server with custom interceptors appended after the default chain.
- *
- * Interceptor execution order:
- * 1. Default chain (errorHandler, validation; resilience interceptors are opt-in)
- * 2. apiKeyInterceptor  — checks x-api-key for SecureEcho
- * 3. rateLimitInterceptor — rate-limits RateLimitedEcho
- */
-const server = createServer({
-    services: [echoServiceRoutes],
-    port: 5000,
-    host: "0.0.0.0",
-    interceptors: [
-        ...createDefaultInterceptors(),
-        apiKeyInterceptor,
-        rateLimitInterceptor,
-    ],
-    shutdown: {
-        timeout: 10_000,
-    },
-});
+/** The server and its interceptor chain are assembled in `server.ts`. */
+const server = buildServer();
 
 /**
  * Lifecycle hooks

@@ -129,6 +129,38 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
         assert.equal(await remainingDays("e-001"), before);
     });
 
+    it("RequestLeave rejects days <= 0 with InvalidArgument: no event, balance unchanged", async () => {
+        const timeoff = server.localClient(TimeOffService);
+        const before = await remainingDays("e-001");
+
+        // A negative value would otherwise raise the balance (the subscriber
+        // subtracts the days), and zero approves nothing.
+        for (const days of [0, -1, -5]) {
+            await assert.rejects(
+                timeoff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "e-001", days })),
+                (err: unknown) => err instanceof ConnectError && err.code === Code.InvalidArgument,
+                `days=${days} must be InvalidArgument`,
+            );
+        }
+
+        assert.deepEqual(published, []);
+        assert.equal(await remainingDays("e-001"), before);
+    });
+
+    it("demo simplification: a request for more days than the balance is still APPROVED and the balance floors at 0", async () => {
+        // The example defines no policy for an overdrawn request: the approval
+        // never looks at the balance and the payroll subscriber clamps at zero.
+        // This test pins that behaviour so a change to it is a visible decision.
+        const timeoff = server.localClient(TimeOffService);
+        const start = await remainingDays("e-002");
+        assert.ok(start !== undefined && start > 0);
+
+        const res = await timeoff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "e-002", days: start + 10 }));
+
+        assert.equal(res.leaveRequest?.status, "APPROVED");
+        assert.equal(await remainingDays("e-002"), 0);
+    });
+
     it("HTTP/2 gRPC loopback: the same RequestLeave flow over the network", async () => {
         const start = await remainingDays("e-003");
         assert.ok(start !== undefined && start > 4, `the demo employee needs spare leave days, got ${start}`);

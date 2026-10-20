@@ -17,6 +17,11 @@ roles. It demonstrates:
 The product is deliberately shallow. The value is the deployment + framework
 wiring.
 
+**Demo values, not a contract.** The charge for a trip is 5 cents per second of drive
+time, rounded up to whole seconds, with a minimum of one second; the saga drives every
+trip for a fixed 60 seconds (a timer that tests skip), so each settled trip costs 300 cents.
+The code is the source (`chargeCents` in `src/temporal/activities.ts`) and the numbers may change.
+
 ## Domain
 
 | Service                   | Role            | RPC                          | Auth                                  |

@@ -9,8 +9,10 @@ import "google/protobuf/empty.proto";
 // a LeaveApproved event that payroll.v1.PayrollService consumes.
 service TimeOffService {
   // RequestLeave validates the employee exists (via the directory), approves
-  // the request, and emits LeaveApproved. Returns NOT_FOUND when the employee
-  // is unknown.
+  // the request, and emits LeaveApproved. Returns INVALID_ARGUMENT when days is
+  // not greater than 0 and NOT_FOUND when the employee is unknown. A request for
+  // more days than the balance is still approved (demo simplification: the
+  // payroll balance floors at 0).
   rpc RequestLeave(RequestLeaveRequest) returns (RequestLeaveResponse) {}
 
   // GrantTimeOff assigns a new hire their annual PTO policy allotment (distinct
@@ -26,6 +28,7 @@ service TimeOffService {
 
 message RequestLeaveRequest {
   string employee_id = 1;
+  // Days of leave requested; must be greater than 0.
   int32 days = 2;
 }
 

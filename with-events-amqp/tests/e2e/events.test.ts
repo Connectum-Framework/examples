@@ -118,6 +118,17 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
         assert.equal((res.json as { code: string }).code, "not_found");
     });
 
+    it("CreateOrder with quantity 0 or less is the Connect invalid_argument error (HTTP 400) and creates no order", async () => {
+        const before = (await getOrders()).length;
+        for (const quantity of [0, -1]) {
+            const res = await connectRaw(ORDER_URL, "orders.v1.OrderService/CreateOrder", { product: "Widget", quantity, customer: "Mallory" });
+            assert.equal(res.status, 400, `quantity ${quantity}`);
+            assert.match(res.contentType ?? "", /^application\/json/);
+            assert.equal((res.json as { code: string }).code, "invalid_argument", `quantity ${quantity}`);
+        }
+        assert.equal((await getOrders()).length, before, "a rejected request must not store an order");
+    });
+
     it("cancel order → inventory released", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
             product: "Gadget", quantity: 2, customer: "Bob",

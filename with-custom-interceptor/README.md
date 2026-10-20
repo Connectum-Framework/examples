@@ -13,6 +13,7 @@ Demonstrates how to write and use **custom ConnectRPC interceptors** with Connec
 ```text
 src/
 ├── index.ts                          # Server entry point
+├── server.ts                         # buildServer(): service + interceptor chain (also used by the test)
 ├── interceptors/
 │   ├── apiKeyInterceptor.ts          # API key auth interceptor
 │   └── rateLimitInterceptor.ts       # Rate limiting interceptor
@@ -36,7 +37,8 @@ pnpm start
 
 ## Testing
 
-The test starts its own server on an ephemeral port and stops it when the run ends.
+The test builds the server with the same `buildServer()` that `src/index.ts` starts, on an
+ephemeral port, and stops it when the run ends.
 
 ```bash
 pnpm test

@@ -45,6 +45,10 @@ grpcurl -plaintext -d '{"name":"world"}' localhost:5000 greeter.v1.GreeterServic
 # { "message": "Hello, world!" }
 ```
 
+An empty name is rejected with `InvalidArgument` (`name: must be at least 1 characters`), the
+same behaviour the quickstart shows. The example enforces it in the handler instead of
+declaring `min_len = 1` in the proto, so it needs no protovalidate dependency.
+
 ## Same code, three runtimes
 
 The same source can run through the provided Node.js, Bun and tsx scripts:

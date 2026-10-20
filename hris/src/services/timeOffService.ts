@@ -20,6 +20,7 @@
 
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { defineService, type ServiceDefinition } from "@connectum/core";
 import type { EventBus } from "@connectum/events";
 import { GetEmployeeRequestSchema } from "#gen/directory/v1/directory_pb.ts";
@@ -53,6 +54,14 @@ export function timeOffGrant(employeeId: string): number | undefined {
 export function makeTimeOffService(eventBus: EventBus): ServiceDefinition {
     return defineService(TimeOffService, {
         async requestLeave(req, ctx) {
+            // A leave request must ask for at least one day. Without this a
+            // negative value would be approved and the payroll subscriber, which
+            // subtracts the days, would RAISE the balance. Checked before the
+            // directory call so a malformed request costs nothing downstream.
+            if (req.days <= 0) {
+                throw new ConnectError("days: must be greater than 0", Code.InvalidArgument);
+            }
+
             // Cross-service call — typed by the generated catalog. Throws
             // Code.NotFound (from DirectoryService) for an unknown employee;
             // that ConnectError propagates to the caller unchanged.

@@ -17,7 +17,9 @@ server.on("ready", () => {
     const addr = server.address;
     healthcheckManager.update(ServingStatus.SERVING);
     console.log(`getting-started ready on ${addr?.address}:${addr?.port}`);
-    console.log("  services: greeter.v1.GreeterService, grpc.health.v1.Health, grpc.reflection.v1.ServerReflection");
+    // Reflection answers on this port too, but it does not list itself: its
+    // listing holds the application services and the protocols registered before it.
+    console.log("  services: greeter.v1.GreeterService, grpc.health.v1.Health, grpc.reflection.v1.ServerReflection (served, but absent from its own listing)");
     console.log(`\n  grpcurl -plaintext -d '{"name":"world"}' localhost:${addr?.port} greeter.v1.GreeterService/SayHello`);
 });
 

@@ -34,6 +34,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ApplicationFailure } from "@temporalio/activity";
+import { WorkflowFailedError } from "@temporalio/client";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import * as realActivities from "#temporal/activities.ts";
@@ -226,6 +227,25 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
 
         // Nothing was pushed before the failing first step, so nothing unwinds.
         assert.deepEqual(calls, ["createEmployee"]);
+    });
+
+    it("a failed step surfaces its ORIGINAL failure (type and message) to the caller, not a generic wrapper", async () => {
+        // Inside the workflow a failed activity arrives as an ActivityFailure whose
+        // `cause` is the activity's own ApplicationFailure. The caller of the run
+        // (temporal-ui, handle.result()) must see that original type and message,
+        // for a first-step failure and for a later step that triggers compensation.
+        for (const step of ["createEmployee", "setupPayroll"]) {
+            const calls: string[] = [];
+            const error = await runWorkflow(makeMockActivities(calls, { step }), `wf-surface-${step}`).then(
+                () => assert.fail("the workflow must fail"),
+                (err: unknown) => err,
+            );
+            assert.ok(error instanceof WorkflowFailedError, `${step}: the run must fail with WorkflowFailedError`);
+            const failure = error.cause;
+            assert.ok(failure instanceof ApplicationFailure, `${step}: the workflow failure must be an ApplicationFailure`);
+            assert.equal(failure.type, "MockFailure");
+            assert.equal(failure.message, `mock ${step} failed`);
+        }
     });
 
     it("the REAL activities module + real workflowsPath register on a Worker (production startup path)", async () => {
