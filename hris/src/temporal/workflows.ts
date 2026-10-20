@@ -33,7 +33,7 @@
  * @module temporal/workflows
  */
 
-import { ApplicationFailure, defineQuery, log, patched, proxyActivities, setHandler } from "@temporalio/workflow";
+import { ActivityFailure, ApplicationFailure, defineQuery, log, patched, proxyActivities, setHandler } from "@temporalio/workflow";
 import type * as activities from "#temporal/activities.ts";
 import type { OnboardingStatus as OnboardingStatusT } from "#temporal/onboardingStatus.ts";
 import { OnboardingStatus } from "#temporal/onboardingStatus.ts";
@@ -76,6 +76,24 @@ const acts = proxyActivities<typeof activities>({
         nonRetryableErrorTypes: ["EmployeeExists"],
     },
 });
+
+/**
+ * The failure the workflow reports to its caller (temporal-ui, `handle.result()`).
+ *
+ * A failed activity reaches workflow code as an `ActivityFailure` whose `cause`
+ * is the activity's own failure, so the original type and message live one level
+ * down. An `ApplicationFailure` cause is rethrown as is; any other cause (a
+ * timeout, a cancellation) or a non-activity error is reported under the
+ * generic `OnboardingWorkflowFailed` type with the cause's own message.
+ */
+function originalFailure(err: unknown): ApplicationFailure {
+    const cause = err instanceof ActivityFailure ? err.cause : err;
+    if (cause instanceof ApplicationFailure) return cause;
+    return ApplicationFailure.create({
+        message: cause instanceof Error ? cause.message : String(cause),
+        type: "OnboardingWorkflowFailed",
+    });
+}
 
 /**
  * Run the onboarding saga for a new hire.
@@ -134,9 +152,7 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
             }
         }
         status = OnboardingStatus.FAILED;
-        // Preserve the original failure so it surfaces in temporal-ui / GetOnboarding.
-        if (err instanceof ApplicationFailure) throw err;
-        throw ApplicationFailure.create({ message: String(err), type: "OnboardingWorkflowFailed" });
+        throw originalFailure(err);
     }
 
     // Reached only on success (the catch above always rethrows). Announce the
