@@ -136,6 +136,21 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
         assert.equal(reservationOf(await getReservations(), result.orderId), undefined, "a dead-lettered order must not hold a reservation");
     });
 
+    it("CreateOrder with quantity 0 or less is the Connect invalid_argument error (HTTP 400) and creates no order", async () => {
+        const before = (await getOrders()).length;
+        for (const quantity of [0, -1]) {
+            const res = await fetch(`${ORDER_URL}/orders.v1.OrderService/CreateOrder`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ product: "Widget", quantity, customer: "Mallory" }),
+            });
+            assert.equal(res.status, 400, `quantity ${quantity}`);
+            assert.match(res.headers.get("content-type") ?? "", /^application\/json/);
+            assert.equal(((await res.json()) as { code: string }).code, "invalid_argument", `quantity ${quantity}`);
+        }
+        assert.equal((await getOrders()).length, before, "a rejected request must not store an order");
+    });
+
     it("cancel order → inventory released", async () => {
         const result = await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
             product: "Gadget", quantity: 2, customer: "Charlie",
