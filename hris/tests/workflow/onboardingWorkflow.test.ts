@@ -177,6 +177,49 @@ describe("OnboardingWorkflow: orchestration + compensation (time-skipping, mocke
         assert.deepEqual(calls, ["createEmployee", "setupPayroll", "teardownPayroll", "offboardEmployee"]);
     });
 
+    it("grantTimeOff fails: its PRE-registered revoke runs too (revokeTimeOff → teardownPayroll → offboardEmployee)", async () => {
+        const calls: string[] = [];
+        await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "grantTimeOff" }), "wf-grant-fail"));
+
+        // revokeTimeOff is registered before grantTimeOff, so an ambiguous grant
+        // failure still unwinds it; provisionAccess never ran, so no revokeAccess.
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "grantTimeOff", "revokeTimeOff", "teardownPayroll", "offboardEmployee"]);
+    });
+
+    it("a transient failure of a forward step is retried and the saga still COMPLETES without compensating", async () => {
+        const calls: string[] = [];
+        let payrollAttempts = 0;
+        const activities = makeMockActivities(calls);
+        activities.setupPayroll = async () => {
+            calls.push("setupPayroll");
+            payrollAttempts++;
+            // A plain (retryable) error on the first attempts: Temporal's retry
+            // policy, not the compensation path, must handle it.
+            if (payrollAttempts < 3) throw new Error("payroll service temporarily unavailable");
+        };
+
+        const result = await runWorkflow(activities, "wf-transient-retry");
+
+        assert.equal(result, "COMPLETED");
+        assert.equal(payrollAttempts, 3);
+        assert.deepEqual(calls, ["createEmployee", "setupPayroll", "setupPayroll", "setupPayroll", "grantTimeOff", "provisionAccess", "activateEmployee", "announceOnboarded"]);
+    });
+
+    it("a compensation that itself fails does not stop the rest of the unwind", async () => {
+        const calls: string[] = [];
+        const activities = makeMockActivities(calls, { step: "activateEmployee" });
+        activities.revokeAccess = async () => {
+            calls.push("revokeAccess");
+            throw ApplicationFailure.create({ message: "mock revokeAccess failed", type: "MockFailure", nonRetryable: true });
+        };
+
+        await assert.rejects(runWorkflow(activities, "wf-compensation-fail"));
+
+        // The failing revokeAccess is first in the unwind; every later
+        // compensation must still run so no half-created state is left behind.
+        assert.deepEqual(calls.slice(calls.indexOf("activateEmployee") + 1), ["revokeAccess", "revokeTimeOff", "teardownPayroll", "offboardEmployee"]);
+    });
+
     it("createEmployee fails (non-retryable): fails fast with NO compensation", async () => {
         const calls: string[] = [];
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "createEmployee" }), "wf-create-fail"));
