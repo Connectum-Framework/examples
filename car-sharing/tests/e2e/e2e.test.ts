@@ -56,7 +56,7 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import type { TestJwksServer } from "@connectum/auth/testing";
 import { createTestJwtRS256, generateRsaTestKeypair, startTestJwksServer } from "@connectum/auth/testing";
 import type { Server } from "@connectum/core";
-import { QueryNotRegisteredError } from "@temporalio/client";
+import { QueryNotRegisteredError, QueryRejectedError, WorkflowNotFoundError } from "@temporalio/client";
 import { generateKeyPair, SignJWT } from "jose";
 import { JWT_AUDIENCE, JWT_ISSUER } from "#auth.ts";
 import { BillingService, OpenTabRequestSchema, SettleRequestSchema } from "#gen/billing/v1/billing_pb.ts";
@@ -65,6 +65,7 @@ import { GetTripRequestSchema, RecordTripRequestSchema, StartTripRequestSchema, 
 import { INTERNAL_AUDIENCE, INTERNAL_TOKEN_HEADER, InternalIdentity, internalIssuer } from "#internalAuth.ts";
 import { buildServer } from "#server.ts";
 import type { TripWorkflowClient, TripWorkflowHandle } from "#services/tripService.ts";
+import { TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb } from "../helpers/db.ts";
 import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
@@ -77,6 +78,8 @@ const CLAIMS_ISSUER = "claims-probe";
 interface StartCall {
     workflowType: string;
     workflowId: string;
+    taskQueue: string;
+    args: unknown[];
 }
 
 /** What the handler asked the workflow client for while reading a status. */
@@ -99,7 +102,7 @@ interface StubHandleBehaviour {
      * treats as "run closed/gone" and falls back to describe(); `"transient"` →
      * a generic error, which the handler must surface as `Unavailable`.
      */
-    readonly queryError?: "closed" | "transient";
+    readonly queryError?: "closed" | "transient" | "not-found" | "rejected";
 }
 
 /**
@@ -112,7 +115,7 @@ interface StubHandleBehaviour {
 function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => StubHandleBehaviour, observed: ObservedReads): TripWorkflowClient {
     return {
         async start(workflowType, options) {
-            starts.push({ workflowType, workflowId: options.workflowId });
+            starts.push({ workflowType, workflowId: options.workflowId, taskQueue: options.taskQueue, args: [...options.args] });
             return { workflowId: options.workflowId };
         },
         getHandle(workflowId): TripWorkflowHandle {
@@ -125,6 +128,13 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
                         if (behaviour.queryError === "transient") {
                             // A generic/infra failure — NOT a closed-run signal.
                             throw new Error("temporal frontend unavailable");
+                        }
+                        if (behaviour.queryError === "not-found") {
+                            throw new WorkflowNotFoundError("workflow execution not found", workflowId, undefined);
+                        }
+                        if (behaviour.queryError === "rejected") {
+                            // The query was refused because the run is closed.
+                            throw new QueryRejectedError(2);
                         }
                         // Closed/gone run: its query handler is not registered.
                         // (code 3 = INVALID_ARGUMENT; the handler keys off the type.)
@@ -248,6 +258,11 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         const started = starts[starts.length - 1];
         assert.equal(started?.workflowType, "TripWorkflow");
         assert.equal(started?.workflowId, res.trip?.id);
+        // The saga must be queued where the worker polls and receive the trip's
+        // inputs exactly as requested, or the worker would never run it / would
+        // reserve the wrong vehicle.
+        assert.equal(started?.taskQueue, TEMPORAL_TASK_QUEUE);
+        assert.deepEqual(started?.args, [{ userId: "user-42", vehicleId: "v-001", tripId: res.trip?.id }]);
     });
 
     it("GetTrip (authenticated): returns the status the workflow Query reports, for the requested trip's workflow", async () => {
@@ -293,6 +308,34 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         });
         assert.equal(cancelled.trip?.status, "CANCELLED");
     });
+
+    // The README documents the closed-run fallback as SETTLED for a saga that
+    // completed and CANCELLED for one that unwound. A closed run that did not
+    // complete (failed, terminated, timed out, cancelled) must never be reported
+    // as SETTLED, since that would tell a rider a charge was settled when it was not.
+    for (const closedWithoutSuccess of ["FAILED", "TERMINATED", "TIMED_OUT", "CANCELLED"]) {
+        it(`GetTrip reports CANCELLED for a closed run that ended ${closedWithoutSuccess}`, async () => {
+            handleBehaviour = { describeStatusName: closedWithoutSuccess };
+            const res = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-closed" }), {
+                headers: { Authorization: `Bearer ${userToken}` },
+            });
+            assert.equal(res.trip?.id, "trip-closed");
+            assert.equal(res.trip?.status, "CANCELLED");
+        });
+    }
+
+    // A missing workflow and a rejected query both mean "the run is closed or
+    // gone", the same situation as an unregistered query handler, so the terminal
+    // status still comes from describe().
+    for (const queryError of ["not-found", "rejected"] as const) {
+        it(`GetTrip falls back to describe() when the live query fails with a ${queryError} signal`, async () => {
+            handleBehaviour = { queryError, describeStatusName: "COMPLETED" };
+            const res = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-closed" }), {
+                headers: { Authorization: `Bearer ${userToken}` },
+            });
+            assert.equal(res.trip?.status, "SETTLED");
+        });
+    }
 
     it("GetTrip surfaces Unavailable (NOT a terminal status) when the live Query fails transiently", async () => {
         // Regression for the blanket catch that mapped ANY query error to a
