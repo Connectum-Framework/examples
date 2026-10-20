@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import http2 from "node:http2";
 import { after, afterEach, before, describe, it } from "node:test";
 import { create } from "@bufbuild/protobuf";
-import { Code, createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import type { Server } from "@connectum/core";
 import { healthcheckManager, ServingStatus } from "@connectum/healthcheck";
@@ -49,14 +49,25 @@ describe("E2E: getting-started", () => {
         assert.notEqual(goodbye.message, hello.message);
     });
 
-    it("SayHello with an empty name still returns a well-formed greeting", async () => {
-        // The README documents the `Hello, <name>!` shape. The word substituted for
-        // an empty name is the example's own choice and is not documented, so the
-        // test pins only what is documented: the greeting keeps its shape and does
-        // not render an empty name (`Hello, !`) or the string "undefined".
-        const res = await greeter.sayHello({ name: "" });
-        assert.match(res.message, /^Hello, .+!$/);
-        assert.doesNotMatch(res.message, /undefined|null/);
+    it("SayHello rejects an empty name with InvalidArgument, as the quickstart shows", async () => {
+        // The quickstart declares `min_len = 1` on `name` and shows an empty name
+        // failing with InvalidArgument and "name: must be at least 1 characters".
+        await assert.rejects(
+            greeter.sayHello({ name: "" }),
+            (err: unknown) => {
+                assert.ok(err instanceof ConnectError, "must be a ConnectError");
+                assert.equal(err.code, Code.InvalidArgument);
+                assert.match(err.rawMessage, /name: must be at least 1 characters/);
+                return true;
+            },
+        );
+    });
+
+    it("SayGoodbye rejects an empty name with InvalidArgument", async () => {
+        await assert.rejects(
+            greeter.sayGoodbye({ name: "" }),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.InvalidArgument,
+        );
     });
 
     it("mounts the Greeter service", () => {
