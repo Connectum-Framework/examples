@@ -39,6 +39,15 @@ Five services, two integration events, and a durable saga:
 
 The product is deliberately thin — the point is the framework wiring.
 
+**Demo values, not a contract.** The numbers below are the example's own data and may
+change; the code is the source:
+
+- `RequestLeave` requires `days > 0` (`InvalidArgument` otherwise) and is always approved
+  once the employee exists. A request for more days than the balance is still approved and
+  the payroll balance floors at 0 — the example defines no overdraft policy.
+- Seed leave balances are 25 days for `e-001` and `e-002` and 18 for `e-003`; the saga
+  enrols a new hire with 25 days and grants a 25-day annual PTO policy.
+
 > **Note:** this example runs on the published `@connectum/*` packages and
 > requires **1.2.0 or later** (`^1.2.0` in `package.json`). Besides the
 > service-catalog API (`defineService`, `ctx.call`, `catalog`) and the EventBus,
