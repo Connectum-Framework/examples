@@ -26,6 +26,9 @@ const unconfirmedOrderIds = new Set<string>();
 
 export const orderServiceRoutes = defineService(OrderService, {
     async createOrder(request: CreateOrderRequest) {
+        if (request.quantity <= 0) {
+            throw new ConnectError("quantity must be positive", Code.InvalidArgument);
+        }
         const orderId = randomUUID();
         const order = { orderId, product: request.product, quantity: request.quantity, customer: request.customer, status: "pending" };
         console.log(`[OrderService] Creating order ${orderId}: ${request.quantity}x ${request.product} for ${request.customer}`);
