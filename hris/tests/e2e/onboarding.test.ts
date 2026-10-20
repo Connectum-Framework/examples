@@ -25,7 +25,8 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { Server } from "@connectum/core";
 import { MemoryAdapter } from "@connectum/events";
-import { QueryNotRegisteredError } from "@temporalio/client";
+import { QueryNotRegisteredError, QueryRejectedError, WorkflowNotFoundError } from "@temporalio/client";
+import { TEMPORAL_TASK_QUEUE } from "#temporal/config.ts";
 import { buildEventBus } from "#eventBus.ts";
 import { GetOnboardingRequestSchema, OnboardEmployeeRequestSchema, OnboardingService } from "#gen/onboarding/v1/onboarding_pb.ts";
 import { buildServer } from "#server.ts";
@@ -44,11 +45,13 @@ interface StubHandleBehaviour {
      * `QueryNotRegisteredError` (run closed/gone) → describe() fallback;
      * `"transient"` → a generic error → surfaced as `Unavailable`.
      */
-    readonly queryError?: "closed" | "transient";
+    readonly queryError?: "closed" | "transient" | "not-found" | "rejected";
 }
 
 /** What the handler asked the workflow client for while reading a status. */
 interface ObservedReads {
+    /** Every `start` call in order: workflow type plus the full options. */
+    readonly starts: Array<{ type: string; options: { taskQueue: string; workflowId: string; args: unknown[] } }>;
     /** Workflow ids passed to `getHandle`, in call order. */
     readonly handleIds: string[];
     /** Query names passed to `handle.query`, in call order. */
@@ -58,8 +61,9 @@ interface ObservedReads {
 /** A stub workflow client recording started ids and answering from `handleBehaviour`. */
 function makeStubClient(started: string[], handleBehaviour: () => StubHandleBehaviour, observed: ObservedReads): OnboardingWorkflowClient {
     return {
-        async start(_type, opts) {
+        async start(type, opts) {
             started.push(opts.workflowId);
+            observed.starts.push({ type, options: { taskQueue: opts.taskQueue, workflowId: opts.workflowId, args: [...opts.args] } });
             return { workflowId: opts.workflowId };
         },
         getHandle(workflowId) {
@@ -72,6 +76,13 @@ function makeStubClient(started: string[], handleBehaviour: () => StubHandleBeha
                         if (behaviour.queryError === "transient") {
                             // A generic/infra failure — NOT a closed-run signal.
                             throw new Error("temporal frontend unavailable");
+                        }
+                        if (behaviour.queryError === "not-found") {
+                            throw new WorkflowNotFoundError("workflow execution not found", workflowId, undefined);
+                        }
+                        if (behaviour.queryError === "rejected") {
+                            // The query was refused because the run is closed.
+                            throw new QueryRejectedError(2);
                         }
                         // Closed/gone run: its query handler is not registered.
                         // (code 3 = INVALID_ARGUMENT; the handler keys off the type.)
@@ -92,7 +103,7 @@ describe("E2E: onboarding edge (pre-check + start, stub Temporal)", () => {
     const started: string[] = [];
     // Mutated per GetOnboarding test to drive the stub handle's query/describe.
     let handleBehaviour: StubHandleBehaviour = { queryStatus: "STARTED" };
-    const observed: ObservedReads = { handleIds: [], queryNames: [] };
+    const observed: ObservedReads = { starts: [], handleIds: [], queryNames: [] };
 
     before(async () => {
         const topology = resolveTopology("*");
@@ -125,6 +136,26 @@ describe("E2E: onboarding edge (pre-check + start, stub Temporal)", () => {
         assert.equal(res.workflowId, "e-300");
         assert.equal(started.length, before + 1);
         assert.equal(started.at(-1), "e-300");
+
+        // What the saga actually receives: the workflow the proto names, on the
+        // queue the worker polls, with the hire's data exactly as requested.
+        assert.deepEqual(observed.starts.at(-1), {
+            type: "OnboardingWorkflow",
+            options: {
+                taskQueue: TEMPORAL_TASK_QUEUE,
+                workflowId: "e-300",
+                args: [
+                    {
+                        employeeId: "e-300",
+                        name: "New Hire",
+                        email: "newhire@example.com",
+                        title: "Software Engineer",
+                        department: "Engineering",
+                        managerId: "e-002",
+                    },
+                ],
+            },
+        });
     });
 
     it("OnboardEmployee on an ALREADY-TAKEN id is rejected with AlreadyExists, never touching Temporal", async () => {
@@ -180,6 +211,29 @@ describe("E2E: onboarding edge (pre-check + start, stub Temporal)", () => {
         const failed = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-300" }));
         assert.equal(failed.onboarding?.status, "FAILED");
     });
+
+    // The proto allows only COMPLETED on success and FAILED if the saga rolled
+    // back: a closed run that did not complete (terminated, timed out, cancelled)
+    // never completed the onboarding, so it must not be reported as COMPLETED.
+    for (const closedWithoutSuccess of ["FAILED", "TERMINATED", "TIMED_OUT", "CANCELLED"]) {
+        it(`GetOnboarding reports FAILED for a closed run that ended ${closedWithoutSuccess}`, async () => {
+            const onboarding = server.localClient(OnboardingService);
+            handleBehaviour = { describeStatusName: closedWithoutSuccess };
+            const res = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-300" }));
+            assert.equal(res.onboarding?.status, "FAILED");
+        });
+    }
+
+    // Both signals mean "the run is closed or gone", the same situation as an
+    // unregistered query handler, so the terminal status still comes from describe().
+    for (const queryError of ["not-found", "rejected"] as const) {
+        it(`GetOnboarding falls back to describe() when the live query fails with a ${queryError} signal`, async () => {
+            const onboarding = server.localClient(OnboardingService);
+            handleBehaviour = { queryError, describeStatusName: "COMPLETED" };
+            const res = await onboarding.getOnboarding(create(GetOnboardingRequestSchema, { employeeId: "e-300" }));
+            assert.equal(res.onboarding?.status, "COMPLETED");
+        });
+    }
 
     it("GetOnboarding surfaces Unavailable (NOT a terminal status) when the live Query fails transiently", async () => {
         // Regression for the blanket catch that mapped ANY query error to a
