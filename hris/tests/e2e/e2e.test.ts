@@ -29,12 +29,17 @@ import { RequestLeaveRequestSchema, TimeOffService } from "#gen/timeoff/v1/timeo
 import { buildServer } from "#server.ts";
 import { resetBalances } from "#services/payrollService.ts";
 import { resolveTopology } from "#topology.ts";
-import { MemoryAdapter } from "@connectum/events";
 import { makeTestDb } from "../helpers/db.ts";
+import { recordingAdapter } from "../helpers/recordingAdapter.ts";
+
+/** The topic the payroll subscriber listens on, as written in payroll.proto. */
+const LEAVE_APPROVED_TOPIC = "timeoff.leave-approved";
 
 describe("E2E: HRIS monolith (in-process, no broker)", () => {
     let server: Server;
     let grpcTimeOff: ReturnType<typeof createClient<typeof TimeOffService>>;
+    /** Topic of every event the bus handed to the adapter, in publish order. */
+    const published: string[] = [];
 
     before(async () => {
         // Force monolith topology and an in-memory bus so publish → subscribe →
@@ -44,7 +49,7 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
         // DirectoryService persists without Docker — the TimeOff handler's
         // in-process ctx.call to GetEmployee reads from it.
         const topology = resolveTopology("*");
-        const eventBus = buildEventBus({ localTypeNames: topology.localTypeNames, adapter: MemoryAdapter() });
+        const eventBus = buildEventBus({ localTypeNames: topology.localTypeNames, adapter: recordingAdapter(published) });
         const db = await makeTestDb();
         server = buildServer({ port: 0, topology, eventBus, db });
         await server.start();
@@ -54,7 +59,15 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
 
     beforeEach(() => {
         resetBalances();
+        published.length = 0;
     });
+
+    /** Remaining leave days for an employee, read through the PayrollService RPC. */
+    async function remainingDays(employeeId: string): Promise<number | undefined> {
+        const payroll = server.localClient(PayrollService);
+        const res = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId }));
+        return res.balance?.remainingDays;
+    }
 
     after(async () => {
         if (server.state === "running") await server.stop();
@@ -67,21 +80,31 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
     });
 
     it("RequestLeave validates via ctx.call, approves, and the event decrements payroll", async () => {
-        const payroll = server.localClient(PayrollService);
         const timeoff = server.localClient(TimeOffService);
 
-        const before = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-001" }));
-        assert.equal(before.balance?.remainingDays, 25);
+        // The starting balance is the demo ledger's own data; the documented
+        // behaviour is the relation: each approved request lowers the balance by
+        // its days, and by nothing else.
+        const start = await remainingDays("e-001");
+        assert.ok(start !== undefined && start > 5, `the demo employee needs spare leave days, got ${start}`);
+        const otherStart = await remainingDays("e-002");
 
         const res = await timeoff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "e-001", days: 3 }));
         assert.equal(res.leaveRequest?.status, "APPROVED");
-        assert.ok(res.leaveRequest?.id.startsWith("lr-"));
+        assert.notEqual(res.leaveRequest?.id, "", "an approved request carries its id");
 
         // No sleep: the MemoryAdapter delivers the LeaveApproved event to the
         // Payroll subscriber synchronously within publish(), so the balance is
         // already decremented when requestLeave resolves.
-        const afterLeave = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-001" }));
-        assert.equal(afterLeave.balance?.remainingDays, 22);
+        assert.equal(await remainingDays("e-001"), start - 3);
+
+        // A second approval accumulates, and another employee is untouched.
+        await timeoff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "e-001", days: 2 }));
+        assert.equal(await remainingDays("e-001"), start - 5);
+        assert.equal(await remainingDays("e-002"), otherStart);
+
+        // Each approval published exactly one LeaveApproved, on the topic the proto declares.
+        assert.deepEqual(published, [LEAVE_APPROVED_TOPIC, LEAVE_APPROVED_TOPIC]);
     });
 
     it("unknown employee: ctx.call surfaces Code.NotFound from the directory", async () => {
@@ -93,22 +116,28 @@ describe("E2E: HRIS monolith (in-process, no broker)", () => {
     });
 
     it("a rejected request publishes no event — payroll balance is unchanged", async () => {
-        const payroll = server.localClient(PayrollService);
         const timeoff = server.localClient(TimeOffService);
+        const before = await remainingDays("e-001");
 
         await assert.rejects(timeoff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "ghost", days: 1 })));
 
-        const balance = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-002" }));
-        assert.equal(balance.balance?.remainingDays, 25);
+        // The bus is the observation point: a rejected request must not have
+        // reached it at all. (A balance read cannot show this, since the
+        // payroll ledger answers 0 for any id it does not hold.)
+        assert.deepEqual(published, []);
+        assert.equal(await remainingDays("ghost"), 0);
+        assert.equal(await remainingDays("e-001"), before);
     });
 
     it("HTTP/2 gRPC loopback: the same RequestLeave flow over the network", async () => {
+        const start = await remainingDays("e-003");
+        assert.ok(start !== undefined && start > 4, `the demo employee needs spare leave days, got ${start}`);
+
         const res = await grpcTimeOff.requestLeave(create(RequestLeaveRequestSchema, { employeeId: "e-003", days: 4 }));
         assert.equal(res.leaveRequest?.status, "APPROVED");
 
-        const payroll = server.localClient(PayrollService);
-        const balance = await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-003" }));
-        assert.equal(balance.balance?.remainingDays, 18 - 4);
+        assert.equal(await remainingDays("e-003"), start - 4);
+        assert.deepEqual(published, [LEAVE_APPROVED_TOPIC]);
     });
 
     it("HTTP/2 gRPC: a ctx.call error surfaces the downstream Code (not a protocol error)", async () => {
