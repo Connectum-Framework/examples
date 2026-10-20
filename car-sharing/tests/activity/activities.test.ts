@@ -23,7 +23,9 @@
 
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
+import type { Client } from "@connectrpc/connect";
 import type { Server } from "@connectum/core";
+import { FleetService } from "#gen/fleet/v1/fleet_pb.ts";
 import { ApplicationFailure } from "@temporalio/activity";
 import { MockActivityEnvironment } from "@temporalio/testing";
 import { buildServer } from "#server.ts";
@@ -35,7 +37,7 @@ import { TripStatus } from "#temporal/tripStatus.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb, reseed } from "../helpers/db.ts";
 import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
-import { startInternalAuth } from "../helpers/internalAuth.ts";
+import { signedClient, startInternalAuth } from "../helpers/internalAuth.ts";
 
 const env = new MockActivityEnvironment();
 
@@ -48,6 +50,7 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
     let server: Server;
     let db: Awaited<ReturnType<typeof makeTestDb>>;
     let internalAuth: InternalAuthFixture;
+    let fleet: Client<typeof FleetService>;
 
     before(async () => {
         const topology = resolveTopology("*");
@@ -66,6 +69,9 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         await server.start();
         const port = server.address?.port ?? 0;
         const addr = `http://localhost:${port}`;
+        // Reads the vehicle state the activities change; proto grants the fleet
+        // reads to the trips identity.
+        fleet = signedClient(FleetService, addr, internalAuth.trips);
         // Point every activity client at the one in-process monolith. Set BEFORE
         // the first activity call: the client resolves a service's endpoint on
         // its first call and keeps that transport.
@@ -97,8 +103,15 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         assert.equal(openTabCount(), 1);
 
         const chargeId = await run(activities.addCharge, { tripId, durationMs: 60_000 });
-        assert.ok(chargeId.startsWith("charge-"));
+        // The proto says the service "returns the minted charge id": it must be
+        // a real, non-empty id, and a second charge must get a different one.
+        assert.notEqual(chargeId, "");
         assert.equal(chargeCount(), 1);
+        assert.equal(activeChargeCount(), 1);
+        const secondChargeId = await run(activities.addCharge, { tripId, durationMs: 60_000 });
+        assert.notEqual(secondChargeId, chargeId, "each charge gets its own id");
+        assert.equal(chargeCount(), 2);
+        await run(activities.refundCharge, { tripId, chargeId: secondChargeId });
         assert.equal(activeChargeCount(), 1);
 
         await run(activities.settle, { tripId });
@@ -155,11 +168,38 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
         );
     });
 
-    it("releaseVehicle is idempotent: releasing an already-available vehicle is a no-op success", async () => {
+    it("reserveVehicle marks exactly that vehicle reserved: available=false, status reserved, the others untouched", async () => {
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-state" });
+
+        const reserved = await fleet.getVehicle({ id: "v-001" });
+        assert.equal(reserved.vehicle?.available, false);
+        assert.equal(reserved.vehicle?.status, "reserved");
+        const neighbour = await fleet.getVehicle({ id: "v-002" });
+        assert.equal(neighbour.vehicle?.available, true);
+        assert.equal(neighbour.vehicle?.status, "available");
+    });
+
+    it("releaseVehicle returns the vehicle to the pool and stays a no-op success when repeated", async () => {
         await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-release" });
+        assert.equal((await fleet.getVehicle({ id: "v-001" })).vehicle?.available, false);
+
         await run(activities.releaseVehicle, { vehicleId: "v-001" });
-        // Second release on an already-available vehicle must not throw.
+        const released = await fleet.getVehicle({ id: "v-001" });
+        assert.equal(released.vehicle?.available, true);
+        assert.equal(released.vehicle?.status, "available");
+
+        // Second release on an already-available vehicle must not throw nor change the state.
         await run(activities.releaseVehicle, { vehicleId: "v-001" });
+        const again = await fleet.getVehicle({ id: "v-001" });
+        assert.equal(again.vehicle?.available, true);
+        assert.equal(again.vehicle?.status, "available");
+    });
+
+    it("a released vehicle can be reserved by a new holder", async () => {
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-first" });
+        await run(activities.releaseVehicle, { vehicleId: "v-001" });
+        await run(activities.reserveVehicle, { vehicleId: "v-001", holderId: "trip-second" });
+        assert.equal((await fleet.getVehicle({ id: "v-001" })).vehicle?.available, false);
     });
 
     it("voidTab is idempotent: voiding twice (and a missing tab) is a no-op success", async () => {

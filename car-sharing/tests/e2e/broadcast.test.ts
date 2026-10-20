@@ -95,29 +95,64 @@ describe("Phase 3 broadcast: one TripCompleted fans out to three independent rea
 
     it("PRIMARY: the terminal publishTripCompleted activity broadcasts ONCE, all three reactors react with the FULL message shape", async () => {
         // Drive the actual publish SITE: the real activity body, not a hand-built
-        // publish. `amountCents` is recomputed in the activity from durationMs
-        // (60_000ms → 60s × 5 cents/s = 300n).
+        // publish. `amountCents` is recomputed in the activity from durationMs;
+        // the tariff is the demo's own choice (no document fixes it), so the
+        // checks below relate the amount to the other reactors instead of
+        // pinning a literal copied from the implementation.
         await run(activities.publishTripCompleted, { tripId: "trip-x", userId: "u-1", vehicleId: "v-1", durationMs: 60_000 });
 
         // ALL THREE reacted to the SINGLE publish.
         assert.equal(pricingTripCountValue(), 1, "pricing reactor counted the trip");
-        assert.equal(pricingRevenueCentsValue(), 300n, "pricing reactor tallied the settled revenue");
 
         assert.equal(sentReceipts().length, 1, "notifications reactor sent one receipt");
         assert.equal(sentReceipts()[0]?.userId, "u-1", "the receipt targets the renter");
 
-        // Full-shape oracle (contract-conformance): the audit record equals the
-        // documented five-field TripCompleted contract, field-by-field, proving
-        // the decoded payload — not just that "an event arrived".
+        // Full-shape oracle (contract-conformance): the audit record carries the
+        // documented five TripCompleted fields, proving the decoded payload —
+        // not just that "an event arrived".
         const records = auditRecords();
         assert.equal(records.length, 1, "audit reactor appended exactly one record");
-        assert.deepEqual(records[0], {
-            tripId: "trip-x",
-            userId: "u-1",
-            vehicleId: "v-1",
-            amountCents: 300n,
-            durationMs: 60_000n,
-        });
+        const record = records[0];
+        assert.ok(record !== undefined);
+        assert.equal(record.tripId, "trip-x");
+        assert.equal(record.userId, "u-1");
+        assert.equal(record.vehicleId, "v-1");
+        assert.equal(record.durationMs, 60_000n);
+        assert.ok(record.amountCents > 0n, "a one-minute trip is charged a positive amount");
+        assert.equal(pricingRevenueCentsValue(), record.amountCents, "the revenue tally is exactly the settled amount in the audit record");
+    });
+
+    it("PRICING: every positive duration is charged, a longer trip never costs less, and revenue is the sum of the settled amounts", async () => {
+        const durations = [1, 999, 1_000, 1_001, 30_000, 60_000, 3_600_000];
+        for (const [i, durationMs] of durations.entries()) {
+            await run(activities.publishTripCompleted, { tripId: `trip-price-${i}`, userId: "u-1", vehicleId: "v-1", durationMs });
+        }
+
+        const records = auditRecords();
+        assert.equal(records.length, durations.length);
+        const byDuration = records.map((r) => ({ durationMs: Number(r.durationMs), amountCents: r.amountCents }));
+        assert.deepEqual(
+            byDuration.map((r) => r.durationMs),
+            durations,
+            "the audit record carries the duration that was passed in",
+        );
+        for (const { durationMs, amountCents } of byDuration) {
+            assert.ok(amountCents > 0n, `a ${durationMs} ms trip must not be free`);
+        }
+        for (let i = 1; i < byDuration.length; i++) {
+            const shorter = byDuration[i - 1];
+            const longer = byDuration[i];
+            assert.ok(shorter !== undefined && longer !== undefined);
+            assert.ok(longer.amountCents >= shorter.amountCents, `${longer.durationMs} ms must not cost less than ${shorter.durationMs} ms`);
+        }
+        assert.equal(
+            pricingRevenueCentsValue(),
+            byDuration.reduce((sum, r) => sum + r.amountCents, 0n),
+        );
+        // An hour costs strictly more than a minute: the amount really depends on the duration.
+        const minute = byDuration.find((r) => r.durationMs === 60_000)?.amountCents ?? 0n;
+        const hour = byDuration.find((r) => r.durationMs === 3_600_000)?.amountCents ?? 0n;
+        assert.ok(hour > minute);
     });
 
     it("TOPIC: the event method resolves to exactly \"trips.completed\" from the proto option (no typeName fallback, no raw {topic})", () => {
