@@ -28,7 +28,7 @@
  * @module temporal/workflows
  */
 
-import { ApplicationFailure, defineQuery, log, proxyActivities, setHandler, sleep } from "@temporalio/workflow";
+import { ActivityFailure, ApplicationFailure, defineQuery, log, proxyActivities, setHandler, sleep } from "@temporalio/workflow";
 import type * as activities from "#temporal/activities.ts";
 import type { TripStatus as TripStatusT } from "#temporal/tripStatus.ts";
 import { TripStatus } from "#temporal/tripStatus.ts";
@@ -84,6 +84,24 @@ const broadcast = proxyActivities<typeof activities>({
 
 /** Simulated drive duration (time-skipped instantly in tests). */
 const DRIVE_DURATION_MS = 60_000;
+
+/**
+ * The failure the workflow reports to its caller (temporal-ui, `handle.result()`).
+ *
+ * A failed activity reaches workflow code as an `ActivityFailure` whose `cause`
+ * is the activity's own failure, so the original type and message live one level
+ * down. An `ApplicationFailure` cause is rethrown as is; any other cause (a
+ * timeout, a cancellation) or a non-activity error is reported under the
+ * generic `TripWorkflowFailed` type with the cause's own message.
+ */
+function originalFailure(err: unknown): ApplicationFailure {
+    const cause = err instanceof ActivityFailure ? err.cause : err;
+    if (cause instanceof ApplicationFailure) return cause;
+    return ApplicationFailure.create({
+        message: cause instanceof Error ? cause.message : String(cause),
+        type: "TripWorkflowFailed",
+    });
+}
 
 /**
  * Run the trip saga for `(userId, vehicleId, tripId)`.
@@ -152,9 +170,7 @@ export async function TripWorkflow(input: TripWorkflowInput): Promise<TripStatus
             }
         }
         status = TripStatus.CANCELLED;
-        // Preserve the original failure so it surfaces in temporal-ui / GetTrip.
-        if (err instanceof ApplicationFailure) throw err;
-        throw ApplicationFailure.create({ message: String(err), type: "TripWorkflowFailed" });
+        throw originalFailure(err);
     }
 
     // SUCCESS-ONLY TAIL (Phase 3 broadcast) — reached ONLY when the trip is
