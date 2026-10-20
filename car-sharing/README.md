@@ -26,7 +26,7 @@ The code is the source (`chargeCents` in `src/temporal/activities.ts`) and the n
 
 | Service                   | Role            | RPC                          | Auth                                  |
 | ------------------------- | --------------- | ---------------------------- | ------------------------------------- |
-| `trips.v1.TripService`    | edge / gateway  | `StartTrip(userId, vehicle)`, `GetTrip(tripId)` | RS256 JWT required and validated via JWKS (Compose `ory` profile uses Oathkeeper); proto `default_policy: allow`; `RecordTrip`/`EndTrip` are internal worker methods |
+| `trips.v1.TripService`    | edge / gateway  | `StartTrip(vehicle)`, `GetTrip(tripId)` | RS256 JWT required and validated via JWKS (Compose `ory` profile uses Oathkeeper); proto `default_policy: allow`; `RecordTrip`/`EndTrip` are internal worker methods |
 | `fleet.v1.FleetService`   | internal leaf   | `GetVehicle`, `ListVehicles` (stream), `ReserveVehicle`, `ReleaseVehicle` | `internal` service token: reads (`GetVehicle`, `ListVehicles`) trips, reserve/release worker |
 | `billing.v1.BillingService` | internal leaf | `OpenTab`, `AddCharge`, `Settle`, `VoidTab`, `RefundCharge` | `internal` service token, worker only |
 
@@ -224,7 +224,8 @@ The e2e suite runs the whole app in one process and asserts: the happy
 `StartTrip` path (GetVehicle pre-check + workflow start returning `{ trip,
 workflow_id }`), `FAILED_PRECONDITION` for an unavailable vehicle, `NOT_FOUND`
 propagated from fleet, the gateway rejecting unauthenticated / invalid-token
-requests, and service-to-service auth on the internal methods — a worker-signed
+requests, trip ownership (each trip belongs to its caller's token subject; another
+caller's `GetTrip` is `NOT_FOUND`), and service-to-service auth on the internal methods — a worker-signed
 call succeeds; no token, a token signed by an unpublished key, or an end user's
 JWT is `UNAUTHENTICATED`; a valid trips token on a worker-only method is
 `PERMISSION_DENIED` (`tests/e2e/e2e.test.ts`). `tests/e2e/split.test.ts` runs
@@ -335,6 +336,14 @@ immediately with the trip id, an initial `STARTED` status, and the `workflow_id`
 Live status is read with a new **`GetTrip`** RPC, which issues a Temporal
 **Workflow Query** (`handle.query(getTripStatus)`) against the running workflow,
 falling back to a terminal status (`SETTLED` / `CANCELLED`) once it closes.
+
+**The trip belongs to the authenticated caller.** `StartTripRequest` carries only
+`vehicle_id`: the owner is the verified token's subject
+(`requireAuthContext().subject`), passed to the workflow as `userId` and stored in
+the workflow memo. (Field 1, the former `user_id`, is `reserved` in the proto.)
+`GetTrip` answers only the owner; for any other caller the trip is `NOT_FOUND`,
+the same answer as for an id that does not exist. The internal `RecordTrip`
+request keeps its `user_id`: the worker fills it from the workflow input.
 
 ### The saga and its compensations
 

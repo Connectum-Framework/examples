@@ -53,10 +53,11 @@ paths:
         - trips.v1.TripService
       summary: GetTrip
       description: >-
-        GetTrip returns a trip's current status. Requires a valid JWT. It reads
-        live
-         status from the running workflow via a Temporal Workflow Query, falling back
-         to a terminal status when the workflow has closed.
+        GetTrip returns a trip's current status. Requires a valid JWT. Only the
+         trip's owner can read it: for any other caller the trip is NOT_FOUND,
+         exactly as if the id did not exist. It reads live status from the running
+         workflow via a Temporal Workflow Query, falling back to a terminal status
+         when the workflow has closed.
       operationId: trips.v1.TripService.GetTrip
       parameters:
         - name: Connect-Protocol-Version
@@ -139,7 +140,9 @@ paths:
         - trips.v1.TripService
       summary: StartTrip
       description: >-
-        StartTrip starts a trip for (user_id, vehicle_id). Requires a valid JWT.
+        StartTrip starts a trip for the authenticated caller on the given
+        vehicle.
+         Requires a valid JWT; the trip belongs to the token's subject.
          It pre-checks availability SYNCHRONOUSLY (FAILED_PRECONDITION if the vehicle
          is unavailable, NOT_FOUND if unknown — propagated from FleetService) BEFORE
          starting the durable workflow, then returns the trip id, initial status, and
@@ -325,9 +328,6 @@ components:
     trips.v1.StartTripRequest:
       type: object
       properties:
-        userId:
-          type: string
-          title: user_id
         vehicleId:
           type: string
           title: vehicle_id
