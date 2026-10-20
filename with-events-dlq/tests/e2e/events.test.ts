@@ -123,6 +123,8 @@ describe("EventBus with NATS + DLQ — 2 Microservices + Saga", () => {
         assert.ok(dlqEvent, "Should find the DLQ event for this order");
         assert.equal(dlqEvent.originalTopic, "orders.v1.OrderCreated");
         assert.notEqual(dlqEvent.originalEventId, "", "the dead letter carries the id of the original event");
+        // The monitor reports "unknown" when the original-id header is missing.
+        assert.notEqual(dlqEvent.originalEventId, "unknown", "the dead letter carries the id of the original event");
         // Exactly one dead letter for the order: retries happen before
         // dead-lettering and must not each produce an entry.
         assert.equal((await getDlqEvents()).filter((e) => e.error.includes(result.orderId)).length, 1);

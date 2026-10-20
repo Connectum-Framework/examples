@@ -212,6 +212,10 @@ describe("Activities: real RPC wiring + compensation idempotency (in-process mon
 
         const hireBalance = (await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: HIRE.employeeId }))).balance?.remainingDays;
         assert.equal(hireBalance, 0, "the torn-down enrollment is gone");
+        // A balance of 0 is also what a missing enrollment reports, so enrolling again must restore a usable balance.
+        await run(activities.setupPayroll, { employeeId: HIRE.employeeId });
+        const reEnrolledBalance = (await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: HIRE.employeeId }))).balance?.remainingDays;
+        assert.ok((reEnrolledBalance ?? 0) > 0, "the employee can be enrolled again after teardown");
         assert.equal((await payroll.getBalance(create(GetBalanceRequestSchema, { employeeId: "e-001" }))).balance?.remainingDays, seededBalance, "another employee's balance is untouched");
     });
 
