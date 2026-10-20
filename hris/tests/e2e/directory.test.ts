@@ -30,7 +30,7 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import type { Client } from "@connectrpc/connect";
 import type { Server } from "@connectum/core";
 import { MemoryAdapter } from "@connectum/events";
-import { DirectoryService, GetEmployeeRequestSchema, ListEmployeesRequestSchema } from "#gen/directory/v1/directory_pb.ts";
+import { CreateEmployeeRequestSchema, DirectoryService, GetEmployeeRequestSchema, ListEmployeesRequestSchema } from "#gen/directory/v1/directory_pb.ts";
 import type { Employee } from "#gen/directory/v1/directory_pb.ts";
 import { buildEventBus } from "#eventBus.ts";
 import { buildServer } from "#server.ts";
@@ -174,6 +174,20 @@ describe("E2E: DirectoryService persistence (Drizzle + PGlite, real gRPC client)
         assert.ok(combined.every((e) => e.department === "Engineering" && e.managerId === "e-002"));
     });
 
+    it("ListEmployees: the department and manager_id filters each narrow the other (AND, not OR)", async () => {
+        // Ada (e-001) manages e-002 (Engineering) and e-003 (Finance). Either filter
+        // alone leaves more than one row; together they must leave exactly the
+        // intersection, and two filters with no common row leave nothing.
+        const byManagerOnly = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { managerId: "e-001" })));
+        assert.deepEqual(byManagerOnly.map((e) => e.id), ["e-002", "e-003"]);
+
+        const engineeringUnderAda = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { department: "Engineering", managerId: "e-001" })));
+        assert.deepEqual(engineeringUnderAda.map((e) => e.id), ["e-002"]);
+
+        const financeUnderGrace = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { department: "Finance", managerId: "e-002" })));
+        assert.deepEqual(financeUnderGrace, []);
+    });
+
     it("ListEmployees combines a filter with cursor pagination", async () => {
         // Engineering in id order: e-001, e-002, e-004, e-005.
         const page1 = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { department: "Engineering", pageSize: 2 })));
@@ -189,5 +203,62 @@ describe("E2E: DirectoryService persistence (Drizzle + PGlite, real gRPC client)
             page2.map((e) => e.id),
             ["e-004", "e-005"],
         );
+    });
+});
+
+describe("E2E: DirectoryService page-size clamping over a large directory", () => {
+    const EXTRA_EMPLOYEES = 110;
+    let server: Server;
+    let directory: Client<typeof DirectoryService>;
+    let totalEmployees = 0;
+
+    before(async () => {
+        const topology = resolveTopology("*");
+        const db = await makeTestDb();
+        const eventBus = buildEventBus({ localTypeNames: topology.localTypeNames, adapter: MemoryAdapter() });
+        server = buildServer({ port: 0, topology, eventBus, db });
+        await server.start();
+        const port = server.address?.port ?? 0;
+        directory = createClient(DirectoryService, createGrpcTransport({ baseUrl: `http://localhost:${port}` }));
+
+        const seeded = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { pageSize: 100 })));
+        for (let i = 0; i < EXTRA_EMPLOYEES; i++) {
+            const id = `x-${String(i).padStart(4, "0")}`;
+            await directory.createEmployee(create(CreateEmployeeRequestSchema, { id, name: `Bulk ${i}`, email: `${id}@example.com`, title: "Engineer", department: "Engineering" }));
+        }
+        totalEmployees = seeded.length + EXTRA_EMPLOYEES;
+    });
+
+    after(async () => {
+        if (server.state === "running") await server.stop();
+    });
+
+    // The proto documents page_size as: "Server clamps to a sane default/max when
+    // 0 or large". With more employees than any sane page, a clamp is visible as
+    // a short page; a missing clamp streams the whole directory.
+    it("page_size 0 streams a default page: at least one employee, fewer than the whole directory", async () => {
+        const page = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { pageSize: 0 })));
+        assert.ok(page.length >= 1, "the default page must not be empty");
+        assert.ok(page.length < totalEmployees, `the default page must be clamped, got ${page.length} of ${totalEmployees}`);
+    });
+
+    it("a very large page_size is clamped to a maximum below the whole directory", async () => {
+        const page = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { pageSize: 1_000_000 })));
+        assert.ok(page.length >= 1);
+        assert.ok(page.length < totalEmployees, `the maximum page must be clamped, got ${page.length} of ${totalEmployees}`);
+    });
+
+    it("following the cursor through default-sized pages visits every employee once, in id order", async () => {
+        const ids: string[] = [];
+        let cursor = "";
+        for (let guard = 0; guard < 100; guard++) {
+            const page = await collect(directory.listEmployees(create(ListEmployeesRequestSchema, { pageToken: cursor })));
+            if (page.length === 0) break;
+            ids.push(...page.map((e) => e.id));
+            cursor = page[page.length - 1]?.id ?? "";
+        }
+        assert.equal(ids.length, totalEmployees);
+        assert.deepEqual(ids, [...ids].sort());
+        assert.equal(new Set(ids).size, totalEmployees, "no employee may appear on two pages");
     });
 });
