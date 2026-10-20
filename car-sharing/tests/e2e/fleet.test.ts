@@ -43,6 +43,7 @@ import { FleetService, GetVehicleRequestSchema, ListVehiclesRequestSchema, Relea
 import type { Vehicle } from "#gen/fleet/v1/fleet_pb.ts";
 import { buildServer } from "#server.ts";
 import type { Db } from "#db/client.ts";
+import { vehicles } from "#db/schema.ts";
 import { resolveTopology } from "#topology.ts";
 import { makeTestDb, reseed } from "../helpers/db.ts";
 import type { InternalAuthFixture } from "../helpers/internalAuth.ts";
@@ -210,6 +211,52 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
         assert.equal(released.status, "available");
     });
 
+    it("ReleaseVehicle persists: a later read shows the vehicle available again", async () => {
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        await writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-001" }));
+        const after = await reader.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" }));
+        assert.equal(after.vehicle?.available, true);
+        assert.equal(after.vehicle?.status, "available");
+    });
+
+    // holder_id is documented as: the same holder re-reserving its own vehicle
+    // succeeds, a held vehicle with a different holder is FAILED_PRECONDITION,
+    // and an empty holder never matches (a held vehicle is always a conflict).
+    it("ReserveVehicle with the SAME holder_id is idempotent and returns the reserved vehicle", async () => {
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        const again = await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        assert.equal(again.id, "v-001");
+        assert.equal(again.available, false);
+        assert.equal(again.status, "reserved");
+    });
+
+    it("ReserveVehicle with a DIFFERENT or EMPTY holder_id on a held vehicle is FAILED_PRECONDITION", async () => {
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        for (const holderId of ["trip-b", ""]) {
+            await assert.rejects(
+                writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId })),
+                (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
+                `holder "${holderId}" must not take a vehicle held by trip-a`,
+            );
+        }
+        // The rejected attempts changed nothing: trip-a still owns the reservation.
+        const stillHeld = await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        assert.equal(stillHeld.status, "reserved");
+    });
+
+    it("a released vehicle can be reserved by a different holder", async () => {
+        await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" }));
+        await writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-001" }));
+        const taken = await writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-b" }));
+        assert.equal(taken.available, false);
+        assert.equal(taken.status, "reserved");
+        // The previous holder is now locked out.
+        await assert.rejects(
+            writer.reserveVehicle(create(ReserveVehicleRequestSchema, { id: "v-001", holderId: "trip-a" })),
+            (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
+        );
+    });
+
     it("ReleaseVehicle on a maintenance vehicle is FAILED_PRECONDITION", async () => {
         await assert.rejects(
             writer.releaseVehicle(create(ReleaseVehicleRequestSchema, { id: "v-003" })),
@@ -250,5 +297,66 @@ describe("E2E: FleetService persistence (Drizzle + PGlite, real gRPC client)", (
             writer.getVehicle(create(GetVehicleRequestSchema, { id: "v-001" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
         );
+    });
+});
+
+describe("E2E: FleetService page-size clamping over a large fleet", () => {
+    const EXTRA_VEHICLES = 130;
+    let server: Server;
+    let internalAuth: InternalAuthFixture;
+    let reader: Client<typeof FleetService>;
+    let totalVehicles = 0;
+
+    before(async () => {
+        const db = await makeTestDb();
+        // A fleet larger than any sane page, so a clamp is visible as a short page.
+        const rows = Array.from({ length: EXTRA_VEHICLES }, (_, i) => ({
+            id: `x-${String(i).padStart(4, "0")}`,
+            model: "Bulk",
+            available: true,
+            status: "available",
+            holder: null,
+            lat: 0,
+            lng: 0,
+        }));
+        await db.insert(vehicles).values(rows);
+        totalVehicles = (await db.select().from(vehicles)).length;
+        internalAuth = await startInternalAuth();
+        server = buildServer({ port: 0, topology: resolveTopology("*"), db, internalSigner: internalAuth.trips, internalIssuers: internalAuth.issuers });
+        await server.start();
+        reader = signedClient(FleetService, `http://localhost:${server.address?.port ?? 0}`, internalAuth.trips);
+    });
+
+    after(async () => {
+        if (server.state === "running") await server.stop();
+        await internalAuth.close();
+    });
+
+    // The proto documents page_size as: "Server clamps to a sane default/max
+    // when 0 or large".
+    it("page_size 0 streams a default page: at least one vehicle, fewer than the whole fleet", async () => {
+        const page = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 0 })));
+        assert.ok(page.length >= 1, "the default page must not be empty");
+        assert.ok(page.length < totalVehicles, `the default page must be clamped, got ${page.length} of ${totalVehicles}`);
+    });
+
+    it("a very large page_size is clamped to a maximum below the whole fleet", async () => {
+        const page = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageSize: 1_000_000 })));
+        assert.ok(page.length >= 1);
+        assert.ok(page.length < totalVehicles, `the maximum page must be clamped, got ${page.length} of ${totalVehicles}`);
+    });
+
+    it("following the cursor through default-sized pages visits every vehicle once, in id order", async () => {
+        const ids: string[] = [];
+        let cursor = "";
+        for (let guard = 0; guard < 100; guard++) {
+            const page = await collect(reader.listVehicles(create(ListVehiclesRequestSchema, { pageToken: cursor })));
+            if (page.length === 0) break;
+            ids.push(...page.map((v) => v.id));
+            cursor = page[page.length - 1]?.id ?? "";
+        }
+        assert.equal(ids.length, totalVehicles);
+        assert.deepEqual(ids, [...ids].sort());
+        assert.equal(new Set(ids).size, totalVehicles, "no vehicle may appear on two pages");
     });
 });
