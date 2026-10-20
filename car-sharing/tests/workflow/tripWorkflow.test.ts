@@ -62,7 +62,7 @@ function makeMockActivities(calls: string[], failing?: { step: string }): Record
         addCharge: async () => record("addCharge", "charge-mock-1"),
         refundCharge: async () => record("refundCharge"),
         settle: async () => record("settle"),
-        // Phase 3 terminal broadcast — fired from the success-only tail AFTER the
+        // Terminal broadcast — fired from the success-only tail AFTER the
         // saga try/catch, so it appears only on the SETTLED path.
         publishTripCompleted: async () => record("publishTripCompleted"),
     };
@@ -96,7 +96,7 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
 
         assert.equal(result, "SETTLED");
         // The terminal broadcast fires LAST, after settle — the success-only tail
-        // outside the saga try/catch (Phase 3).
+        // outside the saga try/catch.
         assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "addCharge", "settle", "publishTripCompleted"]);
     });
 
@@ -140,7 +140,7 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
     });
 
     it("recordTrip fails: its PRE-registered cancel still unwinds (markTripCancelled → releaseVehicle)", async () => {
-        // F4 (register-before): markTripCancelled is on the stack BEFORE recordTrip
+        // Register-before: markTripCancelled is on the stack BEFORE recordTrip
         // is awaited, so an ambiguous recordTrip failure still unwinds it (it
         // no-ops if the record never committed). With the old register-AFTER order
         // this compensation would have been missed entirely.
@@ -150,15 +150,85 @@ describe("TripWorkflow: orchestration + compensation (time-skipping, mocked acti
     });
 
     it("openTab fails: its PRE-registered void still unwinds (void → cancel → release)", async () => {
-        // F4 (register-before): voidTab is registered BEFORE openTab, so an
+        // Register-before: voidTab is registered BEFORE openTab, so an
         // ambiguous openTab failure still unwinds it (no-op on a missing tab).
         const calls: string[] = [];
         await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "openTab" }), "wf-opentab-fail"));
         assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "voidTab", "markTripCancelled", "releaseVehicle"]);
     });
 
+    it("addCharge fails: refundCharge is NOT run (its charge id never existed), the rest unwinds (void → cancel → release)", async () => {
+        const calls: string[] = [];
+        await assert.rejects(runWorkflow(makeMockActivities(calls, { step: "addCharge" }), "wf-addcharge-fail"));
+
+        // refundCharge needs the id addCharge returns, so it is registered only
+        // after addCharge succeeds; a failed addCharge leaves nothing to refund.
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "addCharge", "voidTab", "markTripCancelled", "releaseVehicle"]);
+    });
+
+    it("the activities receive the trip's own identifiers, and refundCharge gets the id addCharge returned", async () => {
+        const received: Record<string, unknown[]> = {};
+        const calls: string[] = [];
+        const activities = makeMockActivities(calls, { step: "settle" });
+        for (const name of ["reserveVehicle", "recordTrip", "openTab", "addCharge", "refundCharge", "voidTab", "markTripCancelled", "releaseVehicle"]) {
+            const base = activities[name];
+            assert.ok(base !== undefined);
+            activities[name] = async (...args: unknown[]) => {
+                received[name] = args;
+                return await base(...args);
+            };
+        }
+
+        await assert.rejects(runWorkflow(activities, "wf-arguments"));
+
+        // README: reserveVehicle carries the trip id as the holder, and the
+        // refund targets the charge the billing step minted.
+        assert.deepEqual(received.reserveVehicle, [{ vehicleId: INPUT.vehicleId, holderId: INPUT.tripId }]);
+        assert.deepEqual(received.recordTrip, [{ userId: INPUT.userId, vehicleId: INPUT.vehicleId, tripId: INPUT.tripId }]);
+        assert.deepEqual(received.openTab, [{ tripId: INPUT.tripId }]);
+        assert.equal((received.addCharge?.[0] as { tripId: string }).tripId, INPUT.tripId);
+        assert.deepEqual(received.refundCharge, [{ tripId: INPUT.tripId, chargeId: "charge-mock-1" }]);
+        assert.deepEqual(received.voidTab, [{ tripId: INPUT.tripId }]);
+        assert.deepEqual(received.markTripCancelled, [{ tripId: INPUT.tripId }]);
+        assert.deepEqual(received.releaseVehicle, [{ vehicleId: INPUT.vehicleId }]);
+    });
+
+    it("a transient failure of a forward step is retried and the saga still SETTLES without compensating", async () => {
+        const calls: string[] = [];
+        let attempts = 0;
+        const activities = makeMockActivities(calls);
+        activities.openTab = async () => {
+            calls.push("openTab");
+            attempts++;
+            // A plain (retryable) error on the first attempts: Temporal's retry
+            // policy, not the compensation path, must absorb it.
+            if (attempts < 3) throw new Error("billing temporarily unavailable");
+        };
+
+        const result = await runWorkflow(activities, "wf-transient-retry");
+
+        assert.equal(result, "SETTLED");
+        assert.equal(attempts, 3);
+        assert.deepEqual(calls, ["reserveVehicle", "recordTrip", "endTrip", "openTab", "openTab", "openTab", "addCharge", "settle", "publishTripCompleted"]);
+    });
+
+    it("a compensation that itself fails does not stop the rest of the unwind", async () => {
+        const calls: string[] = [];
+        const activities = makeMockActivities(calls, { step: "settle" });
+        activities.refundCharge = async () => {
+            calls.push("refundCharge");
+            throw ApplicationFailure.create({ message: "mock refundCharge failed", type: "MockFailure", nonRetryable: true });
+        };
+
+        await assert.rejects(runWorkflow(activities, "wf-compensation-fail"));
+
+        // The failing refund is first in the unwind; every later compensation
+        // must still run so no reservation or open tab is left behind.
+        assert.deepEqual(calls.slice(calls.indexOf("settle") + 1), ["refundCharge", "voidTab", "markTripCancelled", "releaseVehicle"]);
+    });
+
     it("broadcast failure leaves the trip SETTLED — the success-only tail swallows it, NO compensation runs", async () => {
-        // The CRITICAL Phase 3 guarantee (D4): a failed/timed-out broadcast must
+        // The critical broadcast guarantee: a failed/timed-out broadcast must
         // NEVER roll back a settled, paid trip. The mock's `publishTripCompleted`
         // throws (nonRetryable), but it runs in the success-only tail OUTSIDE the
         // saga try/catch, so the catch does not see it: the workflow still returns

@@ -2,7 +2,7 @@
  * E2E tests — MONOLITH mode, in-process, no cluster, no live Temporal.
  *
  * The whole car-sharing app runs in ONE process; every service is mounted
- * locally. Phase 2 changed StartTrip from an inline `ctx.call` chain to a
+ * locally. StartTrip is no longer an inline `ctx.call` chain: it is a
  * synchronous availability PRE-CHECK followed by STARTING a durable Temporal
  * workflow. That reshapes what the server-only e2e can assert:
  *
@@ -14,7 +14,7 @@
  *    records the `start` call instead of contacting a real server, proving the
  *    pre-check ran first and StartTrip returns `{ trip:{ id, status:STARTED },
  *    workflow_id }` with `workflow_id === trip.id`.
- *  - The gateway auth (Phase 4 — Ory as the IdP): trips is a thin IdP CONSUMER.
+ *  - The gateway auth (Ory as the IdP): trips is a thin IdP CONSUMER.
  *    It validates an RS256 JWT (minted at the edge by Ory Oathkeeper from a Kratos
  *    session) against Oathkeeper's published JWKS. The dockerless suite does NOT
  *    run Ory; instead it simulates the mutator with a test RSA keypair + an
@@ -172,7 +172,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
 
     before(async () => {
         // Force monolith topology so fleet, trips and billing are all mounted
-        // locally and ctx.call routes in-process. Phase 4: generate a throwaway
+        // locally and ctx.call routes in-process. Generate a throwaway
         // RS256 keypair, publish its public JWK over an in-process JWKS server,
         // and point the gateway's JWT interceptor at it via `jwksUri` — the SAME
         // production validation branch (`createRemoteJWKSet`) Oathkeeper feeds in
@@ -404,7 +404,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         assert.equal(starts.length, before);
     });
 
-    // Phase 4 trust-boundary negatives (contract conformance): a SIGNATURE-VALID
+    // Trust-boundary negatives (contract conformance): a SIGNATURE-VALID
     // token (same RSA key + kid, so it passes JWKS key selection) is still
     // rejected when its `iss`/`aud`/`exp` don't match what the gateway requires.
     // These prove the issuer/audience/expiry CLAIM checks, not just the signature

@@ -8,8 +8,8 @@
  *
  *  - each forward activity calls its RPC and mutates the real service state
  *    (`tabCount`/`chargeCount`/`tripStatus`), including the happy-path billing
- *    side effects (openTab → addCharge → settle) that MOVED off the e2e from
- *    Phase 1's synchronous StartTrip;
+ *    side effects (openTab → addCharge → settle) that no longer run
+ *    synchronously inside StartTrip;
  *  - the compensating activities are IDEMPOTENT — running release/void/refund
  *    twice (or on already-undone state) is a no-op success.
  *

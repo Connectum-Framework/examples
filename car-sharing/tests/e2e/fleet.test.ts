@@ -1,12 +1,12 @@
 /**
- * E2E tests — FleetService over Drizzle + PGlite (Phase 1 persistence).
+ * E2E tests — FleetService over Drizzle + PGlite.
  *
  * The fleet is the only persistent service: a PGlite in-process Postgres is
  * migrated + seeded in the test and injected into `buildServer({ db })`, the
  * same parameter production uses for its postgres.js client. Every assertion
  * goes through a REAL gRPC client over HTTP/2 — the server keeps the default
  * h2c posture (`allowHTTP1` unset → `false`), exercising the actual wire path,
- * not the db directly. (Phase 4 made `allowHTTP1` an opt-in for the Oathkeeper
+ * not the db directly. (`allowHTTP1` is an opt-in for the Oathkeeper
  * Connect/HTTP1 edge; the gRPC/streaming path here is unaffected by that default.)
  *
  * FleetService is `internal` (see fleet.proto): every call carries a service

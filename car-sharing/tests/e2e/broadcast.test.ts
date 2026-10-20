@@ -1,5 +1,5 @@
 /**
- * Phase 3 EventBus broadcast / fan-out tests — DOCKERLESS.
+ * EventBus broadcast / fan-out tests — DOCKERLESS.
  *
  * Proves the third interaction mechanism: ONE `TripCompleted` published on the
  * saga's terminal step fans out to THREE INDEPENDENT reactors. No broker — one
@@ -16,7 +16,7 @@
  *     `MockActivityEnvironment`, and asserts ALL THREE reactors fired with the
  *     FULL `TripCompleted` shape (contract-conformance: the audit record equals
  *     the documented five-field contract, not just "an event arrived"). This is
- *     the only test that ties the publish-site decision (D1) to behavior.
+ *     the only test that ties the publish site (the terminal saga activity) to behavior.
  *  2. TOPIC — `resolveTopicName(TripEventHandlers.method.onTripCompleted)` is
  *     exactly `"trips.completed"`, pinning the topic to the proto option (not the
  *     `typeName` fallback). No raw `{topic}` is passed anywhere.
@@ -58,7 +58,7 @@ function run<A extends unknown[], R>(fn: (...args: A) => Promise<R>, ...args: A)
     return env.run(fn, ...args);
 }
 
-describe("Phase 3 broadcast: one TripCompleted fans out to three independent reactors (dockerless, MemoryAdapter)", () => {
+describe("Broadcast: one TripCompleted fans out to three independent reactors (dockerless, MemoryAdapter)", () => {
     let adapter: EventAdapter;
     let publisher: ManagedBus;
     let reactorBuses: ManagedBus[];
