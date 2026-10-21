@@ -80,6 +80,7 @@ interface StartCall {
     workflowId: string;
     taskQueue: string;
     args: unknown[];
+    memo: Record<string, unknown> | undefined;
 }
 
 /** What the handler asked the workflow client for while reading a status. */
@@ -103,7 +104,22 @@ interface StubHandleBehaviour {
      * a generic error, which the handler must surface as `Unavailable`.
      */
     readonly queryError?: "closed" | "transient" | "not-found" | "rejected";
+    /**
+     * Memo `describe()` reports. When absent, the stub answers with the memo the
+     * workflow was started with (what a real Temporal server does), so a trip
+     * started through StartTrip keeps its owner.
+     */
+    readonly memo?: Record<string, unknown>;
+    /** When set, `describe()` itself fails: the workflow id is unknown to Temporal. */
+    readonly describeError?: "not-found";
 }
+
+/**
+ * Memo of a trip that belongs to the default test caller (`user-42`). The
+ * owner key is part of what the stub reproduces from the real client: the
+ * subject recorded when the workflow was started, read back by `describe()`.
+ */
+const OWNED_BY_USER_42: Record<string, unknown> = { owner: "user-42" };
 
 /**
  * A stub Temporal client that records `start` calls and answers `getHandle`
@@ -115,7 +131,7 @@ interface StubHandleBehaviour {
 function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => StubHandleBehaviour, observed: ObservedReads): TripWorkflowClient {
     return {
         async start(workflowType, options) {
-            starts.push({ workflowType, workflowId: options.workflowId, taskQueue: options.taskQueue, args: [...options.args] });
+            starts.push({ workflowType, workflowId: options.workflowId, taskQueue: options.taskQueue, args: [...options.args], memo: options.memo });
             return { workflowId: options.workflowId };
         },
         getHandle(workflowId): TripWorkflowHandle {
@@ -143,7 +159,11 @@ function makeStubWorkflowClient(starts: StartCall[], handleBehaviour: () => Stub
                     return behaviour.queryStatus as Ret;
                 },
                 async describe() {
-                    return { status: { name: behaviour.describeStatusName ?? "RUNNING" } };
+                    if (behaviour.describeError === "not-found") {
+                        throw new WorkflowNotFoundError("workflow execution not found", workflowId, undefined);
+                    }
+                    const started = starts.find((call) => call.workflowId === workflowId);
+                    return { status: { name: behaviour.describeStatusName ?? "RUNNING" }, memo: behaviour.memo ?? started?.memo };
                 },
             };
         },
@@ -243,7 +263,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         // the local ctx.call path.
         const before = starts.length;
 
-        const res = await trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+        const res = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
             headers: { Authorization: `Bearer ${userToken}` },
         });
 
@@ -277,12 +297,12 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         observed.handleIds.length = 0;
         observed.queryNames.length = 0;
 
-        handleBehaviour = { queryStatus: "ENDED", describeStatusName: "COMPLETED" };
+        handleBehaviour = { queryStatus: "ENDED", describeStatusName: "COMPLETED", memo: OWNED_BY_USER_42 };
         const ended = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-live" }), { headers });
         assert.equal(ended.trip?.id, "trip-live");
         assert.equal(ended.trip?.status, "ENDED");
 
-        handleBehaviour = { queryStatus: "STARTED", describeStatusName: "FAILED" };
+        handleBehaviour = { queryStatus: "STARTED", describeStatusName: "FAILED", memo: OWNED_BY_USER_42 };
         const started = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-other" }), { headers });
         assert.equal(started.trip?.id, "trip-other");
         assert.equal(started.trip?.status, "STARTED");
@@ -295,14 +315,14 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         // queryStatus undefined → the stub Query throws a QueryNotRegisteredError
         // (the run is closed/gone), which the handler treats as "fall back to
         // describe()": COMPLETED → SETTLED.
-        handleBehaviour = { describeStatusName: "COMPLETED" };
+        handleBehaviour = { describeStatusName: "COMPLETED", memo: OWNED_BY_USER_42 };
         const settled = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-done" }), {
             headers: { Authorization: `Bearer ${userToken}` },
         });
         assert.equal(settled.trip?.status, "SETTLED");
 
         // A failed/cancelled closed run maps to CANCELLED.
-        handleBehaviour = { describeStatusName: "FAILED" };
+        handleBehaviour = { describeStatusName: "FAILED", memo: OWNED_BY_USER_42 };
         const cancelled = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-failed" }), {
             headers: { Authorization: `Bearer ${userToken}` },
         });
@@ -315,7 +335,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     // as SETTLED, since that would tell a rider a charge was settled when it was not.
     for (const closedWithoutSuccess of ["FAILED", "TERMINATED", "TIMED_OUT", "CANCELLED"]) {
         it(`GetTrip reports CANCELLED for a closed run that ended ${closedWithoutSuccess}`, async () => {
-            handleBehaviour = { describeStatusName: closedWithoutSuccess };
+            handleBehaviour = { describeStatusName: closedWithoutSuccess, memo: OWNED_BY_USER_42 };
             const res = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-closed" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             });
@@ -329,7 +349,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     // status still comes from describe().
     for (const queryError of ["not-found", "rejected"] as const) {
         it(`GetTrip falls back to describe() when the live query fails with a ${queryError} signal`, async () => {
-            handleBehaviour = { queryError, describeStatusName: "COMPLETED" };
+            handleBehaviour = { queryError, describeStatusName: "COMPLETED", memo: OWNED_BY_USER_42 };
             const res = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-closed" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             });
@@ -341,7 +361,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         // Regression for the blanket catch that mapped ANY query error to a
         // terminal status: a transient/infra failure must surface as Unavailable,
         // never be silently reported as a SETTLED/CANCELLED trip.
-        handleBehaviour = { queryError: "transient" };
+        handleBehaviour = { queryError: "transient", memo: OWNED_BY_USER_42 };
         await assert.rejects(
             trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-flaky" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
@@ -357,11 +377,85 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         );
     });
 
+    // The trip belongs to the authenticated caller: the request carries no user
+    // id at all, so the owner can only come from the verified token's subject.
+    describe("trip ownership follows the authenticated caller", () => {
+        it("StartTrip records the token subject as the owner; two callers get two owners", async () => {
+            const tokenA = await mint({ sub: "user-A", roles: ["rider"] });
+            const tokenB = await mint({ sub: "user-B", roles: ["rider"] });
+
+            const resA = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), { headers: { Authorization: `Bearer ${tokenA}` } });
+            const resB = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), { headers: { Authorization: `Bearer ${tokenB}` } });
+
+            const startA = starts.find((call) => call.workflowId === resA.trip?.id);
+            const startB = starts.find((call) => call.workflowId === resB.trip?.id);
+            assert.deepEqual(startA?.args, [{ userId: "user-A", vehicleId: "v-001", tripId: resA.trip?.id }]);
+            assert.deepEqual(startB?.args, [{ userId: "user-B", vehicleId: "v-001", tripId: resB.trip?.id }]);
+            // The owner is also stored with the workflow, so GetTrip can check it
+            // later without any state in this process.
+            assert.deepEqual(startA?.memo, { owner: "user-A" });
+            assert.deepEqual(startB?.memo, { owner: "user-B" });
+        });
+
+        it("GetTrip: the owner reads the trip, another caller gets NotFound", async () => {
+            const tokenA = await mint({ sub: "user-A", roles: ["rider"] });
+            const tokenB = await mint({ sub: "user-B", roles: ["rider"] });
+            const started = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), { headers: { Authorization: `Bearer ${tokenA}` } });
+            const tripId = started.trip?.id ?? "";
+            handleBehaviour = { queryStatus: "STARTED" };
+
+            const own = await trips.getTrip(create(GetTripRequestSchema, { tripId }), { headers: { Authorization: `Bearer ${tokenA}` } });
+            assert.equal(own.trip?.id, tripId);
+            assert.equal(own.trip?.status, "STARTED");
+
+            // NotFound, not PermissionDenied: the answer must not confirm that
+            // the identifier exists.
+            await assert.rejects(
+                trips.getTrip(create(GetTripRequestSchema, { tripId }), { headers: { Authorization: `Bearer ${tokenB}` } }),
+                (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
+            );
+        });
+
+        it("GetTrip answers a foreign trip and an unknown trip identically (NotFound, same message)", async () => {
+            const tokenA = await mint({ sub: "user-A", roles: ["rider"] });
+            const tokenB = await mint({ sub: "user-B", roles: ["rider"] });
+            const started = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), { headers: { Authorization: `Bearer ${tokenA}` } });
+            handleBehaviour = { queryStatus: "STARTED" };
+            const foreign = await trips.getTrip(create(GetTripRequestSchema, { tripId: started.trip?.id ?? "" }), { headers: { Authorization: `Bearer ${tokenB}` } }).catch((err: unknown) => err);
+
+            handleBehaviour = { describeError: "not-found" };
+            const unknown = await trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-no-such" }), { headers: { Authorization: `Bearer ${tokenB}` } }).catch((err: unknown) => err);
+
+            assert.ok(foreign instanceof ConnectError && unknown instanceof ConnectError);
+            assert.equal(foreign.code, Code.NotFound);
+            assert.equal(unknown.code, Code.NotFound);
+            assert.equal(foreign.rawMessage, unknown.rawMessage.replace("trip-no-such", started.trip?.id ?? ""));
+        });
+
+        it("GetTrip of a trip with no recorded owner is NotFound for everyone", async () => {
+            handleBehaviour = { queryStatus: "STARTED", memo: {} };
+            await assert.rejects(
+                trips.getTrip(create(GetTripRequestSchema, { tripId: "trip-ownerless" }), { headers: { Authorization: `Bearer ${userToken}` } }),
+                (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
+            );
+        });
+
+        it("StartTrip with a token whose subject is empty is Unauthenticated and starts nothing", async () => {
+            const before = starts.length;
+            const emptySubject = await mint({ sub: "", roles: ["rider"] });
+            await assert.rejects(
+                trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), { headers: { Authorization: `Bearer ${emptySubject}` } }),
+                (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
+            );
+            assert.equal(starts.length, before);
+        });
+    });
+
     it("StartTrip with an UNAVAILABLE vehicle is FailedPrecondition BEFORE the workflow starts", async () => {
         const before = starts.length;
         await assert.rejects(
             // v-003 is maintenance in the seed.
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-003" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-003" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.FailedPrecondition,
@@ -375,7 +469,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         // ctx.call and out to the external gRPC client.
         const before = starts.length;
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "ghost" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "ghost" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,
@@ -386,7 +480,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     it("gateway auth: StartTrip with NO token is rejected as Unauthenticated", async () => {
         const before = starts.length;
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" })),
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" })),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
         );
         // No handler ran, so no workflow started.
@@ -396,7 +490,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
     it("gateway auth: StartTrip with an INVALID token is rejected as Unauthenticated", async () => {
         const before = starts.length;
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
                 headers: { Authorization: "Bearer not.a.jwt" },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
@@ -413,7 +507,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         const before = starts.length;
         const wrongIssuer = await mint({ sub: "user-42", name: "Dana", issuer: "http://evil-idp.example/" });
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
                 headers: { Authorization: `Bearer ${wrongIssuer}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
@@ -425,7 +519,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         const before = starts.length;
         const wrongAudience = await mint({ sub: "user-42", name: "Dana", audience: "some-other-api" });
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
                 headers: { Authorization: `Bearer ${wrongAudience}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,
@@ -438,7 +532,7 @@ describe("E2E: car-sharing monolith (in-process gateway, no cluster, stub Tempor
         // ttl in the past → `exp` already elapsed at verification time.
         const expired = await mint({ sub: "user-42", name: "Dana", ttl: "-1m" });
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
                 headers: { Authorization: `Bearer ${expired}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.Unauthenticated,

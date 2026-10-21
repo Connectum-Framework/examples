@@ -112,7 +112,7 @@ describe("E2E: split topology — trips reaches fleet over gRPC with a signed se
     });
 
     it("StartTrip's remote pre-check passes fleet's internal auth and the workflow starts", async () => {
-        const res = await trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "v-001" }), {
+        const res = await trips.startTrip(create(StartTripRequestSchema, { vehicleId: "v-001" }), {
             headers: { Authorization: `Bearer ${userToken}` },
         });
         assert.equal(res.trip?.status, "STARTED");
@@ -121,7 +121,7 @@ describe("E2E: split topology — trips reaches fleet over gRPC with a signed se
 
     it("fleet's NotFound still crosses the network unchanged (the call was authorized, then answered)", async () => {
         await assert.rejects(
-            trips.startTrip(create(StartTripRequestSchema, { userId: "user-42", vehicleId: "ghost" }), {
+            trips.startTrip(create(StartTripRequestSchema, { vehicleId: "ghost" }), {
                 headers: { Authorization: `Bearer ${userToken}` },
             }),
             (err: unknown) => err instanceof ConnectError && err.code === Code.NotFound,

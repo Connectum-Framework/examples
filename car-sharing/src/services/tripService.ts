@@ -12,9 +12,14 @@
  *    `{ trip: { id, status: STARTED }, workflowId }`. The long-running saga
  *    (reserve → record → end → openTab → addCharge → settle, with automatic
  *    compensation) runs in Temporal, not in this handler.
- *  - `GetTrip` reads LIVE status from the workflow via a Temporal Workflow Query
- *    (`handle.query(getTripStatusQuery)`), falling back to a terminal status
- *    derived from `handle.describe()` once the workflow has closed.
+ *    The trip belongs to the authenticated caller: its owner is the subject of
+ *    the verified token (`requireAuthContext().subject`), stored in the
+ *    workflow's memo at start. The request has no user id.
+ *  - `GetTrip` answers only the owner (any other caller, and an unknown id, get
+ *    the same `Code.NotFound`). It reads LIVE status from the workflow via a
+ *    Temporal Workflow Query (`handle.query(getTripStatusQuery)`), falling back
+ *    to a terminal status derived from `handle.describe()` once the workflow
+ *    has closed.
  *  - `RecordTrip` / `EndTrip` are the INTERNAL RPCs the worker's activities call
  *    (method-level `internal`, worker role only, in proto). They own the
  *    in-memory trip ledger.
@@ -39,6 +44,7 @@
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { requireAuthContext } from "@connectum/auth";
 import type { ServiceDefinition } from "@connectum/core";
 import { defineService } from "@connectum/core";
 import { QueryNotRegisteredError, QueryRejectedError, WorkflowNotFoundError } from "@temporalio/client";
@@ -57,12 +63,15 @@ import type { TripWorkflowInput } from "#temporal/workflows.ts";
 /** A handle subset: query the live status and describe the (possibly closed) run. */
 export interface TripWorkflowHandle {
     query<Ret>(queryName: string): Promise<Ret>;
-    describe(): Promise<{ status: { name: string } }>;
+    describe(): Promise<{ status: { name: string }; memo?: Record<string, unknown> }>;
 }
 
 /** The Temporal client subset the trip handler depends on. */
 export interface TripWorkflowClient {
-    start(workflowType: string, options: { taskQueue: string; workflowId: string; args: [TripWorkflowInput] }): Promise<{ workflowId: string }>;
+    start(
+        workflowType: string,
+        options: { taskQueue: string; workflowId: string; args: [TripWorkflowInput]; memo?: Record<string, unknown> },
+    ): Promise<{ workflowId: string }>;
     getHandle(workflowId: string): TripWorkflowHandle;
 }
 
@@ -109,6 +118,33 @@ export function tripStatus(tripId: string): TripStatusT | undefined {
     return trips.get(tripId)?.status;
 }
 
+/**
+ * Memo key under which a trip's workflow stores the owner's subject. The memo
+ * is written once at start and Temporal keeps it for the life of the workflow,
+ * including after it closes, so GetTrip can check ownership from any process
+ * and across restarts, without a table of its own.
+ */
+const OWNER_MEMO_KEY = "owner";
+
+/**
+ * The authenticated caller's subject. The auth interceptor sets the context
+ * before any handler runs, but an empty subject (a token without `sub`) would
+ * make every such caller the owner of every other's trips, so it is rejected
+ * here instead of being used as an owner.
+ */
+function callerSubject(): string {
+    const { subject } = requireAuthContext();
+    if (subject === "") {
+        throw new ConnectError("The credentials carry no subject.", Code.Unauthenticated);
+    }
+    return subject;
+}
+
+/** The error GetTrip answers for an unknown trip and for another caller's trip alike. */
+function tripNotFound(tripId: string): ConnectError {
+    return new ConnectError(`Trip "${tripId}" not found.`, Code.NotFound);
+}
+
 /** Map a closed-workflow status name to a terminal trip status for GetTrip. */
 function terminalStatusFor(workflowStatusName: string): TripStatusT {
     // A completed saga settled the trip; anything else (FAILED/CANCELLED/
@@ -136,6 +172,10 @@ export function createTripService(options: TripServiceOptions): ServiceDefinitio
 
     return defineService(TripService, {
         async startTrip(req, ctx) {
+            // The trip belongs to the authenticated caller. The request has no
+            // user id to trust: the owner is the subject of the verified token.
+            const owner = callerSubject();
+
             // SYNCHRONOUS availability pre-check — preserves today's edge error
             // contract. An unknown vehicle throws Code.NotFound inside
             // FleetService and propagates unchanged; an unavailable one is
@@ -159,7 +199,8 @@ export function createTripService(options: TripServiceOptions): ServiceDefinitio
             const handle = await workflowClient.start("TripWorkflow", {
                 taskQueue,
                 workflowId: tripId,
-                args: [{ userId: req.userId, vehicleId: req.vehicleId, tripId }],
+                args: [{ userId: owner, vehicleId: req.vehicleId, tripId }],
+                memo: { [OWNER_MEMO_KEY]: owner },
             });
 
             return create(StartTripResponseSchema, {
@@ -173,7 +214,24 @@ export function createTripService(options: TripServiceOptions): ServiceDefinitio
                 throw new ConnectError("Temporal is not configured — cannot read trip status.", Code.Unavailable);
             }
 
+            const subject = callerSubject();
             const handle = workflowClient.getHandle(req.tripId);
+
+            // Only the owner may read a trip. A trip that is someone else's, has
+            // no recorded owner, or does not exist at all gets the same NotFound,
+            // so the answer never confirms that another caller's id exists.
+            let owner: unknown;
+            try {
+                owner = (await handle.describe()).memo?.[OWNER_MEMO_KEY];
+            } catch (err) {
+                if (err instanceof WorkflowNotFoundError) {
+                    throw tripNotFound(req.tripId);
+                }
+                throw new ConnectError(`Could not read status for trip "${req.tripId}".`, Code.Unavailable);
+            }
+            if (owner !== subject) {
+                throw tripNotFound(req.tripId);
+            }
 
             // Prefer the LIVE status from the running workflow's Query. Only when
             // the Query is unavailable because the run is closed/gone or its

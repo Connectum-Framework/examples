@@ -32,16 +32,19 @@ import "connectum/auth/v1/options.proto";
 service TripService {
   option (connectum.auth.v1.service_auth) = { default_policy: "allow" };
 
-  // StartTrip starts a trip for (user_id, vehicle_id). Requires a valid JWT.
+  // StartTrip starts a trip for the authenticated caller on the given vehicle.
+  // Requires a valid JWT; the trip belongs to the token's subject.
   // It pre-checks availability SYNCHRONOUSLY (FAILED_PRECONDITION if the vehicle
   // is unavailable, NOT_FOUND if unknown — propagated from FleetService) BEFORE
   // starting the durable workflow, then returns the trip id, initial status, and
   // the workflow id.
   rpc StartTrip(StartTripRequest) returns (StartTripResponse) {}
 
-  // GetTrip returns a trip's current status. Requires a valid JWT. It reads live
-  // status from the running workflow via a Temporal Workflow Query, falling back
-  // to a terminal status when the workflow has closed.
+  // GetTrip returns a trip's current status. Requires a valid JWT. Only the
+  // trip's owner can read it: for any other caller the trip is NOT_FOUND,
+  // exactly as if the id did not exist. It reads live status from the running
+  // workflow via a Temporal Workflow Query, falling back to a terminal status
+  // when the workflow has closed.
   rpc GetTrip(GetTripRequest) returns (GetTripResponse) {}
 
   // RecordTrip creates the trip ledger row (status STARTED). INTERNAL: called by
@@ -65,7 +68,11 @@ service TripService {
 }
 
 message StartTripRequest {
-  string user_id = 1;
+  // The trip's owner is the authenticated caller (the verified token's
+  // subject), so the request carries no user id. Field 1 used to hold one;
+  // its number and name stay reserved so they are never reused.
+  reserved 1;
+  reserved "user_id";
   string vehicle_id = 2;
 }
 
