@@ -776,8 +776,9 @@ durable NATS JetStream consumer (one delivered and acknowledged message per
 consumer). A reactor does not log its reaction: it keeps the tally, audit line or
 receipt in memory (`src/events/reactors.ts`) and logs only `reactor ready` and
 `reactor stopped`, so delivery is visible on the consumers, and the reactions
-themselves in `tests/e2e/broadcast.test.ts`. Stop one reactor and replay — the
-others still receive (broadcast, not steal).
+themselves in `tests/e2e/broadcast.test.ts`. Stop one reactor and run another
+trip to the end: the new `trips.completed` event still reaches the reactors that
+are running (broadcast, not steal).
 
 > **Version note.** This phase uses `createBroadcastSubscribers` (reactor buses)
 > and the `publishes` option on `createEventBus` (publisher bus), both added in
