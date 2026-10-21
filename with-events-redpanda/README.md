@@ -314,7 +314,7 @@ Redpanda is fully compatible with the Kafka API, so `@connectum/events-kafka` (`
 ```yaml
 services:
   redpanda:                    # Kafka-compatible broker
-    image: redpandadata/redpanda:latest
+    image: redpandadata/redpanda:v25.3.10
     ports: ["9092:9092"]
 
   console:                     # Web UI for monitoring

@@ -183,7 +183,7 @@ export const orderEventBus = createEventBus({
 ```yaml
 services:
   kafka:                       # Apache Kafka in KRaft mode (no ZooKeeper)
-    image: apache/kafka:latest
+    image: apache/kafka:4.2.0
     ports: ["9092:9092"]
     environment:
       KAFKA_NODE_ID: "1"
