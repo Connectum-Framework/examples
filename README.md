@@ -82,7 +82,7 @@ it:
   cross-service `ctx.call` across pods.
 - **Istio** — PeerAuthentication mTLS (STRICT), AuthorizationPolicy, VirtualService /
   DestinationRule, a canary example.
-- **Temporal** — durable `TripWorkflow` saga (reserve → charge → settle) with
+- **Temporal** — durable `TripWorkflow` saga (reserve → record → bill → settle) with
   automatic LIFO compensation; a separate worker process keeps the RPC roles
   build-free.
 
