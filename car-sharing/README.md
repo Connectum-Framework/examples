@@ -422,6 +422,13 @@ Start a trip against the `trips` role (gRPC `:5002`) and watch `TripWorkflow`
 walk reserve → record → end → openTab → addCharge → settle in the Web UI. Stop
 the `billing` role mid-run to watch the compensations unwind in reverse.
 
+`StartTrip` needs a valid RS256 user token (a call without one is answered
+`Missing credentials`), and the `saga` profile ships no identity provider: the
+`trips` role takes its keys from Oathkeeper's JWKS endpoint, which only the `ory`
+profile starts. To drive a trip end to end, start both profiles together
+(`docker compose --profile saga --profile ory up --build`) and obtain the token as
+described in [Phase 4 — Ory as the IdP](#phase-4--ory-as-the-idp).
+
 The internal methods stay closed to the host: a direct call without a service
 token is rejected before any handler runs, e.g.
 
@@ -762,10 +769,15 @@ DATABASE_URL=postgresql://car_sharing:car_sharing@localhost:5432/car_sharing pnp
 docker compose --profile saga up --build   # roles + worker + Temporal + NATS + 3 reactors
 ```
 
-Start a trip on the `trips` role (`:5002`); when the saga settles, all **three**
-reactor logs each print their independent reaction to the one `trips.completed`
-event. Stop one reactor and replay — the others still receive (broadcast, not
-steal).
+Start a trip on the `trips` role (`:5002`; it needs a user token, see
+[Run it and watch the saga](#run-it-and-watch-the-saga)); when the saga settles, all
+**three** reactors receive the one `trips.completed` event, each through its own
+durable NATS JetStream consumer (one delivered and acknowledged message per
+consumer). A reactor does not log its reaction: it keeps the tally, audit line or
+receipt in memory (`src/events/reactors.ts`) and logs only `reactor ready` and
+`reactor stopped`, so delivery is visible on the consumers, and the reactions
+themselves in `tests/e2e/broadcast.test.ts`. Stop one reactor and replay — the
+others still receive (broadcast, not steal).
 
 > **Version note.** This phase uses `createBroadcastSubscribers` (reactor buses)
 > and the `publishes` option on `createEventBus` (publisher bus), both added in

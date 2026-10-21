@@ -45,7 +45,7 @@ grpcurl -plaintext -d '{"name":"world"}' localhost:5000 greeter.v1.GreeterServic
 # { "message": "Hello, world!" }
 ```
 
-An empty name is rejected with `InvalidArgument` (`name: must be at least 1 characters`), the
+An empty name is rejected with `InvalidArgument` (`name: must be at least 1 characters [string.min_len]`), the
 same behaviour the quickstart shows. The example enforces it in the handler instead of
 declaring `min_len = 1` in the proto, so it needs no protovalidate dependency.
 

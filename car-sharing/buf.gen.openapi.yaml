@@ -8,6 +8,11 @@ clean: true
 # authz overlay (scripts/openapi-authz.ts) on top of this base.
 inputs:
   - directory: proto
+    # The event-handler service in trip_events.proto is a set of subscriptions on
+    # the reactor processes, not part of the edge API this contract documents, and
+    # the authz overlay knows only the trips, fleet and billing specs.
+    exclude_paths:
+      - proto/trips/v1/trip_events.proto
 plugins:
   # OpenAPI v3.1 from the Connect proto (sudorandom/protoc-gen-connect-openapi).
   - remote: buf.build/community/sudorandom-connect-openapi:v0.25.7
