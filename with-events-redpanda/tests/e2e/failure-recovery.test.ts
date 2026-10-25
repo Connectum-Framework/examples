@@ -79,7 +79,12 @@ describe("EventBus with Redpanda — failure and restart", () => {
             assert.equal(statusOf(pending, id), "pending", "no one can confirm an order while the inventory service is stopped");
         }
 
-        await compose("start", "inventory-service");
+        // `up --no-deps`, not `start`: `start` refuses to run while the broker's
+        // own healthcheck is failing, and under CPU load that check can time out
+        // for a moment although the broker is fine. This test is about the
+        // service; a broker that is really down shows up as the message never
+        // being handled.
+        await compose("up", "--detach", "--no-deps", "--no-build", "inventory-service");
         await eventually(() => isHealthy(INVENTORY_URL), (healthy) => healthy, "the inventory service to answer again", RESTART_DEADLINE_MS);
 
         await eventually(
