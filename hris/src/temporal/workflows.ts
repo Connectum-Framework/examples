@@ -62,10 +62,22 @@ interface Compensation {
 }
 
 /**
- * Activity proxies. `createEmployee`'s business failure is non-retryable (the
- * activity rethrows `ApplicationFailure(EmployeeExists)`); every other step
- * keeps Temporal's default retry policy, which is the durability the saga
- * demonstrates.
+ * The one activity proxy shared by every step (forward steps, compensations and
+ * the announcement). The retry policy is bounded, not Temporal's unlimited
+ * default, and sets these explicitly:
+ *
+ * - `startToCloseTimeout` of 30 seconds for each attempt;
+ * - `initialInterval` of 1 second (the same value Temporal uses by default);
+ * - `maximumAttempts` of 5, so a transient failure that outlasts five attempts
+ *   fails the step and hands control to the saga's failure handling
+ *   (compensation), instead of being retried forever;
+ * - `nonRetryableErrorTypes` of `EmployeeExists`: `createEmployee`'s business
+ *   failure (the activity rethrows `ApplicationFailure(EmployeeExists)`) is
+ *   never retried.
+ *
+ * `backoffCoefficient` and `maximumInterval` are not set here and stay at
+ * Temporal's defaults. Transient failures of every other step remain
+ * retryable within that bound, which is the durability the saga demonstrates.
  */
 const acts = proxyActivities<typeof activities>({
     startToCloseTimeout: "30 seconds",
@@ -158,8 +170,8 @@ export async function OnboardingWorkflow(input: OnboardingWorkflowInput): Promis
     // Reached only on success (the catch above always rethrows). Announce the
     // completed onboarding to the EventBus reactors. This sits OUTSIDE the
     // compensation scope on purpose: the employee is already active, and losing
-    // the announcement must never undo that, so a failure (after Temporal's
-    // retries) is logged and the workflow still completes.
+    // the announcement must never undo that, so a failure (after its
+    // five attempts) is logged and the workflow still completes.
     //
     // `patched` keeps replay deterministic for runs that completed before this
     // step existed: GetOnboarding queries a closed run by replaying its history,

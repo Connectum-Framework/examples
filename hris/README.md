@@ -157,14 +157,21 @@ createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provision
   retry observing its own prior commit), while a **genuinely different** employee
   under the same id is rethrown as a **non-retryable** `ApplicationFailure` so the
   workflow fails fast with nothing to compensate.
-- Every other step keeps Temporal's **default retry policy** — the durability the
-  saga demonstrates. The compensations are **idempotent**, so an unwind after a
-  partially-applied step is safe.
+- Every activity (forward steps, compensations and the announcement) goes
+  through one proxy with a **bounded retry policy**, not Temporal's unlimited
+  default: each attempt has a 30-second `startToCloseTimeout`, the
+  `initialInterval` is 1 second (the same as Temporal's default), at most **5
+  attempts** are made, and the `EmployeeExists` error type is **non-retryable**.
+  `backoffCoefficient` and `maximumInterval` are not set and stay at Temporal's
+  defaults. Transient failures are therefore retried within that bound, which is
+  the durability the saga demonstrates; a failure that outlasts it fails the step
+  and the workflow unwinds the compensations. The compensations are
+  **idempotent**, so an unwind after a partially-applied step is safe.
 - **`activateEmployee`** (onboarding → active) is terminal: a success is final, so
   it pushes no compensation.
 - After it, and outside the compensation scope, **`announceOnboarded`**
   broadcasts `EmployeeOnboarded` (see [Broadcast](#broadcast-employeeonboarded)).
-  If that activity still fails after Temporal's retries, the workflow logs a
+  If that activity still fails after its 5 attempts, the workflow logs a
   warning and stays `COMPLETED`: the employee is already active, and a lost
   announcement must not undo that. The step is guarded with Temporal's
   `patched()`, so runs that completed before it existed still replay
