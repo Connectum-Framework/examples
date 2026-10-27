@@ -164,8 +164,10 @@ createEmployee ──▶ setupPayroll ──▶ grantTimeOff ──▶ provision
   attempts** are made, and the `EmployeeExists` error type is **non-retryable**.
   `backoffCoefficient` and `maximumInterval` are not set and stay at Temporal's
   defaults. Transient failures are therefore retried within that bound, which is
-  the durability the saga demonstrates; a failure that outlasts it fails the step
-  and the workflow unwinds the compensations. The compensations are
+  the durability the saga demonstrates. If a **forward step** still fails after
+  the bound, the workflow unwinds the compensations; a failing compensation is
+  logged and the unwind continues, and an announcement failure is handled
+  separately (below). The compensations are
   **idempotent**, so an unwind after a partially-applied step is safe.
 - **`activateEmployee`** (onboarding → active) is terminal: a success is final, so
   it pushes no compensation.

@@ -69,8 +69,10 @@ interface Compensation {
  * - `startToCloseTimeout` of 30 seconds for each attempt;
  * - `initialInterval` of 1 second (the same value Temporal uses by default);
  * - `maximumAttempts` of 5, so a transient failure that outlasts five attempts
- *   fails the step and hands control to the saga's failure handling
- *   (compensation), instead of being retried forever;
+ *   fails the activity instead of being retried forever. For a forward step this
+ *   hands control to the saga's compensation; a failing compensation is logged
+ *   and the unwind continues, and an announcement failure is caught without
+ *   compensation;
  * - `nonRetryableErrorTypes` of `EmployeeExists`: `createEmployee`'s business
  *   failure (the activity rethrows `ApplicationFailure(EmployeeExists)`) is
  *   never retried.
