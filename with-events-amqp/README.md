@@ -358,7 +358,7 @@ services:
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [RabbitMQ](https://www.rabbitmq.com/) — AMQP 0-9-1 message broker with Management UI
 - [@connectum/events](https://github.com/Connectum-Framework/connectum) — EventBus with proto-first routing
 - [@connectum/events-amqp](https://github.com/Connectum-Framework/connectum) — AMQP/RabbitMQ adapter

@@ -336,7 +336,7 @@ services:
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [Redpanda](https://redpanda.com/) — Kafka-compatible streaming platform
 - [Redpanda Console](https://docs.redpanda.com/current/manage/console/) — Web UI for topics and messages
 - [@connectum/events](https://github.com/Connectum-Framework/connectum) — EventBus with proto-first routing
