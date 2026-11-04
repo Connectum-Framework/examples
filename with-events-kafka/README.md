@@ -203,7 +203,7 @@ services:
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [Apache Kafka](https://kafka.apache.org/) — distributed event streaming platform (KRaft mode)
 - [@connectum/events](https://github.com/Connectum-Framework/connectum) — EventBus with proto-first routing
 - [@connectum/events-kafka](https://github.com/Connectum-Framework/connectum) — KafkaJS adapter (Kafka + Redpanda)
