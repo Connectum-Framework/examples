@@ -332,8 +332,8 @@ private `x-connectum-publish-id` header on mandatory publishes, visible to
 external consumers. Set `publisherOptions.correlationHeader: false` to omit it;
 mandatory publishes are then serialized one at a time. This option exists in 1.0.0.
 The `x-event-id` and `x-published-at` envelope headers are removed only by
-`publisherOptions.externalContract`, which requires `@connectum/events-amqp`
-1.1.0 or newer (the lockfile pins 1.3.0). See the
+`publisherOptions.externalContract`, available since `@connectum/events-amqp`
+1.1.0. See the
 [@connectum/events-amqp documentation](https://connectum.dev/en/packages/events-amqp)
 for topology modes, recovery options and the error taxonomy.
 
