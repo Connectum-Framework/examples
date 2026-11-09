@@ -197,7 +197,7 @@ See `src/topology.ts` (env → `enabledServices` + `perServiceEnvResolver`).
 
 Install the published framework packages with `pnpm install`. The current
 `package.json` ranges and lockfile resolve the `@connectum/*` dependencies to
-the 1.2.x line; this README describes the APIs used by those pinned packages.
+the 1.3.x line; this README describes the APIs used by those pinned packages.
 
 ```bash
 pnpm install
@@ -782,7 +782,7 @@ are running (broadcast, not steal).
 
 > **Version note.** This phase uses `createBroadcastSubscribers` (reactor buses)
 > and the `publishes` option on `createEventBus` (publisher bus), both added in
-> `@connectum/events@1.1.0`. The example pins the events stack at `^1.2.0`, above
+> `@connectum/events@1.1.0`. The example pins the events stack at `^1.3.0`, above
 > that minimum, so the manifest itself rules out a too-old version: under `^1.0.0` an install that resolved
 > `1.0.0` (an older lockfile, or a registry mirror that lags behind) would break
 > this phase at runtime. The committed lockfile fixes the exact versions that

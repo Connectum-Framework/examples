@@ -49,7 +49,7 @@ change; the code is the source:
   enrols a new hire with 25 days and grants a 25-day annual PTO policy.
 
 > **Note:** this example runs on the published `@connectum/*` packages and
-> requires **1.2.0 or later** (`^1.2.0` in `package.json`). Besides the
+> requires **1.2.0 or later** (`^1.3.0` in `package.json`). Besides the
 > service-catalog API (`defineService`, `ctx.call`, `catalog`) and the EventBus,
 > it uses APIs that are not in 1.0.0: `createCatalogClient` (the worker's
 > client), the EventBus `publishes` / `strictTopics` options, and
