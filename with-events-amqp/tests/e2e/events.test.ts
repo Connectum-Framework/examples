@@ -251,9 +251,8 @@ describe("AMQP startup failures", () => {
             await removeContainer(containerName);
             // A healthy rejected start exits in about a second: the container
             // starts, the broker refuses the exchange, and the probe rejects.
-            // The deadline is for the other case: without fail-fast (or with the
-            // entrypoint report missing) the start never rejects, so the test
-            // must fail instead of hanging the job.
+            // The deadline is for the other case: without fail-fast the start
+            // never rejects, so the test must fail instead of hanging the job.
             const result = await runCompose(
                 [
                     "run", "--rm", "--no-deps", "-T",
