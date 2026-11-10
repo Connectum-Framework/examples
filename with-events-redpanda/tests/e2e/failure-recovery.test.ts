@@ -144,4 +144,63 @@ describe("EventBus with Redpanda — failure and restart", () => {
         }
         assert.equal(reservationOf(reservations, acknowledged), undefined, `order ${acknowledged} was acknowledged before the stop and must not be delivered again`);
     });
+
+    it("a batch that contains a message whose handler fails does not drop the messages behind it", async (t) => {
+        // The orders topic has one partition: the Kafka compose file creates
+        // it with one, and one is the broker default for an auto-created topic
+        // on Redpanda. The producer sets no key, so every order lands in
+        // partition 0. Published while no consumer is in the group, these four
+        // messages are one backlog with consecutive offsets. Both brokers were
+        // observed to return such a backlog in one fetched batch, but that is
+        // not a protocol guarantee: a broker may split the backlog, and then
+        // the scenario would pass without exercising the batch tail. The
+        // failing order is second: the orders behind it can only be confirmed
+        // if the adapter keeps the rest of the batch after a handler failure.
+        await compose("stop", "inventory-service");
+        // A failed assertion below must not leave the service stopped, or the
+        // next local run starts without an inventory consumer.
+        t.after(async () => {
+            await compose("up", "--detach", "--no-deps", "--no-build", "inventory-service");
+        });
+        assert.equal(await isHealthy(INVENTORY_URL), false, "the inventory service is still answering after the stop");
+
+        const ahead = await createOrder("Widget");
+        const flaky = await createOrder("FLAKY");
+        const behind = [await createOrder("Gadget"), await createOrder("Gizmo")];
+        const backlog = [ahead, flaky, ...behind];
+
+        const pending = await getOrders();
+        for (const id of backlog) {
+            assert.equal(statusOf(pending, id), "pending", "no one can confirm an order while the inventory service is stopped");
+        }
+
+        await compose("up", "--detach", "--no-deps", "--no-build", "inventory-service");
+        await eventually(() => isHealthy(INVENTORY_URL), (healthy) => healthy, "the inventory service to answer again", RESTART_DEADLINE_MS);
+
+        await eventually(
+            getOrders,
+            (orders) => backlog.every((id) => statusOf(orders, id) === "confirmed"),
+            `orders ${ahead}, ${flaky} (its handler fails first) and ${behind.join(", ")} behind it, all published while the inventory service was stopped, to be confirmed; an order behind the failing one that never gets confirmed was dropped from its batch`,
+            RESTART_DEADLINE_MS,
+        );
+
+        const reservations = await watchForDuplicates({
+            read: getReservations,
+            violation: (current) => {
+                for (const [id, expected] of [[ahead, 1], [flaky, FLAKY_RUNS_UNTIL_SUCCESS], [behind[0], 1], [behind[1], 1]] as const) {
+                    const deliveries = reservationOf(current, id)?.deliveries;
+                    if (deliveries !== undefined && deliveries > expected) {
+                        return `order ${id} was handled ${deliveries} times, expected ${expected}; it was delivered again after the order was confirmed`;
+                    }
+                }
+                return undefined;
+            },
+            windowMs: DUPLICATE_WINDOW_MS,
+        });
+        assert.equal(reservationOf(reservations, ahead)?.deliveries, 1, "the order before the failing one is handled once");
+        assert.equal(reservationOf(reservations, flaky)?.deliveries, FLAKY_RUNS_UNTIL_SUCCESS, "the failing order is handled successfully once, after the redelivery");
+        for (const id of behind) {
+            assert.equal(reservationOf(reservations, id)?.deliveries, 1, `order ${id}, behind the failing one, is handled once, not dropped with the rest of its batch`);
+        }
+    });
 });
