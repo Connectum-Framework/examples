@@ -28,8 +28,6 @@ updates:
     commit-message:
       prefix: "chore(deps):"
     open-pull-requests-limit: 10
-    reviewers:
-      - Connectum-Framework/maintainers
 
   # Every action in .github/workflows is referenced by full commit SHA with the
   # release it belongs to in a trailing comment, which is the form this ecosystem
@@ -42,5 +40,3 @@ updates:
     commit-message:
       prefix: "ci(deps):"
     open-pull-requests-limit: 10
-    reviewers:
-      - Connectum-Framework/maintainers
