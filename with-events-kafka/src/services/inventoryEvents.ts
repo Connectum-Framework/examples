@@ -12,7 +12,8 @@ export const reservations = new Map<string, { orderId: string; product: string; 
 const FLAKY_PRODUCT = "FLAKY";
 const FLAKY_FAILING_RUNS = MAX_RETRIES + 1;
 
-// Handler runs per order, failed ones included.
+// Handler runs per order, failed ones included. Demo bookkeeping kept for the
+// life of the process: the map grows by one entry per order and is never pruned.
 const runs = new Map<string, number>();
 
 export const inventoryEventRoutes: EventRoute = (events) => {
