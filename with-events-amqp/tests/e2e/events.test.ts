@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+// `docker compose` finds the project file in its working directory, so it is
+// run in the example directory wherever the tests were started from.
+const exampleDir = fileURLToPath(new URL("../../", import.meta.url));
 
 const ORDER_URL = process.env.ORDER_URL ?? "http://localhost:5001";
 const INVENTORY_URL = process.env.INVENTORY_URL ?? "http://localhost:5002";
@@ -107,7 +112,7 @@ type ComposeRun = { code: number | null; signal: NodeJS.Signals | null; output: 
  */
 function runCompose(args: string[], timeoutMs: number): Promise<ComposeRun> {
     return new Promise((resolve, reject) => {
-        const child = spawn("docker", ["compose", ...args], { timeout: timeoutMs, killSignal: "SIGKILL" });
+        const child = spawn("docker", ["compose", ...args], { cwd: exampleDir, timeout: timeoutMs, killSignal: "SIGKILL" });
         let output = "";
         child.stdout.on("data", (chunk: Buffer) => {
             output += chunk.toString();
