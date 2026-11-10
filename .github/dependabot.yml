@@ -1,0 +1,46 @@
+version: 2
+
+# The Dockerfiles pin their base images by digest, so a moved upstream tag cannot
+# change what these images build from without a reviewed commit here. Dependabot is
+# what keeps those pins current: it reads `tag@sha256:...` from a Dockerfile and
+# updates the tag and the digest together.
+updates:
+  # One entry with a directory list rather than a recursive glob: this is the form
+  # the Dependabot documentation describes for several directories, and an explicit
+  # list makes a new example visible in the diff when it is added. A directory that
+  # holds more than one Dockerfile (getting-started has Dockerfile and
+  # Dockerfile.bun) is covered by its single entry.
+  - package-ecosystem: docker
+    directories:
+      - /car-sharing
+      - /getting-started
+      - /hris
+      - /o11y-coroot/service
+      - /performance-test-server
+      - /with-events-amqp
+      - /with-events-dlq
+      - /with-events-kafka
+      - /with-events-redpanda
+      - /with-events-valkey
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(deps):"
+    open-pull-requests-limit: 10
+    reviewers:
+      - Connectum-Framework/maintainers
+
+  # Every action in .github/workflows is referenced by full commit SHA with the
+  # release it belongs to in a trailing comment, which is the form this ecosystem
+  # updates (it rewrites both the SHA and the comment).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci(deps):"
+    open-pull-requests-limit: 10
+    reviewers:
+      - Connectum-Framework/maintainers
