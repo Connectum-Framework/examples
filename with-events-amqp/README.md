@@ -303,9 +303,10 @@ adapter: AmqpAdapter({
 
 ### A topology the broker refuses
 
-The name defaults to `orders`; the `AMQP_EXCHANGE` override exists so the
-conflict below can point one short-lived service at an exchange of its own,
-without touching the exchange the running stack uses.
+Both services read `AMQP_EXCHANGE` (default `orders`); the quick start never
+sets it, and setting it for only one service splits the saga across two
+exchanges — the conflict below uses it on a single short-lived service and
+never touches the running stack.
 
 ```bash
 # Declare the exchange the example would create as a different type.
@@ -315,13 +316,21 @@ curl -u guest:guest -X PUT http://localhost:15672/api/exchanges/%2F/orders.examp
 AMQP_URL=amqp://localhost:5672 AMQP_EXCHANGE=orders.example-conflict pnpm run start:order
 ```
 
-Observed output (the process exits with status 1):
+Observed output (output shortened: stack-trace frames and the `[cause]` block
+are omitted; every line that carries the behavior is kept). The process exits
+with status 1:
 
 ```text
+$ node src/order-service.ts
 Starting Order Service (Events + AMQP/RabbitMQ)...
+
+createServer: readMaxBytes is not set, so incoming messages are not limited (the default is the transport's cap of 4294967295 bytes, about 4 GiB). An authentication interceptor runs only after a message has been received, so one oversized request can exhaust memory. Set readMaxBytes to the largest message your services accept. See https://connectum.dev/en/guide/security/request-admission
 Order Service starting...
 [order-service] setup-failed during initial setup: AmqpTopologyError (exchange 'orders.example-conflict'): Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders.example-conflict' in vhost '/': received 'topic' but current is 'direct'"
-Order Service cannot start: AmqpTopologyError (exchange 'orders.example-conflict'): Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders.example-conflict' in vhost '/': received 'topic' but current is 'direct'"
+Order Service error: AmqpTopologyError: Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders.example-conflict' in vhost '/': received 'topic' but current is 'direct'"
+  object: { kind: 'exchange', name: 'orders.example-conflict' },
+Order Service cannot start: AmqpTopologyError (exchange 'orders.example-conflict')
+[ELIFECYCLE] Command failed with exit code 1.
 ```
 
 Remove the exchange afterwards:
@@ -348,14 +357,30 @@ broker in another terminal:
 docker compose start rabbitmq
 ```
 
-Observed lines, about 9 seconds after `docker compose start rabbitmq` (the
-previous command had been waiting for 5 seconds while the broker was down):
+Observed output (the log marks the steps: service start 14:57:09, broker start
+14:57:14, ready 14:57:21 — 7 seconds after the broker started and 12 seconds
+after the service started):
 
 ```text
+$ node src/order-service.ts
+Starting Order Service (Events + AMQP/RabbitMQ)...
+
+createServer: readMaxBytes is not set, so incoming messages are not limited (the default is the transport's cap of 4294967295 bytes, about 4 GiB). An authentication interceptor runs only after a message has been received, so one oversized request can exhaust memory. Set readMaxBytes to the largest message your services accept. See https://connectum.dev/en/guide/security/request-admission
+Order Service starting...
 Server listening 0.0.0.0:5001
 
 Order Service ready on 0.0.0.0:5001
-AMQP: amqp://***:***@localhost:5672
+AMQP: amqp://localhost:5672
+
+Test with curl:
+  curl -X POST http://localhost:5001/orders.v1.OrderService/CreateOrder \
+    -H "Content-Type: application/json" \
+    -d '{"product":"Widget","quantity":5,"customer":"Alice"}'
+
+  curl -X POST http://localhost:5001/orders.v1.OrderService/GetOrders \
+    -H "Content-Type: application/json" -d '{}'
+
+Press Ctrl+C to shutdown gracefully
 ```
 
 ### Setup failures during a reconnect
