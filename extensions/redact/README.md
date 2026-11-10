@@ -31,20 +31,20 @@ await server.start();
 
 ### Module format
 
-Both files are ES modules: they use `import` and `export`, and `redact.ts`
-imports `./extensions.ts` by its `.ts` path. Copy them into a project that
-type-checks ES modules: `"type": "module"` in the nearest `package.json`, and
-`"module": "nodenext"` plus `"allowImportingTsExtensions": true` in
-`tsconfig.json`. The examples in this repository use those settings together
-with `"verbatimModuleSyntax": true`. `"module": "esnext"` with
+`redact.ts` and `extensions.ts` are ES modules, and `redact.ts` imports
+`./extensions.ts` by its `.ts` path. In the nearest `package.json` set
+`"type": "module"`; in `tsconfig.json` set `"module": "nodenext"`,
+`"allowImportingTsExtensions": true` and `"noEmit": true` (TypeScript accepts
+`.ts` import paths only together with `noEmit` or `emitDeclarationOnly`). The examples
+in this repository use these settings together with
+`"verbatimModuleSyntax": true`. `"module": "esnext"` with
 `"moduleResolution": "bundler"` also type-checks the files, with or without the
 `type` field.
 
-In a CommonJS package (`"module": "nodenext"`, no `"type": "module"`) with
-`"verbatimModuleSyntax": true`, `tsc --noEmit` rejects the files with TS1287
-(`A top-level 'export' modifier cannot be used on value declarations in a CommonJS module when 'verbatimModuleSyntax' is enabled`) and TS1295
-(`ECMAScript imports and exports cannot be written in a CommonJS file under 'verbatimModuleSyntax'`).
-Without `verbatimModuleSyntax` the check passes.
+Without `"type": "module"`, a project that sets `"verbatimModuleSyntax": true`
+rejects the files with TS1287 and TS1295: ES `import` and `export` cannot be
+written in a CommonJS file under that option. Without `verbatimModuleSyntax`
+the type check passes.
 
 ## Proto Definition
 
