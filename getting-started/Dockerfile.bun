@@ -10,7 +10,7 @@
 # dependencies plus the generated code, and never needs buf.
 
 # ── build: full dependencies, then generate the proto code ──────────────────
-FROM oven/bun:1-slim AS build
+FROM oven/bun:1-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS build
 WORKDIR /app
 COPY package.json ./
 # No lockfile is committed for this example: deps resolve from the caret (^) ranges in
@@ -24,13 +24,13 @@ COPY proto/ ./proto/
 RUN bunx buf generate
 
 # ── deps: production dependencies only ──────────────────────────────────────
-FROM oven/bun:1-slim AS deps
+FROM oven/bun:1-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS deps
 WORKDIR /app
 COPY package.json ./
 RUN bun install --production
 
 # ── runtime ─────────────────────────────────────────────────────────────────
-FROM oven/bun:1-slim AS runtime
+FROM oven/bun:1-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime
 # curl, not wget: this service serves plaintext h2c (`allowHTTP1: false`), and wget
 # speaks HTTP/1.1 only. Against an h2c listener `wget --spider` gets an empty status
 # line yet still exits 0, so it would report a dead or NOT_SERVING service as healthy.
