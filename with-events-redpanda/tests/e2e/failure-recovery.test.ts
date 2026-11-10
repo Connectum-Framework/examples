@@ -146,10 +146,14 @@ describe("EventBus with Redpanda — failure and restart", () => {
     });
 
     it("a batch that contains a message whose handler fails does not drop the messages behind it", async (t) => {
-        // The orders topic has one partition and the producer sets no key, so
-        // every order lands in partition 0. Published while no consumer is in
-        // the group, these four messages are one backlog with consecutive
-        // offsets, and the restarted consumer fetches them in one batch. The
+        // The orders topic has one partition: the Kafka compose file creates
+        // it with one, and one is the broker default for an auto-created topic
+        // on Redpanda. The producer sets no key, so every order lands in
+        // partition 0. Published while no consumer is in the group, these four
+        // messages are one backlog with consecutive offsets. Both brokers were
+        // observed to return such a backlog in one fetched batch, but that is
+        // not a protocol guarantee: a broker may split the backlog, and then
+        // the scenario would pass without exercising the batch tail. The
         // failing order is second: the orders behind it can only be confirmed
         // if the adapter keeps the rest of the batch after a handler failure.
         await compose("stop", "inventory-service");
