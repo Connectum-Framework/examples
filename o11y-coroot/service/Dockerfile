@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Install dependencies
 # =============================================================================
-FROM node:26-slim AS deps
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS deps
 
 # pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
 # frozen install below reads the lockfile exactly as it was produced. npm rather
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile --prod
 # =============================================================================
 # Stage 2: Production runtime
 # =============================================================================
-FROM node:26-slim AS runtime
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS runtime
 
 # Install curl for HEALTHCHECK (minimal addition)
 RUN apt-get update && apt-get install -y --no-install-recommends curl \

@@ -1,7 +1,7 @@
 # =============================================================================
 # Performance Test Server — Docker image for k6 benchmarking
 # =============================================================================
-FROM node:26-slim AS deps
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS deps
 
 # pnpm is pinned to the version that writes the committed pnpm-lock.yaml, so the
 # frozen install reads the lockfile exactly as it was produced.
@@ -19,7 +19,7 @@ RUN pnpm install --frozen-lockfile --prod
 # =============================================================================
 # Generate protobuf TypeScript code from .proto sources
 # =============================================================================
-FROM node:26-slim AS proto
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS proto
 
 RUN npm install -g pnpm@12.4.1
 
@@ -39,7 +39,7 @@ RUN pnpm build:proto
 # =============================================================================
 # Generate self-signed TLS certificates for h2 (ALPN) support
 # =============================================================================
-FROM node:26-slim AS certs
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS certs
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -51,7 +51,7 @@ RUN mkdir -p /certs && openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:p
 # =============================================================================
 # Production runtime
 # =============================================================================
-FROM node:26-slim AS runtime
+FROM node:26-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS runtime
 
 RUN groupadd -r connectum && useradd -r -g connectum -d /app connectum
 
