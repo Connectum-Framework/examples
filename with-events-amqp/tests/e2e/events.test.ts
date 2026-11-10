@@ -249,6 +249,11 @@ describe("AMQP startup failures", () => {
         await declareExchange(conflictExchange, "direct");
         try {
             await removeContainer(containerName);
+            // A healthy rejected start exits in about a second: the container
+            // starts, the broker refuses the exchange, and the probe rejects.
+            // The deadline is for the other case: without fail-fast (or with the
+            // entrypoint report missing) the start never rejects, so the test
+            // must fail instead of hanging the job.
             const result = await runCompose(
                 [
                     "run", "--rm", "--no-deps", "-T",
@@ -259,9 +264,12 @@ describe("AMQP startup failures", () => {
                 20_000,
             );
             assert.equal(result.signal, null, `the service must exit on its own; output:\n${result.output}`);
-            assert.notEqual(result.code, 0, `the service must exit non-zero; output:\n${result.output}`);
+            assert.equal(result.code, 1, `the service must exit with 1; output:\n${result.output}`);
             assert.match(result.output, /AmqpTopologyError/, result.output);
             assert.match(result.output, new RegExp(`exchange '${conflictExchange}'`), result.output);
+            // The adapter's setup-failed line and the entrypoint's summary are
+            // different facts: this pins the summary the process ends with.
+            assert.match(result.output, new RegExp(`Order Service cannot start: AmqpTopologyError \\(exchange '${conflictExchange}'\\)`), result.output);
         } finally {
             await removeContainer(containerName);
             await deleteExchange(conflictExchange);
