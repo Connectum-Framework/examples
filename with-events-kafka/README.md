@@ -115,7 +115,7 @@ The e2e suite (`pnpm test`, with the stack running) also checks what the example
 - the failure is reported in the inventory service log as `handler error for <topic>[<partition>]@<offset>`;
 - the inventory service is stopped, two orders are placed while it is down, and it is started again. Both orders must be confirmed, once each, and the order acknowledged before the stop must not be delivered again.
 
-The suite calls `docker compose` in the example directory: it stops `inventory-service`, brings it back with `docker compose up --no-deps` and reads its log. The redelivery check waits up to 90 seconds for the retry backoff, the adapter's redelivery delay and the consumer's fetch cycle; the restart check waits up to 120 seconds, because a consumer that rejoins its group can wait for the stopped member's session to expire. These checks pass only with the `@connectum/events-kafka` settlement fix that ships in 1.3.0, which is the version the lockfile installs.
+The suite calls `docker compose` in the example directory: it stops `inventory-service`, brings it back with `docker compose up --no-deps` and reads its log. The redelivery check waits up to 90 seconds for the retry backoff, the adapter's redelivery delay and the consumer's fetch cycle. The restart check waits up to 120 seconds as headroom: in the runs the stopped consumer left its group cleanly and rejoined in about 3 seconds, so the deadline covers that rejoin plus delivery of the messages published while it was down, not an observed wait. These checks pass on `@connectum/events-kafka` 1.3.0, the version the lockfile installs, and fail on 1.0.0; 1.1.x and 1.2.x were not run against them.
 
 ### Stopping
 
