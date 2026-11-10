@@ -72,7 +72,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up buf (for `buf curl`)
-        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1
+        uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1
         with:
           setup_only: true
 
