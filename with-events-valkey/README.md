@@ -197,7 +197,7 @@ services:
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [Valkey](https://valkey.io/) — Open-source, Redis-compatible in-memory data store
 - [@connectum/events](https://github.com/Connectum-Framework/connectum) — EventBus with proto-first routing
 - [@connectum/events-redis](https://github.com/Connectum-Framework/connectum) — Redis Streams adapter (Redis + Valkey)

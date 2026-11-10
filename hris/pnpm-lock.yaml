@@ -15,29 +15,29 @@ importers:
         specifier: ^2.16.0
         version: 2.16.0
       '@connectrpc/connect':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.16.0)
+        specifier: ^2.3.0
+        version: 2.3.0(@bufbuild/protobuf@2.16.0)
       '@connectrpc/connect-node':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+        specifier: ^2.3.0
+        version: 2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       '@connectum/core':
-        specifier: ^1.2.0
-        version: 1.2.0
+        specifier: ^1.3.0
+        version: 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       '@connectum/events':
-        specifier: ^1.2.0
-        version: 1.2.0
+        specifier: ^1.3.0
+        version: 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))
       '@connectum/events-nats':
-        specifier: ^1.2.0
-        version: 1.2.0(@connectum/events@1.2.0)
+        specifier: ^1.3.0
+        version: 1.3.0(@connectum/events@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))))
       '@connectum/healthcheck':
-        specifier: ^1.2.0
-        version: 1.2.0(@connectum/core@1.2.0)
+        specifier: ^1.3.0
+        version: 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))
       '@connectum/interceptors':
-        specifier: ^1.2.0
-        version: 1.2.0(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))
+        specifier: ^1.3.0
+        version: 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))
       '@connectum/reflection':
-        specifier: ^1.2.0
-        version: 1.2.0(@connectum/core@1.2.0)
+        specifier: ^1.3.0
+        version: 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))
       '@temporalio/activity':
         specifier: ^1.18.1
         version: 1.24.0
@@ -64,8 +64,8 @@ importers:
         specifier: ^2.16.0
         version: 2.16.0(@bufbuild/protobuf@2.16.0)(supports-color@8.1.1)
       '@connectum/protoc-gen-catalog':
-        specifier: ^1.2.0
-        version: 1.2.0(supports-color@8.1.1)
+        specifier: ^1.3.0
+        version: 1.3.0(supports-color@8.1.1)
       '@electric-sql/pglite':
         specifier: ^0.5.0
         version: 0.5.8
@@ -168,15 +168,15 @@ packages:
   '@bufbuild/re2@0.6.1':
     resolution: {integrity: sha512-VY7zV7bWKdAsf46epowVKidolEfMKw/FoHo2xYVDVzLj/hiP5qDL3nXqJt6seZClRYfG+uzAPFQBZBlj07wO5A==}
 
-  '@connectrpc/connect-node@2.2.0':
-    resolution: {integrity: sha512-E6uUO6e11WdynAuBjuN+0WpHjqxEM9BNDdfDIJHcn49Esg/WxSIbn2y1KFt9XL96IJi01qdBbvubcdpBz1X3Zw==}
+  '@connectrpc/connect-node@2.3.0':
+    resolution: {integrity: sha512-kcQgV4GqFIESsl0MOHInC9/wNYU4aJDvG1OfGR5Lq6/l0gqycSGqEk+fixXGcUtPLc8vJBgS4V1nTmWlh4o9gw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.2.0
+      '@connectrpc/connect': 2.3.0
 
-  '@connectrpc/connect@2.2.0':
-    resolution: {integrity: sha512-M63OQ1ZFcPUm85CuewJ9G9CMV8LjzGR9935xOnXNQGSazAbwMb3x2W7vXBYM1zqrP7XFD8uxp/dUAhirclgwnQ==}
+  '@connectrpc/connect@2.3.0':
+    resolution: {integrity: sha512-rjAn8L9KbAZrkwiB8m1qzDsLs74hkYmwwM2iSWuxTPVOTRm/EZw31smKbQqPU50AXqJC5eKKpEnA6Uf/swQOgQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
 
@@ -187,40 +187,56 @@ packages:
       '@bufbuild/protovalidate': ^1.0.0
       '@connectrpc/connect': ^2.0.3
 
-  '@connectum/core@1.2.0':
-    resolution: {integrity: sha512-3T8MJP8oeWO+cNgMUEImsMqcMR2SgLgTpbc1aAd6K/uzsFtMQQDIjuAnp0OV2uIVlbvkQHwMhO2pPYGyczHTLg==}
-    engines: {node: '>=22.13.0'}
-
-  '@connectum/events-nats@1.2.0':
-    resolution: {integrity: sha512-9eppF/+a2Ou4bJPXN4H+6dRCxI9d5ICmJXCgSxe1+k+NjxUrhgxl2Dc/X60JprNzENGS62fuC0NCvf5RlQW2RQ==}
+  '@connectum/core@1.3.0':
+    resolution: {integrity: sha512-VlxFA+/ti/M8+/I+gpmahLzNh9+HqxQisle609xluTdHIKfsbeDMrSCj4UgobvLSnd8kbHjWo7pDQGMBok5npg==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/events': ^1.2.0
+      '@bufbuild/protobuf': ^2.16.0
+      '@connectrpc/connect': ^2.3.0
+      '@connectrpc/connect-node': ^2.3.0
 
-  '@connectum/events@1.2.0':
-    resolution: {integrity: sha512-CUb9XKi//X6suRqPIZaZ3z/EXMyTgvVGiiY8I4949qTgChzm+bvR8crbT8sg1pdvtnpvNgESzGFiv1u3KKE1ew==}
-    engines: {node: '>=22.13.0'}
-
-  '@connectum/healthcheck@1.2.0':
-    resolution: {integrity: sha512-Q2kgb5vc8ViRBuHkvKwJMBYcIMtz52BnxXdfv7kM8nzdJktBX2FCFMiTkrsQAhPj2oH9UiLH7iy47nJMvA3wfQ==}
+  '@connectum/events-nats@1.3.0':
+    resolution: {integrity: sha512-KGDaXmdyFT6YqnTXMZWXotd/PMi2ymobpsJP+xQcO5Z/4XaRvvBSXmgtxXvs/rE8TVyH7z9NAAvMxPvXeg0zPw==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/core': ^1.2.0
+      '@connectum/events': ^1.3.0
 
-  '@connectum/interceptors@1.2.0':
-    resolution: {integrity: sha512-4pQ4/sL87xEFROWKXHJVA2HGQubtguYXE2ye1pfwZErQ7Rj0H6s8UebS31nsGnTzXFoNJKzoI2VI+Hh13yK3ng==}
+  '@connectum/events@1.3.0':
+    resolution: {integrity: sha512-UaMjle+ZpM/906rukNsZp1qTGxjqBHzbt/vsSc8vQv+GFiWBlprl2067+G/Zk2Fw3QPhjgotcEETeGhm7Oq/Cw==}
     engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.16.0
+      '@connectrpc/connect': ^2.2.0
+      '@connectum/core': ^1.3.0
 
-  '@connectum/protoc-gen-catalog@1.2.0':
-    resolution: {integrity: sha512-xAc5M/tt9t6wDj1Vs4xZWSOtPNhnKuBDQm8WE5WvTZ3gsmJ675MIXjiD/Mk0a/gEbbEVB2+YG13R8kNxwghwtQ==}
+  '@connectum/healthcheck@1.3.0':
+    resolution: {integrity: sha512-ovA3Ww9liEbuOZKHppvdumjaS+IqiXoTwGNVspViX44MceerDT5AxgmNT3OaM9c/0D7iHc3BikZuWAJ34glAsg==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.16.0
+      '@connectrpc/connect': ^2.2.0
+      '@connectum/core': ^1.3.0
+
+  '@connectum/interceptors@1.3.0':
+    resolution: {integrity: sha512-KH6rqAfXcao8Lvlt+N3FOMuozKEo3y8HljfiIoek+T55nG39nZEyZKTtgenwyLQGtO4x7B4W/XZWCQyE8AmDIA==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.16.0
+      '@connectrpc/connect': ^2.2.0
+      '@connectum/core': ^1.3.0
+
+  '@connectum/protoc-gen-catalog@1.3.0':
+    resolution: {integrity: sha512-zZwRWX149RDiKY+WXVoJaVT+Ji14HApMzNjrLKBRDHx1xcfrWsiuvV28McuWDnt/WAkCd1i17KC5iE7NiZcZFQ==}
     engines: {node: '>=22.13.0'}
     hasBin: true
 
-  '@connectum/reflection@1.2.0':
-    resolution: {integrity: sha512-OIpgVMUbGOraSnZIh5zJj6yaoTusOBRM9l+pDEU2hTo/0ztzsCMvGlcw2I69oJOwbDvG1GKik+hsy83+kk9oHg==}
+  '@connectum/reflection@1.3.0':
+    resolution: {integrity: sha512-D6CDAs0WEPTsGgQX2oFHnNf8xtyjw6HjzzXzbAle+OElNKV2f8ANdaqxGh0XJdvoam7xbxC5FgtAK0D9NdOO/g==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@connectum/core': ^1.2.0
+      '@bufbuild/protobuf': ^2.16.0
+      '@connectrpc/connect': ^2.2.0
+      '@connectum/core': ^1.3.0
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
@@ -695,9 +711,6 @@ packages:
     engines: {node: '>=10.0'}
     peerDependencies:
       tslib: '2'
-
-  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
-    resolution: {integrity: sha512-OisIo84Kmv4sTIFSC8v6sFxlj7H22g8uvRScqFz8ZIWEhNdg7rJK60G05EdQo5juNSK0KzG+x31TieikgQotog==}
 
   '@nats-io/jetstream@3.4.0':
     resolution: {integrity: sha512-GzHQodNJ942+R5LRb8PuZ5ugVWVWMRiufxUYLLVWkXKfwDXYN+Owo0d7L/b9O7BPyrbYD7jQWAC6+ZVuXa9Gyw==}
@@ -1466,8 +1479,8 @@ packages:
     resolution: {integrity: sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==}
     engines: {node: '>=12'}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -1538,69 +1551,68 @@ snapshots:
 
   '@bufbuild/re2@0.6.1': {}
 
-  '@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))':
+  '@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
 
-  '@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)':
+  '@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
 
-  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.16.0)(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))':
+  '@connectrpc/validate@0.2.0(@bufbuild/protobuf@2.16.0)(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@bufbuild/protovalidate': 1.3.0(@bufbuild/protobuf@2.16.0)
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
 
-  '@connectum/core@1.2.0':
+  '@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
-      '@connectrpc/connect-node': 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect-node': 2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       env-var: 7.5.0
-      zod: 4.6.5
+      zod: 4.6.7
 
-  '@connectum/events-nats@1.2.0(@connectum/events@1.2.0)':
+  '@connectum/events-nats@1.3.0(@connectum/events@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))))':
     dependencies:
-      '@connectum/events': 1.2.0
+      '@connectum/events': 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))
       '@nats-io/jetstream': 3.4.0
       '@nats-io/transport-node': 3.4.0
 
-  '@connectum/events@1.2.0':
+  '@connectum/events@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectum/core': 1.2.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectum/core': 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
 
-  '@connectum/healthcheck@1.2.0(@connectum/core@1.2.0)':
+  '@connectum/healthcheck@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
-      '@connectum/core': 1.2.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectum/core': 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
 
-  '@connectum/interceptors@1.2.0(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))':
+  '@connectum/interceptors@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
-      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.16.0)(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
-      '@connectum/core': 1.2.0
+      '@bufbuild/protovalidate': 1.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/validate': 0.2.0(@bufbuild/protobuf@2.16.0)(@bufbuild/protovalidate@1.3.0(@bufbuild/protobuf@2.16.0))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
+      '@connectum/core': 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       cockatiel: 4.0.0
-    transitivePeerDependencies:
-      - '@bufbuild/protovalidate'
 
-  '@connectum/protoc-gen-catalog@1.2.0(supports-color@8.1.1)':
+  '@connectum/protoc-gen-catalog@1.3.0(supports-color@8.1.1)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@bufbuild/protoplugin': 2.16.0(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  '@connectum/reflection@1.2.0(@connectum/core@1.2.0)':
+  '@connectum/reflection@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))(@connectum/core@1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
-      '@connectum/core': 1.2.0
-      '@lambdalisue/connectrpc-grpcreflect': 0.5.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
+      '@connectum/core': 1.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
 
   '@drizzle-team/brocli@0.10.2': {}
 
@@ -1932,11 +1944,6 @@ snapshots:
       '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
       tslib: 2.8.1
-
-  '@lambdalisue/connectrpc-grpcreflect@0.5.0':
-    dependencies:
-      '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
 
   '@nats-io/jetstream@3.4.0':
     dependencies:
@@ -2676,4 +2683,4 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 21.1.1
 
-  zod@4.6.5: {}
+  zod@4.6.7: {}

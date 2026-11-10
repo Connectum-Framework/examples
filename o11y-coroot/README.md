@@ -221,7 +221,7 @@ docker compose down -v
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC microservice framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [Coroot](https://coroot.com/) — Open-source observability platform
 - [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) — Vendor-agnostic telemetry pipeline
 - [ClickHouse](https://clickhouse.com/) — Column-oriented database for traces and logs

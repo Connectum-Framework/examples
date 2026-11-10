@@ -269,7 +269,7 @@ services:
 
 ## Technologies
 
-- [Connectum](https://github.com/Connectum-Framework/connectum) — gRPC/ConnectRPC framework
+- [Connectum](https://github.com/Connectum-Framework/connectum) — Proto-first gRPC/ConnectRPC framework for TypeScript
 - [NATS](https://nats.io/) — Lightweight cloud-native messaging system
 - [NATS JetStream](https://docs.nats.io/nats-concepts/jetstream) — Persistent streaming layer built into NATS
 - [@connectum/events](https://github.com/Connectum-Framework/connectum) — EventBus with proto-first routing, retry and DLQ middleware
