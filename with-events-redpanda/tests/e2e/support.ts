@@ -56,6 +56,29 @@ export async function eventually<T>(read: () => Promise<T>, done: (value: T) => 
     return last;
 }
 
+/**
+ * Poll `read` for `windowMs` and throw as soon as `violation` names a problem.
+ * A duplicate is delivered on a later fetch, so checking once when the final
+ * state is reached can miss it. The window has to outlast the adapter's
+ * redelivery delay plus one fetch cycle of an idle consumer; polling stops
+ * early when a violation appears instead of sleeping through the whole window.
+ */
+export async function watchForDuplicates<T>(options: {
+    read: () => Promise<T>;
+    violation: (value: T) => string | undefined;
+    windowMs: number;
+}): Promise<T> {
+    const deadline = Date.now() + options.windowMs;
+    let last = await options.read();
+    for (;;) {
+        const problem = options.violation(last);
+        if (problem !== undefined) throw new Error(problem);
+        if (Date.now() >= deadline) return last;
+        await sleep(200);
+        last = await options.read();
+    }
+}
+
 export type Order = { orderId: string; status: string; product: string; quantity: number; customer: string };
 export type Reservation = { orderId: string; status: string; product: string; quantity: number; deliveries: number };
 

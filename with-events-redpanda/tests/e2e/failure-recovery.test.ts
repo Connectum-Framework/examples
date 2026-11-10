@@ -11,6 +11,7 @@ import {
     isHealthy,
     reservationOf,
     statusOf,
+    watchForDuplicates,
 } from "./support.ts";
 
 // What a failing handler costs: the retry middleware runs it MAX_RETRIES more
@@ -25,9 +26,15 @@ const FLAKY_RUNS_UNTIL_SUCCESS = MAX_RETRIES + 2;
 // deadline sits well above that sum so that a slow machine does not fail it.
 const REDELIVERY_DEADLINE_MS = 90_000;
 
-// A restarted consumer first has to join its group again, which can wait for
-// the stopped member's session to expire before the partition is reassigned.
+// A restarted consumer first has to join its group again, and the messages
+// published meanwhile have to be delivered.
 const RESTART_DEADLINE_MS = 120_000;
+
+// A duplicate arrives on a later fetch, not with the confirmation, so the
+// counts are read again after this window. It outlasts the adapter's 1 s
+// redelivery delay plus one fetch cycle of an idle consumer (about 5 s in
+// KafkaJS); polling stops early when a duplicate appears.
+const DUPLICATE_WINDOW_MS = 12_000;
 
 describe("EventBus with Redpanda — failure and restart", () => {
     it("a handler that fails is redelivered and neither it nor its neighbours are lost or repeated", async () => {
@@ -42,7 +49,19 @@ describe("EventBus with Redpanda — failure and restart", () => {
             REDELIVERY_DEADLINE_MS,
         );
 
-        const reservations = await getReservations();
+        const reservations = await watchForDuplicates({
+            read: getReservations,
+            violation: (current) => {
+                for (const [id, expected] of [[before, 1], [flaky, FLAKY_RUNS_UNTIL_SUCCESS], [after, 1]] as const) {
+                    const deliveries = reservationOf(current, id)?.deliveries;
+                    if (deliveries !== undefined && deliveries > expected) {
+                        return `order ${id} was handled ${deliveries} times, expected ${expected}; it was delivered again after the order was confirmed`;
+                    }
+                }
+                return undefined;
+            },
+            windowMs: DUPLICATE_WINDOW_MS,
+        });
         assert.equal(reservationOf(reservations, flaky)?.deliveries, FLAKY_RUNS_UNTIL_SUCCESS, "the failing order is handled successfully once, after the redelivery");
         assert.equal(reservationOf(reservations, before)?.deliveries, 1, "the order before the failing one is handled once");
         assert.equal(reservationOf(reservations, after)?.deliveries, 1, "the order after the failing one is handled once, not repeated by the redelivery");
@@ -66,11 +85,16 @@ describe("EventBus with Redpanda — failure and restart", () => {
         );
     });
 
-    it("a consumer restarted after downtime gets what was published meanwhile, once, and nothing it already acknowledged", async () => {
+    it("a consumer restarted after downtime gets what was published meanwhile, once, and nothing it already acknowledged", async (t) => {
         const acknowledged = await createOrder("Widget");
         await eventually(getOrders, (orders) => statusOf(orders, acknowledged) === "confirmed", `order ${acknowledged} to be confirmed before the stop`);
 
         await compose("stop", "inventory-service");
+        // A failed assertion below must not leave the service stopped, or the
+        // next local run starts without an inventory consumer.
+        t.after(async () => {
+            await compose("up", "--detach", "--no-deps", "--no-build", "inventory-service");
+        });
         assert.equal(await isHealthy(INVENTORY_URL), false, "the inventory service is still answering after the stop");
 
         const duringDowntime = [await createOrder("Gadget"), await createOrder("Gizmo")];
@@ -96,7 +120,25 @@ describe("EventBus with Redpanda — failure and restart", () => {
 
         // The restarted service starts with an empty reservation list, so an
         // acknowledged order that shows up in it was delivered a second time.
-        const reservations = await getReservations();
+        // Counts are read at the end of the window: a duplicate can arrive after
+        // the downtime orders are confirmed.
+        const reservations = await watchForDuplicates({
+            read: getReservations,
+            violation: (current) => {
+                const again = reservationOf(current, acknowledged);
+                if (again !== undefined) {
+                    return `order ${acknowledged} was acknowledged before the stop and was delivered again after the restart (${again.deliveries} deliveries)`;
+                }
+                for (const id of duringDowntime) {
+                    const deliveries = reservationOf(current, id)?.deliveries ?? 0;
+                    if (deliveries > 1) {
+                        return `order ${id}, published during the downtime, was handled ${deliveries} times`;
+                    }
+                }
+                return undefined;
+            },
+            windowMs: DUPLICATE_WINDOW_MS,
+        });
         for (const id of duringDowntime) {
             assert.equal(reservationOf(reservations, id)?.deliveries, 1, `order ${id}, published during the downtime, is handled once`);
         }
