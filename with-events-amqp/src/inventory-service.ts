@@ -2,6 +2,7 @@ import { createServer } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
+import { reportStartupFailure } from "./amqpFailureReporting.ts";
 import { inventoryEventBus } from "./inventoryEventBus.ts";
 import { inventoryServiceRoutes } from "./services/inventoryService.ts";
 
@@ -33,4 +34,4 @@ server.on("ready", () => {
 server.on("stop", () => console.log("Inventory Service stopped"));
 server.on("error", (err: unknown) => console.error("Inventory Service error:", err));
 
-await server.start();
+await server.start().catch((error: unknown) => reportStartupFailure("Inventory Service", error));

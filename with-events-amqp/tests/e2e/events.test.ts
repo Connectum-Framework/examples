@@ -1,8 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+// `docker compose` finds the project file in its working directory, so it is
+// run in the example directory wherever the tests were started from.
+const exampleDir = fileURLToPath(new URL("../../", import.meta.url));
 
 const ORDER_URL = process.env.ORDER_URL ?? "http://localhost:5001";
 const INVENTORY_URL = process.env.INVENTORY_URL ?? "http://localhost:5002";
+const MANAGEMENT_URL = process.env.RABBITMQ_MANAGEMENT_URL ?? "http://localhost:15672";
+const MANAGEMENT_AUTH = `Basic ${Buffer.from("guest:guest").toString("base64")}`;
 
 async function connectPost(baseUrl: string, method: string, body: Record<string, unknown> = {}): Promise<unknown> {
     const res = await fetch(`${baseUrl}/${method}`, {
@@ -66,6 +74,65 @@ const getReservations = async (): Promise<Reservation[]> =>
 
 const statusOf = (orders: Order[], orderId: string): string | undefined => orders.find((o) => o.orderId === orderId)?.status;
 const reservationOf = (reservations: Reservation[], orderId: string): Reservation | undefined => reservations.find((r) => r.orderId === orderId);
+
+/**
+ * Declare an exchange through the management API so the broker already holds a
+ * topology the adapter will refuse. The adapter asserts its own exchange as a
+ * topic exchange, so a direct exchange under the same name is the deterministic
+ * conflict its fail-fast option exists for.
+ */
+async function declareExchange(name: string, type: "direct" | "fanout" | "topic"): Promise<void> {
+    const res = await fetch(`${MANAGEMENT_URL}/api/exchanges/%2F/${name}`, {
+        method: "PUT",
+        headers: { authorization: MANAGEMENT_AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ type, durable: true, auto_delete: false, arguments: {} }),
+    });
+    if (!res.ok) {
+        throw new Error(`declare exchange ${name}: ${res.status} ${await res.text()}`);
+    }
+}
+
+/** A cleanup that runs after a failed test must not fail on an absent exchange. */
+async function deleteExchange(name: string): Promise<void> {
+    const res = await fetch(`${MANAGEMENT_URL}/api/exchanges/%2F/${name}`, {
+        method: "DELETE",
+        headers: { authorization: MANAGEMENT_AUTH },
+    });
+    if (!res.ok && res.status !== 404) {
+        throw new Error(`delete exchange ${name}: ${res.status} ${await res.text()}`);
+    }
+}
+
+type ComposeRun = { code: number | null; signal: NodeJS.Signals | null; output: string };
+
+/**
+ * Run a one-off `docker compose` service and collect both streams. The deadline
+ * is what turns a start that never rejects (the defect fail-fast prevents) into
+ * a failing test instead of a hanging job.
+ */
+function runCompose(args: string[], timeoutMs: number): Promise<ComposeRun> {
+    return new Promise((resolve, reject) => {
+        const child = spawn("docker", ["compose", ...args], { cwd: exampleDir, timeout: timeoutMs, killSignal: "SIGKILL" });
+        let output = "";
+        child.stdout.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+        });
+        child.on("error", reject);
+        child.on("close", (code, signal) => resolve({ code, signal, output }));
+    });
+}
+
+/** `docker compose run` leaves its container behind if the CLI itself is killed. */
+function removeContainer(name: string): Promise<void> {
+    return new Promise((resolve) => {
+        const child = spawn("docker", ["rm", "-f", name], { stdio: "ignore" });
+        child.on("error", () => resolve());
+        child.on("close", () => resolve());
+    });
+}
 
 describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
     // /healthz answers 200 with the overall status in the body only while the
@@ -172,5 +239,54 @@ describe("EventBus with AMQP/RabbitMQ — 2 Microservices + Saga", () => {
             assert.equal(reservation?.status, "reserved");
         }
         assert.equal(new Set(orderIds).size, orderIds.length);
+    });
+});
+
+describe("AMQP startup failures", () => {
+    const conflictExchange = "orders.e2e-conflict";
+    const containerName = "with-events-amqp-fail-fast-check";
+
+    it("a conflicting exchange rejects the service with AmqpTopologyError", async () => {
+        // The service asserts `orders` as a topic exchange. A direct exchange
+        // already holding that name is exactly the permanent misconfiguration
+        // failFastOnInitialSetupError is for: the broker refuses with
+        // PRECONDITION_FAILED and retrying cannot change the answer.
+        await declareExchange(conflictExchange, "direct");
+        try {
+            await removeContainer(containerName);
+            // A healthy rejected start exits in about a second: the container
+            // starts, the broker refuses the exchange, and the probe rejects.
+            // The deadline is for the other case: without fail-fast the start
+            // never rejects, so the test must fail instead of hanging the job.
+            const result = await runCompose(
+                [
+                    "run", "--rm", "--no-deps", "-T",
+                    "--name", containerName,
+                    "-e", `AMQP_EXCHANGE=${conflictExchange}`,
+                    "order-service",
+                ],
+                20_000,
+            );
+            assert.equal(result.signal, null, `the service must exit on its own; output:\n${result.output}`);
+            assert.equal(result.code, 1, `the service must exit with 1; output:\n${result.output}`);
+            assert.match(result.output, /AmqpTopologyError/, result.output);
+            assert.match(result.output, new RegExp(`exchange '${conflictExchange}'`), result.output);
+            // The adapter's setup-failed line and the entrypoint's summary are
+            // different facts: this pins the summary the process ends with.
+            assert.match(result.output, new RegExp(`Order Service cannot start: AmqpTopologyError \\(exchange '${conflictExchange}'\\)`), result.output);
+        } finally {
+            await removeContainer(containerName);
+            await deleteExchange(conflictExchange);
+        }
+    });
+
+    it("the running stack still confirms an order after the fail-fast check", async () => {
+        // The conflicting exchange is a name of its own, so the live services
+        // were never touched; this proves the check left them usable.
+        const result = (await connectPost(ORDER_URL, "orders.v1.OrderService/CreateOrder", {
+            product: "AfterFailFast", quantity: 1, customer: "Alice",
+        })) as { orderId: string; status: string };
+        const orders = await eventually(getOrders, (o) => statusOf(o, result.orderId) === "confirmed", `order ${result.orderId} to be confirmed`);
+        assert.equal(statusOf(orders, result.orderId), "confirmed");
     });
 });

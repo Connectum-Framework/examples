@@ -2,6 +2,7 @@ import { createServer } from "@connectum/core";
 import { Healthcheck, healthcheckManager, ServingStatus } from "@connectum/healthcheck";
 import { createDefaultInterceptors } from "@connectum/interceptors";
 import { Reflection } from "@connectum/reflection";
+import { reportStartupFailure } from "./amqpFailureReporting.ts";
 import { orderEventBus } from "./orderEventBus.ts";
 import { orderServiceRoutes } from "./services/orderService.ts";
 
@@ -37,4 +38,4 @@ server.on("ready", () => {
 server.on("stop", () => console.log("Order Service stopped"));
 server.on("error", (err: unknown) => console.error("Order Service error:", err));
 
-await server.start();
+await server.start().catch((error: unknown) => reportStartupFailure("Order Service", error));

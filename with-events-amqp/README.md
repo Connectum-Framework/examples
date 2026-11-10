@@ -225,6 +225,7 @@ with-events-amqp/
 │   ├── inventory-service.ts                # Entrypoint: Inventory Service (:5002)
 │   ├── orderEventBus.ts                    # EventBus config for Order Service
 │   ├── inventoryEventBus.ts                # EventBus config for Inventory Service
+│   ├── amqpFailureReporting.ts             # Startup/lifecycle failure log
 │   └── services/
 │       ├── orderService.ts                 # CreateOrder, CancelOrder, GetOrders RPCs
 │       ├── orderEvents.ts                  # OnInventoryReserved handler
@@ -268,14 +269,146 @@ Each microservice creates its own EventBus instance with a separate consumer gro
 ```typescript
 // orderEventBus.ts
 export const orderEventBus = createEventBus({
-    adapter: AmqpAdapter({ url: AMQP_URL, exchange: "orders" }),
+    adapter: AmqpAdapter({
+        url: AMQP_URL,
+        exchange: AMQP_EXCHANGE, // "orders" unless the fail-fast check overrides it
+        failFastOnInitialSetupError: true,
+        lifecycle: { onLifecycle: logSetupFailures("order-service") },
+    }),
     routes: [orderEventRoutes],
     group: "order-service",
     middleware: { retry: { maxRetries: 3, backoff: "exponential" } },
 });
 ```
 
-`AmqpAdapter` connects to RabbitMQ and uses a topic exchange with durable queues per group, ensuring at-least-once delivery with manual acknowledgement.
+`AmqpAdapter` connects to RabbitMQ and uses a topic exchange with durable queues per group, ensuring at-least-once delivery with manual acknowledgement. Both buses also set `failFastOnInitialSetupError` and a `lifecycle.onLifecycle` logger; see [Startup Failures and Recovery](#startup-failures-and-recovery).
+
+## Startup Failures and Recovery
+
+Both services opt into fail-fast for a topology the broker refuses, and log
+topology setup failures through the adapter's lifecycle callback:
+
+```typescript
+adapter: AmqpAdapter({
+    url: AMQP_URL,
+    exchange: AMQP_EXCHANGE,
+    // A wrong exchange type or a queue with other arguments will be refused on
+    // every retry; reject start() instead of retrying forever.
+    failFastOnInitialSetupError: true,
+    // Report setup failures the adapter cannot fix by itself, including the
+    // topology re-assert after a lost connection.
+    lifecycle: { onLifecycle: logSetupFailures("order-service") },
+}),
+```
+
+### A topology the broker refuses
+
+Both services read `AMQP_EXCHANGE` (default `orders`); the quick start never
+sets it, and setting it for only one service splits the saga across two
+exchanges — the conflict below uses it on a single short-lived service and
+never touches the running stack.
+
+```bash
+# Declare the exchange the example would create as a different type.
+curl -u guest:guest -X PUT http://localhost:15672/api/exchanges/%2F/orders.example-conflict \
+  -H 'Content-Type: application/json' -d '{"type":"direct","durable":true}'
+
+AMQP_URL=amqp://localhost:5672 AMQP_EXCHANGE=orders.example-conflict pnpm run start:order
+```
+
+Observed output (output shortened: stack-trace frames and the `[cause]` block
+are omitted; every line that carries the behavior is kept). The process exits
+with status 1:
+
+```text
+$ node src/order-service.ts
+Starting Order Service (Events + AMQP/RabbitMQ)...
+
+createServer: readMaxBytes is not set, so incoming messages are not limited (the default is the transport's cap of 4294967295 bytes, about 4 GiB). An authentication interceptor runs only after a message has been received, so one oversized request can exhaust memory. Set readMaxBytes to the largest message your services accept. See https://connectum.dev/en/guide/security/request-admission
+Order Service starting...
+[order-service] setup-failed during initial setup: AmqpTopologyError (exchange 'orders.example-conflict'): Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders.example-conflict' in vhost '/': received 'topic' but current is 'direct'"
+Order Service error: AmqpTopologyError: Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders.example-conflict' in vhost '/': received 'topic' but current is 'direct'"
+  object: { kind: 'exchange', name: 'orders.example-conflict' },
+Order Service cannot start: AmqpTopologyError (exchange 'orders.example-conflict')
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+Remove the exchange afterwards:
+
+```bash
+curl -u guest:guest -X DELETE http://localhost:15672/api/exchanges/%2F/orders.example-conflict
+```
+
+### A broker that is merely unreachable
+
+An unreachable broker is not a topology error, so it does not fail fast: the
+service keeps waiting in the adapter's normal recovery and connects when the
+broker appears. Start the service with RabbitMQ stopped:
+
+```bash
+docker compose stop rabbitmq
+AMQP_URL=amqp://localhost:5672 pnpm run start:order
+```
+
+It prints `Order Service starting...` and stays up with no error. Start the
+broker in another terminal:
+
+```bash
+docker compose start rabbitmq
+```
+
+Observed output (the log marks the steps: service start 14:57:09, broker start
+14:57:14, ready 14:57:21 — 7 seconds after the broker started and 12 seconds
+after the service started):
+
+```text
+$ node src/order-service.ts
+Starting Order Service (Events + AMQP/RabbitMQ)...
+
+createServer: readMaxBytes is not set, so incoming messages are not limited (the default is the transport's cap of 4294967295 bytes, about 4 GiB). An authentication interceptor runs only after a message has been received, so one oversized request can exhaust memory. Set readMaxBytes to the largest message your services accept. See https://connectum.dev/en/guide/security/request-admission
+Order Service starting...
+Server listening 0.0.0.0:5001
+
+Order Service ready on 0.0.0.0:5001
+AMQP: amqp://localhost:5672
+
+Test with curl:
+  curl -X POST http://localhost:5001/orders.v1.OrderService/CreateOrder \
+    -H "Content-Type: application/json" \
+    -d '{"product":"Widget","quantity":5,"customer":"Alice"}'
+
+  curl -X POST http://localhost:5001/orders.v1.OrderService/GetOrders \
+    -H "Content-Type: application/json" -d '{}'
+
+Press Ctrl+C to shutdown gracefully
+```
+
+### Setup failures during a reconnect
+
+`lifecycle.onLifecycle` also receives `setup-failed` when the topology cannot be
+re-applied after a lost connection. That event has `initial: false`, the
+reconnect `attempt`, and the `AmqpTopologyError` with its structured `object`.
+With the stack running, replace the `orders` exchange with one of another type
+and cut the connections:
+
+```bash
+curl -u guest:guest -X DELETE http://localhost:15672/api/exchanges/%2F/orders
+curl -u guest:guest -X PUT http://localhost:15672/api/exchanges/%2F/orders \
+  -H 'Content-Type: application/json' -d '{"type":"direct","durable":true}'
+docker compose restart rabbitmq
+docker compose logs order-service | grep 'setup-failed'
+```
+
+Observed:
+
+```text
+[order-service] setup-failed during reconnect attempt 6: AmqpTopologyError (exchange 'orders'): Topology declaration failed: Operation failed: ExchangeDeclare; 406 (PRECONDITION-FAILED) with message "PRECONDITION_FAILED - inequivalent arg 'type' for exchange 'orders' in vhost '/': received 'topic' but current is 'direct'"
+```
+
+The adapter keeps retrying (the delay grows to a 30 second cap). Deleting the
+conflicting exchange lets the next attempt re-create the topic exchange, after
+which the saga works again. `lifecycle.onLifecycle` is the 1.3.0 surface; the
+flat `lifecycle.onSetupFailed` is deprecated in that version.
 
 ## External AMQP Contract
 
