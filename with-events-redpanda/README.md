@@ -121,6 +121,16 @@ curl -X POST http://localhost:5001/orders.v1.OrderService/CancelOrder \
   -d '{"orderId":"<ORDER_ID>","reason":"Changed my mind"}'
 ```
 
+### Failure and restart
+
+The e2e suite (`pnpm test`, with the stack running) also checks what the example does when things go wrong:
+
+- an order for the product `FLAKY` makes the inventory handler fail on every run of its first delivery. The retry middleware runs it `maxRetries` more times, the failure reaches the adapter, and the message is delivered again. The order must still be confirmed and handled once after the redelivery, and its neighbours in the topic must be neither lost nor repeated;
+- the failure is reported in the inventory service log as `handler error for <topic>[<partition>]@<offset>`;
+- the inventory service is stopped, two orders are placed while it is down, and it is started again. Both orders must be confirmed, once each, and the order acknowledged before the stop must not be delivered again.
+
+The suite calls `docker compose` in the example directory: it stops `inventory-service`, brings it back with `docker compose up --no-deps` and reads its log. The redelivery check waits up to 90 seconds for the retry backoff, the adapter's redelivery delay and the consumer's fetch cycle. The restart check waits up to 120 seconds as headroom: in the runs the stopped consumer left its group cleanly and rejoined in about 3 seconds, so the deadline covers that rejoin plus delivery of the messages published while it was down, not an observed wait. These checks pass on `@connectum/events-kafka` 1.3.0, the version the lockfile installs, and fail on 1.0.0; 1.1.x and 1.2.x were not run against them.
+
 ### Stopping
 
 ```bash
@@ -257,12 +267,13 @@ with-events-redpanda/
 │   ├── inventory-service.ts                # Entrypoint: Inventory Service (:5002)
 │   ├── orderEventBus.ts                    # EventBus config for Order Service
 │   ├── inventoryEventBus.ts                # EventBus config for Inventory Service
+│   ├── retryPolicy.ts                      # Retry count shared by the bus and the failure test
 │   └── services/
 │       ├── orderService.ts                 # CreateOrder, CancelOrder, GetOrders RPCs
 │       ├── orderEvents.ts                  # OnInventoryReserved handler
 │       ├── inventoryService.ts             # GetInventory RPC
 │       └── inventoryEvents.ts              # OnOrderCreated, OnOrderCancelled handlers
-├── tests/e2e/events.test.ts                # E2E tests
+├── tests/e2e/                              # E2E: saga, failure and restart
 ├── console-config.yml                      # Redpanda Console config
 ├── docker-compose.yml                      # Redpanda + Console + 2 services
 ├── Dockerfile                              # Multi-stage build
