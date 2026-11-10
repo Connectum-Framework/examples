@@ -29,6 +29,23 @@ const server = createServer({
 await server.start();
 ```
 
+### Module format
+
+`redact.ts` and `extensions.ts` are ES modules, and `redact.ts` imports
+`./extensions.ts` by its `.ts` path. In the nearest `package.json` set
+`"type": "module"`; in `tsconfig.json` set `"module": "nodenext"`,
+`"allowImportingTsExtensions": true` and `"noEmit": true` (TypeScript accepts
+`.ts` import paths only together with `noEmit` or `emitDeclarationOnly`). The examples
+in this repository use these settings together with
+`"verbatimModuleSyntax": true`. `"module": "esnext"` with
+`"moduleResolution": "bundler"` also type-checks the files, with or without the
+`type` field.
+
+Without `"type": "module"`, a project that sets `"verbatimModuleSyntax": true`
+rejects the files with TS1287 and TS1295: ES `import` and `export` cannot be
+written in a CommonJS file under that option. Without `verbatimModuleSyntax`
+the type check passes.
+
 ## Proto Definition
 
 > Illustrative only. This example does not include a generated
