@@ -29,6 +29,23 @@ const server = createServer({
 await server.start();
 ```
 
+### Module format
+
+Both files are ES modules: they use `import` and `export`, and `redact.ts`
+imports `./extensions.ts` by its `.ts` path. Copy them into a project that
+type-checks ES modules: `"type": "module"` in the nearest `package.json`, and
+`"module": "nodenext"` plus `"allowImportingTsExtensions": true` in
+`tsconfig.json`. The examples in this repository use those settings together
+with `"verbatimModuleSyntax": true`. `"module": "esnext"` with
+`"moduleResolution": "bundler"` also type-checks the files, with or without the
+`type` field.
+
+In a CommonJS package (`"module": "nodenext"`, no `"type": "module"`) with
+`"verbatimModuleSyntax": true`, `tsc --noEmit` rejects the files with TS1287
+(`A top-level 'export' modifier cannot be used on value declarations in a CommonJS module when 'verbatimModuleSyntax' is enabled`) and TS1295
+(`ECMAScript imports and exports cannot be written in a CommonJS file under 'verbatimModuleSyntax'`).
+Without `verbatimModuleSyntax` the check passes.
+
 ## Proto Definition
 
 > Illustrative only. This example does not include a generated

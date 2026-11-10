@@ -26,6 +26,22 @@ const transport = createConnectTransport({
 });
 ```
 
+### Module format
+
+`addToken.ts` is an ES module: it uses `import type` and `export`, and the usage
+example above imports it by its `.ts` path. Copy it into a project that
+type-checks ES modules: `"type": "module"` in the nearest `package.json`,
+`"module": "nodenext"` and `"allowImportingTsExtensions": true` in
+`tsconfig.json`. The examples in this repository use those settings together
+with `"verbatimModuleSyntax": true`. `"module": "esnext"` with
+`"moduleResolution": "bundler"` also type-checks the file, with or without the
+`type` field.
+
+In a CommonJS package (`"module": "nodenext"`, no `"type": "module"`) with
+`"verbatimModuleSyntax": true`, `tsc --noEmit` rejects the file with TS1287
+(`A top-level 'export' modifier cannot be used on value declarations in a CommonJS module when 'verbatimModuleSyntax' is enabled`).
+Without `verbatimModuleSyntax` the check passes.
+
 ## Dependencies
 
 - `@connectrpc/connect` — ConnectRPC interceptor type
