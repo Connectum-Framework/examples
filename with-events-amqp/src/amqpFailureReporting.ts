@@ -35,15 +35,13 @@ export function logSetupFailures(service: string): (event: AmqpLifecycleEvent) =
 
 /**
  * A start rejected by the broker must leave a process that exits non-zero with
- * the error class and the refused object visible. Node's uncaught-error output
- * carries the class and message but not the structured `object` field, which is
- * the part that names what to fix.
+ * the error class and the refused object visible. The server's own "error"
+ * listener has already printed the full error and its stack: @connectum/core
+ * emits that event for every failed start() when a listener exists. This adds
+ * the one line an operator scans for instead of repeating the stack.
  */
 export function reportStartupFailure(service: string, error: unknown): void {
-    if (error instanceof AmqpTopologyError) {
-        console.error(`${service} cannot start: ${error.name}${refusedObject(error)}: ${error.message}`);
-    } else {
-        console.error(`${service} cannot start:`, error);
-    }
+    const failed = error instanceof Error ? error : new Error(String(error));
+    console.error(`${service} cannot start: ${failed.name}${refusedObject(failed)}`);
     process.exitCode = 1;
 }
